@@ -35,7 +35,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     const scene = project.scenes?.[0] || null
     const objects = scene?.scene_objects || []
-    const marker = project.project_markers?.[0] || null
+    const marker = project.project_markers
+      ? (Array.isArray(project.project_markers) ? project.project_markers[0] : project.project_markers)
+      : null
 
     return NextResponse.json({
       project: {

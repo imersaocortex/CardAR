@@ -168,21 +168,37 @@ export default function StudioPage() {
 
     setUploadingMarker(true)
     try {
-      const { compileMarkerImage } = await import("@/lib/mindar/compile")
-      const buffer = await compileMarkerImage(url)
-      const blob = new Blob([buffer.buffer as ArrayBuffer], { type: "application/octet-stream" })
-      const fileName = `target_${projectId}_${Date.now()}.mind`
-
+      // Download image via Supabase client (authenticated session)
       const supabase = createClient()
+
+      // Extract filename from storage URL
+      const imageFileName = url.split("/").pop() || ""
+      if (!imageFileName) throw new Error("URL inválida")
+
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("markers")
+        .download(imageFileName)
+
+      if (downloadError || !fileData) throw new Error("Falha ao baixar imagem do marcador")
+
+      const objectUrl = URL.createObjectURL(fileData)
+
+      const { compileMarkerImage } = await import("@/lib/mindar/compile")
+      const buffer = await compileMarkerImage(objectUrl)
+      URL.revokeObjectURL(objectUrl)
+
+      const mindBlob = new Blob([buffer.buffer as ArrayBuffer], { type: "application/octet-stream" })
+      const mindFile = `target_${projectId}_${Date.now()}.mind`
+
       const { error: uploadError } = await supabase.storage
         .from("public-previews")
-        .upload(fileName, blob, { upsert: true, contentType: "application/octet-stream" })
+        .upload(mindFile, mindBlob, { upsert: true, contentType: "application/octet-stream" })
 
       if (uploadError) throw new Error(uploadError.message)
 
       const { data: urlData } = await supabase.storage
         .from("public-previews")
-        .getPublicUrl(fileName)
+        .getPublicUrl(mindFile)
 
       if (!urlData?.publicUrl) throw new Error("Erro ao obter URL")
 

@@ -51,6 +51,25 @@ export function NoCamera({ onRetry }: FallbackProps) {
   )
 }
 
+export function MarkerNotCompiled() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="text-center max-w-xs"
+    >
+      <div className="w-20 h-20 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-6">
+        <FileWarning className="h-10 w-10 text-amber-400" />
+      </div>
+      <h2 className="text-xl font-bold text-white mb-2">Marcador não Compilado</h2>
+      <p className="text-sm text-white/60 mb-8">
+        O marcador de imagem desta experiência ainda não foi compilado para AR.
+        O criador do projeto precisa gerar o arquivo de tracking no editor antes de publicar.
+      </p>
+    </motion.div>
+  )
+}
+
 export function WebGLUnavailable() {
   return (
     <motion.div

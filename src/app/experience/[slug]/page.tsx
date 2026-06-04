@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { Loader2, X } from "lucide-react"
 import { ArPlayer } from "@/components/ar/ar-player"
-import { NoCamera } from "@/components/ar/ar-fallbacks"
+import { NoCamera, MarkerNotCompiled } from "@/components/ar/ar-fallbacks"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 
 export default function ExperiencePage() {
@@ -68,7 +68,7 @@ export default function ExperiencePage() {
   if (!experience.marker?.targetUrl) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <NoCamera />
+        <MarkerNotCompiled />
       </div>
     )
   }

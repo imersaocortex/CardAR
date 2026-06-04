@@ -380,43 +380,47 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       await Promise.race([startPromise, timeoutPromise])
       videoRef.current = mindarThree.video
 
+      // Disable MindAR's internal resize (it overrides our CSS with calculated pixel sizes)
+      mindarThree.resize = () => {}
+
       // Force all MindAR internal elements to fill container
       const forceFill = (el: HTMLElement) => {
         el.removeAttribute("width")
         el.removeAttribute("height")
-        el.style.setProperty("position", "absolute", "important")
-        el.style.setProperty("inset", "0", "important")
-        el.style.setProperty("width", "100%", "important")
-        el.style.setProperty("height", "100%", "important")
-        el.style.setProperty("object-fit", "cover", "important")
+        el.style.position = "absolute"
+        el.style.inset = "0"
+        el.style.width = "100%"
+        el.style.height = "100%"
+        // Override any inline pixel values MindAR set
+        el.style.top = "0"
+        el.style.left = "0"
       }
       const container = containerRef.current
       if (container) {
-        container.querySelectorAll("video, canvas").forEach((el) => {
-          const target = el as HTMLElement
-          forceFill(target)
-          // Watch for MindAR re-setting width/height attributes after our override
-          const mo = new MutationObserver(() => {
-            target.removeAttribute("width")
-            target.removeAttribute("height")
-            target.style.setProperty("width", "100%", "important")
-            target.style.setProperty("height", "100%", "important")
-          })
-          mo.observe(target, { attributes: true, attributeFilter: ["width", "height"] })
-          mutationObserversRef.current.push(mo)
+        // Override video styling directly
+        const video = mindarThree.video
+        if (video) {
+          video.removeAttribute("width")
+          video.removeAttribute("height")
+          video.style.position = "absolute"
+          video.style.inset = "0"
+          video.style.width = "100%"
+          video.style.height = "100%"
+          video.style.top = "0"
+          video.style.left = "0"
+          video.style.objectFit = "cover"
+        }
+        // Override canvas styling
+        const canvases = container.querySelectorAll("canvas")
+        canvases.forEach((c) => {
+          const ce = c as HTMLElement
+          ce.style.position = "absolute"
+          ce.style.inset = "0"
+          ce.style.width = "100%"
+          ce.style.height = "100%"
+          ce.style.top = "0"
+          ce.style.left = "0"
         })
-        // Inject persistent CSS rules inside container to override any future video/canvas elements
-        const styleEl = document.createElement("style")
-        styleEl.textContent = `
-          video, canvas {
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-          }
-        `
-        container.appendChild(styleEl)
       }
 
       // Force renderer to fill viewport
@@ -435,10 +439,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         if (mindarThree.camera?.aspect) {
           mindarThree.camera.aspect = w2 / h2
           mindarThree.camera.updateProjectionMatrix?.()
-        }
-        // Re-apply fill to any new elements
-        if (container) {
-          container.querySelectorAll("video, canvas").forEach((el) => forceFill(el as HTMLElement))
         }
       })
       if (container) {

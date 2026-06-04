@@ -27,6 +27,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [startError, setStartError] = useState<string | null>(null)
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const mutationObserversRef = useRef<MutationObserver[]>([])
 
   const updateState = useCallback(
     (state: ArState) => {
@@ -379,8 +380,10 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       await Promise.race([startPromise, timeoutPromise])
       videoRef.current = mindarThree.video
 
-      // Force all MindAR internal elements to fill the container
+      // Force all MindAR internal elements to fill container
       const forceFill = (el: HTMLElement) => {
+        el.removeAttribute("width")
+        el.removeAttribute("height")
         el.style.setProperty("position", "absolute", "important")
         el.style.setProperty("inset", "0", "important")
         el.style.setProperty("width", "100%", "important")
@@ -389,7 +392,31 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
       const container = containerRef.current
       if (container) {
-        container.querySelectorAll("video, canvas").forEach((el) => forceFill(el as HTMLElement))
+        container.querySelectorAll("video, canvas").forEach((el) => {
+          const target = el as HTMLElement
+          forceFill(target)
+          // Watch for MindAR re-setting width/height attributes after our override
+          const mo = new MutationObserver(() => {
+            target.removeAttribute("width")
+            target.removeAttribute("height")
+            target.style.setProperty("width", "100%", "important")
+            target.style.setProperty("height", "100%", "important")
+          })
+          mo.observe(target, { attributes: true, attributeFilter: ["width", "height"] })
+          mutationObserversRef.current.push(mo)
+        })
+        // Inject persistent CSS rules inside container to override any future video/canvas elements
+        const styleEl = document.createElement("style")
+        styleEl.textContent = `
+          video, canvas {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+          }
+        `
+        container.appendChild(styleEl)
       }
 
       // Force renderer to fill viewport
@@ -499,11 +526,15 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
           resizeObserverRef.current.disconnect()
           resizeObserverRef.current = null
         }
+        mutationObserversRef.current.forEach((mo) => mo.disconnect())
+        mutationObserversRef.current = []
         startingRef.current = false
       }
     } catch (err) {
       console.error("AR start error:", err)
       startingRef.current = false
+      mutationObserversRef.current.forEach((mo) => mo.disconnect())
+      mutationObserversRef.current = []
       const msg = String(err)
       if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {
         setFallback("camera-permission")

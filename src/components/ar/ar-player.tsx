@@ -34,6 +34,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [initKey, setInitKey] = useState(0)
   const [noDetectionWarning, setNoDetectionWarning] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
+  const [initStep, setInitStep] = useState("")
+
+  const step = useCallback((msg: string) => {
+    console.log("[AR]", msg)
+    setInitStep(msg)
+  }, [])
 
   const updateState = useCallback(
     (state: ArState) => {
@@ -331,6 +337,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
     updateState("loading")
     setShowOverlay(true)
+    step("Preparando câmera...")
 
     const cleanups: (() => void)[] = []
 
@@ -387,7 +394,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       const vw = video.videoWidth
       const vh = video.videoHeight
-      console.log("[AR] Camera ready", vw, vh)
+      step("Câmera pronta (" + vw + "x" + vh + ")")
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -424,8 +431,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       scene.add(anchorGroup)
 
       await buildSceneObjects(anchorGroup)
+      step("Cena 3D pronta")
 
-      console.log("[AR] Importing MindAR Controller")
+      step("Importando MindAR...")
       let Controller: any
       try {
         const mod = await import("mind-ar/dist/mindar-image.prod.js")
@@ -434,7 +442,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         Controller = (window as any).MINDAR?.IMAGE?.Controller
       }
       if (!Controller) throw new Error("MindAR Controller not available")
-      console.log("[AR] Controller loaded")
+      step("MindAR importado")
 
       let isShowing = false
 
@@ -480,21 +488,21 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         },
       })
 
-      console.log("[AR] Loading .mind file...")
+      step("Carregando marcador (.mind)...")
       await Promise.race([
         controller.addImageTargets(experience.marker.targetUrl),
         new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error("Timeout ao carregar arquivo de marcador (20s)")), 20000)
         ),
       ])
-      console.log("[AR] .mind file loaded, running dummyRun")
+      step("Marcador carregado. Inicializando motor...")
 
       try {
         controller.dummyRun(video)
       } catch (e) {
         throw new Error("Falha na inicialização do motor AR: " + String(e))
       }
-      console.log("[AR] dummyRun OK, starting processVideo")
+      step("Motor inicializado. Iniciando tracking...")
 
       const proj = controller.getProjectionMatrix()
       if (proj) {
@@ -648,8 +656,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     setFallback(null)
     setStartError(null)
     setNoDetectionWarning(false)
+    step("")
     setInitKey((k) => k + 1)
-  }, [])
+  }, [step])
 
   if (fallback === "webgl") {
     return (
@@ -703,9 +712,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         <>
           {arState === "loading" && (
             <div className="absolute top-8 left-1/2 z-10 -translate-x-1/2">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/20 backdrop-blur-sm">
-                <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                <span className="text-white/80 text-xs">Inicializando AR...</span>
+              <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10">
+                <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />
+                <div className="flex flex-col">
+                  <span className="text-white/90 text-xs font-medium">Inicializando AR...</span>
+                  <span className="text-white/40 text-[10px] mt-0.5">{initStep}</span>
+                </div>
               </div>
             </div>
           )}

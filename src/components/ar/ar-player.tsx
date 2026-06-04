@@ -362,20 +362,22 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       video.srcObject = stream
       cleanups.push(() => stream.getTracks().forEach((t) => t.stop()))
 
+      await video.play()
+
       await new Promise<void>((resolve, reject) => {
         let attempts = 0
-        const maxAttempts = 50
+        const maxAttempts = 100
         const check = () => {
           attempts++
           if (video.videoWidth > 0 && video.videoHeight > 0) {
             resolve()
           } else if (attempts >= maxAttempts) {
-            reject(new Error("Video dimensions never became available"))
+            reject(new Error("Video dimensions never became available after " + (attempts * 100) + "ms"))
           } else {
             setTimeout(check, 100)
           }
         }
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+        if (video.videoWidth > 0) {
           resolve()
         } else {
           video.addEventListener("loadedmetadata", check, { once: true })
@@ -385,6 +387,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       const vw = video.videoWidth
       const vh = video.videoHeight
+      console.log("[AR] Camera ready", vw, vh)
 
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -422,6 +425,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       await buildSceneObjects(anchorGroup)
 
+      console.log("[AR] Importing MindAR Controller")
       let Controller: any
       try {
         const mod = await import("mind-ar/dist/mindar-image.prod.js")
@@ -430,6 +434,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         Controller = (window as any).MINDAR?.IMAGE?.Controller
       }
       if (!Controller) throw new Error("MindAR Controller not available")
+      console.log("[AR] Controller loaded")
 
       let isShowing = false
 
@@ -475,23 +480,21 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         },
       })
 
-      const loadTimeout = setTimeout(() => {
-        throw new Error("Timeout ao carregar arquivo de marcador (20s). Verifique sua conexão.")
-      }, 20000)
-
-      try {
-        await controller.addImageTargets(experience.marker.targetUrl)
-      } catch (e) {
-        clearTimeout(loadTimeout)
-        throw e
-      }
-      clearTimeout(loadTimeout)
+      console.log("[AR] Loading .mind file...")
+      await Promise.race([
+        controller.addImageTargets(experience.marker.targetUrl),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout ao carregar arquivo de marcador (20s)")), 20000)
+        ),
+      ])
+      console.log("[AR] .mind file loaded, running dummyRun")
 
       try {
         controller.dummyRun(video)
       } catch (e) {
         throw new Error("Falha na inicialização do motor AR: " + String(e))
       }
+      console.log("[AR] dummyRun OK, starting processVideo")
 
       const proj = controller.getProjectionMatrix()
       if (proj) {

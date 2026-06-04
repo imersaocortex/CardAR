@@ -1,5 +1,5 @@
 diff --git a/node_modules/mind-ar/dist/mindar-image-three.prod.js b/node_modules/mind-ar/dist/mindar-image-three.prod.js
-index c19cd8e..c09541c 100644
+index c19cd8e..a5e5a54 100644
 --- a/node_modules/mind-ar/dist/mindar-image-three.prod.js
 +++ b/node_modules/mind-ar/dist/mindar-image-three.prod.js
 @@ -1,4 +1,4 @@
@@ -18,12 +18,3 @@ index c19cd8e..c09541c 100644
      }
      return new ci(this.input, this.options);
    }
-@@ -13580,7 +13579,7 @@ class Zb {
-     userDeviceId: c = null,
-     environmentDeviceId: d = null
-   }) {
--    this.container = e, this.imageTargetSrc = t, this.maxTrack = a, this.filterMinCF = o, this.filterBeta = l, this.warmupTolerance = p, this.missTolerance = m, this.ui = new Rd({ uiLoading: r, uiScanning: n, uiError: u }), this.userDeviceId = c, this.environmentDeviceId = d, this.shouldFaceUser = !1, this.scene = new Ct(), this.cssScene = new Ct(), this.renderer = new Ti({ antialias: !0, alpha: !0 }), this.cssRenderer = new Vd({ antialias: !0 }), this.renderer.outputEncoding = Si, this.renderer.setPixelRatio(window.devicePixelRatio), this.camera = new vi(), this.anchors = [], this.renderer.domElement.style.position = "absolute", this.cssRenderer.domElement.style.position = "absolute", this.container.appendChild(this.renderer.domElement), this.container.appendChild(this.cssRenderer.domElement), window.addEventListener("resize", this.resize.bind(this));
-+    this.container = e, this.imageTargetSrc = t, this.maxTrack = a, this.filterMinCF = o, this.filterBeta = l, this.warmupTolerance = p, this.missTolerance = m, this.ui = new Rd({ uiLoading: r, uiScanning: n, uiError: u }), this.userDeviceId = c, this.environmentDeviceId = d, this.shouldFaceUser = !1, this.scene = new Ct(), this.cssScene = new Ct(), this.renderer = new Ti({ antialias: !0, alpha: !0, preserveDrawingBuffer: !0 }), this.cssRenderer = new Vd({ antialias: !0 }), this.renderer.outputEncoding = Si, this.renderer.setPixelRatio(window.devicePixelRatio), this.camera = new vi(), this.anchors = [], this.renderer.domElement.style.position = "absolute", this.cssRenderer.domElement.style.position = "absolute", this.container.appendChild(this.renderer.domElement), this.container.appendChild(this.cssRenderer.domElement), window.addEventListener("resize", this.resize.bind(this));
-   }
-   async start() {
-     this.ui.showLoading(), await this._startVideo(), await this._startAR();

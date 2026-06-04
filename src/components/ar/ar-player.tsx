@@ -445,43 +445,70 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       step("MindAR importado")
 
       step("Preparando marcador...")
+      const targetUrl = experience.marker!.targetUrl
       const imageUrl = experience.marker!.imageUrl
-      step("Baixando imagem: " + imageUrl.slice(0, 60))
-      const imgRes = await fetch("/api/storage/download?url=" + encodeURIComponent(imageUrl))
-      if (!imgRes.ok) {
-        const errText = await imgRes.text().catch(() => "")
-        throw new Error("Falha ao baixar imagem do marcador (" + imgRes.status + "): " + errText.slice(0, 100))
+
+      // Try .mind file first (pre-compiled), fall back to compiling from image
+      let mindBuffer: ArrayBuffer | null = null
+      let loadedAsImage = false
+
+      if (targetUrl) {
+        step("Baixando .mind: " + targetUrl.slice(0, 50))
+        try {
+          const res = await fetch("/api/storage/download?url=" + encodeURIComponent(targetUrl))
+          if (res.ok) {
+            let buf = await res.arrayBuffer()
+            step(".mind baixado (" + (buf.byteLength / 1024).toFixed(0) + "KB)")
+
+            // Trim trailing garbage bytes (MessagePack encoder bug)
+            let trimmed = buf.byteLength
+            try {
+              const testCompiler = new MindAR.Compiler()
+              testCompiler.importData(new Uint8Array(buf))
+            } catch (e2: any) {
+              const m2 = String(e2).match(/buffer\[(\d+)\]/)
+              if (m2) trimmed = parseInt(m2[1])
+            }
+            if (trimmed < buf.byteLength) {
+              step("Ajustado (" + trimmed + "/" + buf.byteLength + " bytes)")
+              buf = buf.slice(0, trimmed)
+            }
+            mindBuffer = buf
+          } else {
+            step(".mind falhou (" + res.status + "), tentando imagem...")
+          }
+        } catch (e) {
+          step(".mind erro: " + String(e).slice(0, 60))
+        }
       }
-      const imgBlob = await imgRes.blob()
-      const imgBlobUrl = URL.createObjectURL(imgBlob)
-      step("Imagem baixada (" + (imgBlob.size / 1024).toFixed(0) + "KB). Carregando...")
 
-      const img = new Image()
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve()
-        img.onerror = () => reject(new Error("Falha ao decodificar imagem"))
-        img.src = imgBlobUrl
-      })
-      URL.revokeObjectURL(imgBlobUrl)
-      step("Imagem carregada (" + img.naturalWidth + "x" + img.naturalHeight + "). Compilando...")
+      if (!mindBuffer) {
+        loadedAsImage = true
+        step("Baixando imagem do marcador...")
+        const imgRes = await fetch("/api/storage/download?url=" + encodeURIComponent(imageUrl))
+        if (!imgRes.ok) throw new Error("Falha ao baixar imagem (" + imgRes.status + ")")
+        const imgBuf = await imgRes.arrayBuffer()
+        const imgBlobUrl = URL.createObjectURL(new Blob([imgBuf]))
+        const img = new Image()
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error("Falha ao decodificar imagem"))
+          img.src = imgBlobUrl
+        })
+        URL.revokeObjectURL(imgBlobUrl)
+        step("Imagem (" + img.naturalWidth + "x" + img.naturalHeight + "). Compilando...")
 
-      const compiler = new MindAR.Compiler()
-      await compiler.compileImageTargets([img], () => {})
-      const mindBuffer = compiler.exportData()
-      step("Compilado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB)")
+        const compiler = new MindAR.Compiler()
+        await compiler.compileImageTargets([img], () => {})
+        mindBuffer = compiler.exportData()
+        step("Compilado (" + (mindBuffer!.byteLength / 1024).toFixed(0) + "KB)")
+      }
 
+      const finalBuffer = mindBuffer!
       let isShowing = false
       let frameCount = 0
-      let featCount = -1
 
-      // Get feature point count from compiled data
-      try {
-        const data = new (MindAR.Compiler.constructor === Object ? MindAR.Compiler : (await import("mind-ar/dist/mindar-image.prod.js")).Compiler.constructor)()
-        // Can't easily get feat count, skip
-      } catch {}
-
-      step("Compilado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB)")
-      const featHint = mindBuffer.byteLength > 100000 ? " (alta qualidade)" : mindBuffer.byteLength > 50000 ? " (média)" : " (baixa qualidade)"
+      step("Compilado (" + (finalBuffer.byteLength / 1024).toFixed(0) + "KB)")
 
       const controller = new MindAR.Controller({
         inputWidth: vw,
@@ -530,7 +557,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       })
 
       step("Adicionando marcador ao tracker...")
-      controller.addImageTargetsFromBuffer(mindBuffer)
+      controller.addImageTargetsFromBuffer(finalBuffer)
       step("Marcador pronto. Inicializando motor...")
 
       try {

@@ -144,7 +144,7 @@ export default function StudioPage() {
           image_url: urlData.publicUrl,
           width: 0,
           height: 0,
-        })
+        }, { onConflict: "project_id" })
 
       if (markerError) throw new Error(markerError.message)
 

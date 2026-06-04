@@ -139,7 +139,7 @@ export default function ProjectsPage() {
             image_url: urlData.publicUrl,
             width: 0,
             height: 0,
-          })
+          }, { onConflict: "project_id" })
         }
       }
     }

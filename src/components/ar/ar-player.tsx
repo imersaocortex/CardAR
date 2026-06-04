@@ -5,7 +5,6 @@ import * as THREE from "three"
 import type { ArExperienceData, ArState, ArSceneObject } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
-import { getMarkerDimensions } from "@/lib/mindar"
 
 interface ArPlayerProps {
   experience: ArExperienceData
@@ -23,6 +22,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [fallback, setFallback] = useState<"camera-permission" | "no-camera" | "webgl" | null>(null)
   const [showOverlay, setShowOverlay] = useState(true)
   const [initKey, setInitKey] = useState(0)
+  const [noDetectionWarning, setNoDetectionWarning] = useState(false)
+  const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateState = useCallback(
     (state: ArState) => {
@@ -136,6 +137,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       anchor.onTargetFound = () => {
         updateState("detected")
         setShowOverlay(false)
+        if (detectionTimeoutRef.current) clearTimeout(detectionTimeoutRef.current)
       }
 
       anchor.onTargetLost = () => {
@@ -373,6 +375,11 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         updateState("scanning")
       }, 1500)
 
+      // If marker not detected after 30s, show persistent guidance
+      detectionTimeoutRef.current = setTimeout(() => {
+        setNoDetectionWarning(true)
+      }, 30000)
+
       // Handle click events for buttons
       const renderer = mindarThree.renderer
       const raycaster = new THREE.Raycaster()
@@ -440,6 +447,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         renderer.domElement.removeEventListener("click", handleClick)
         mindarThree.stop()
         clearTimeout(scanTimeout)
+        if (detectionTimeoutRef.current) clearTimeout(detectionTimeoutRef.current)
       }
     } catch (err) {
       console.error("AR start error:", err)
@@ -517,16 +525,28 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
       {showOverlay && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+        <>
           {arState === "loading" && (
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin mx-auto mb-4" />
-              <p className="text-white/80 text-sm">Inicializando AR...</p>
+            <div className="absolute top-8 left-1/2 z-10 -translate-x-1/2">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/20 backdrop-blur-sm">
+                <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                <span className="text-white/80 text-xs">Inicializando AR...</span>
+              </div>
             </div>
           )}
-          {arState === "scanning" && <MarkerNotFound onRetry={handleRetry} />}
-          {arState === "lost" && <MarkerNotFound onRetry={handleRetry} />}
-        </div>
+          {arState === "scanning" && !noDetectionWarning && (
+            <div className="absolute top-8 left-1/2 z-10 -translate-x-1/2">
+              <div className="px-4 py-2 rounded-full bg-black/20 backdrop-blur-sm">
+                <p className="text-white/80 text-xs">Aponte a câmera para o marcador</p>
+              </div>
+            </div>
+          )}
+          {(arState === "scanning" || arState === "lost") && noDetectionWarning && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10">
+              <MarkerNotFound onRetry={handleRetry} />
+            </div>
+          )}
+        </>
       )}
 
       {arState !== "loading" && arState !== "error" && (

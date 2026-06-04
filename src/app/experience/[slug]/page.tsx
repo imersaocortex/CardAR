@@ -84,7 +84,7 @@ export default function ExperiencePage() {
         />
       </div>
 
-      <div className="relative z-10 h-screen">
+      <div className="relative z-10 h-dvh">
         <ArPlayer experience={experience} onStateChange={handleStateChange} />
       </div>
     </div>

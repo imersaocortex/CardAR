@@ -23,7 +23,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [showOverlay, setShowOverlay] = useState(true)
   const [initKey, setInitKey] = useState(0)
   const [noDetectionWarning, setNoDetectionWarning] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
   const updateState = useCallback(
     (state: ArState) => {
@@ -370,6 +372,28 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       await mindarThree.start()
       videoRef.current = mindarThree.video
 
+      // Force renderer to fill viewport
+      const renderer = mindarThree.renderer
+      const w = containerRef.current.clientWidth || window.innerWidth
+      const h = containerRef.current.clientHeight || window.innerHeight
+      if (w > 0 && h > 0) {
+        renderer.setSize(w, h)
+      }
+
+      // Watch for viewport changes (orientation, keyboard)
+      resizeObserverRef.current = new ResizeObserver(() => {
+        const w2 = containerRef.current?.clientWidth || window.innerWidth
+        const h2 = containerRef.current?.clientHeight || window.innerHeight
+        if (w2 > 0 && h2 > 0) {
+          renderer.setSize(w2, h2)
+          mindarThree.camera?.aspect && (mindarThree.camera.aspect = w2 / h2)
+          mindarThree.camera?.updateProjectionMatrix?.()
+        }
+      })
+      if (containerRef.current) {
+        resizeObserverRef.current.observe(containerRef.current)
+      }
+
       // Transition to scanning state after 1.5s (allows camera to stabilize)
       const scanTimeout = setTimeout(() => {
         updateState("scanning")
@@ -381,7 +405,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }, 30000)
 
       // Handle click events for buttons
-      const renderer = mindarThree.renderer
       const raycaster = new THREE.Raycaster()
       const pointer = new THREE.Vector2()
 
@@ -448,13 +471,24 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         mindarThree.stop()
         clearTimeout(scanTimeout)
         if (detectionTimeoutRef.current) clearTimeout(detectionTimeoutRef.current)
+        if (resizeObserverRef.current) {
+          resizeObserverRef.current.disconnect()
+          resizeObserverRef.current = null
+        }
       }
     } catch (err) {
       console.error("AR start error:", err)
-      if (String(err).includes("getUserMedia") || String(err).includes("permission")) {
+      const msg = String(err)
+      if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {
         setFallback("camera-permission")
+      } else if (msg.includes("MindARThree not available")) {
+        setStartError("Falha ao carregar o motor AR. Tente recarregar a página.")
+      } else if (msg.includes("fetch") || msg.includes("load") || msg.includes("NetworkError")) {
+        setStartError("Falha ao baixar arquivo de tracking. Verifique sua conexão.")
+      } else if (msg.includes("Compile") || msg.includes("compile") || msg.includes("target")) {
+        setStartError("Arquivo de marcador inválido. Recompile o marcador no editor.")
       } else {
-        setFallback("no-camera")
+        setStartError("Erro ao iniciar AR. Tente recarregar a página.")
       }
       updateState("error")
     }
@@ -493,6 +527,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
   const handleRetry = useCallback(() => {
     setFallback(null)
+    setStartError(null)
+    setNoDetectionWarning(false)
     setInitKey((k) => k + 1)
   }, [])
 
@@ -520,8 +556,28 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     )
   }
 
+  if (startError) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
+        <div className="text-center max-w-xs">
+          <div className="w-20 h-20 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
+            <span className="text-2xl">!</span>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Erro ao Iniciar</h2>
+          <p className="text-sm text-white/60 mb-8">{startError}</p>
+          <button
+            onClick={handleRetry}
+            className="px-4 py-2 rounded-xl bg-white/10 text-white/80 text-sm hover:bg-white/20 transition-colors"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="relative w-full h-full">
+    <div className="fixed inset-0">
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
       {showOverlay && (

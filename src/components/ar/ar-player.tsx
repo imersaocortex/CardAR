@@ -434,19 +434,34 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       step("Cena 3D pronta")
 
       step("Importando MindAR...")
-      let Controller: any
+      let MindAR: any
       try {
         const mod = await import("mind-ar/dist/mindar-image.prod.js")
-        Controller = mod.Controller
+        MindAR = mod
       } catch {
-        Controller = (window as any).MINDAR?.IMAGE?.Controller
+        MindAR = (window as any).MINDAR?.IMAGE
       }
-      if (!Controller) throw new Error("MindAR Controller not available")
+      if (!MindAR || !MindAR.Controller) throw new Error("MindAR Controller not available")
       step("MindAR importado")
+
+      step("Preparando marcador...")
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error("Falha ao carregar imagem do marcador"))
+        img.src = experience.marker!.imageUrl
+      })
+      step("Imagem carregada (" + img.naturalWidth + "x" + img.naturalHeight + "). Compilando...")
+
+      const compiler = new MindAR.Compiler()
+      await compiler.compileImageTargets([img], () => {})
+      const mindBuffer = compiler.exportData()
+      step("Compilado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB)")
 
       let isShowing = false
 
-      const controller = new Controller({
+      const controller = new MindAR.Controller({
         inputWidth: vw,
         inputHeight: vh,
         maxTrack: 1,
@@ -488,15 +503,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         },
       })
 
-      step("Carregando marcador (.mind)...")
-      const targetUrl = experience.marker.targetUrl
-      step("URL: " + targetUrl.slice(0, 80))
-      const mindRes = await fetch(targetUrl, { signal: AbortSignal.timeout(15000) })
-      if (!mindRes.ok) throw new Error("Falha ao baixar .mind: " + mindRes.status + " " + mindRes.statusText)
-      const mindBuffer = await mindRes.arrayBuffer()
-      step(".mind baixado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB). Compilando...")
+      step("Adicionando marcador ao tracker...")
       controller.addImageTargetsFromBuffer(mindBuffer)
-      step("Marcador compilado. Inicializando motor...")
+      step("Marcador pronto. Inicializando motor...")
 
       try {
         controller.dummyRun(video)

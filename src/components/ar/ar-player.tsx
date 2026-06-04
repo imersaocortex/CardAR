@@ -508,7 +508,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       let isShowing = false
       let frameCount = 0
 
-      step("Compilado (" + (finalBuffer.byteLength / 1024).toFixed(0) + "KB)")
+      if (loadedAsImage) {
+        step("Imagem compilada (" + (finalBuffer.byteLength / 1024).toFixed(0) + "KB)")
+      }
 
       const controller = new MindAR.Controller({
         inputWidth: vw,

@@ -170,7 +170,7 @@ export default function StudioPage() {
     try {
       const { compileMarkerImage } = await import("@/lib/mindar/compile")
       const buffer = await compileMarkerImage(url)
-      const blob = new Blob([buffer], { type: "application/octet-stream" })
+      const blob = new Blob([buffer.buffer as ArrayBuffer], { type: "application/octet-stream" })
       const fileName = `target_${projectId}_${Date.now()}.mind`
 
       const supabase = createClient()

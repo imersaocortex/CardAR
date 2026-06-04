@@ -471,6 +471,17 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       step("Compilado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB)")
 
       let isShowing = false
+      let frameCount = 0
+      let featCount = -1
+
+      // Get feature point count from compiled data
+      try {
+        const data = new (MindAR.Compiler.constructor === Object ? MindAR.Compiler : (await import("mind-ar/dist/mindar-image.prod.js")).Compiler.constructor)()
+        // Can't easily get feat count, skip
+      } catch {}
+
+      step("Compilado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB)")
+      const featHint = mindBuffer.byteLength > 100000 ? " (alta qualidade)" : mindBuffer.byteLength > 50000 ? " (média)" : " (baixa qualidade)"
 
       const controller = new MindAR.Controller({
         inputWidth: vw,
@@ -481,6 +492,10 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         warmupTolerance: 0,
         missTolerance: 10,
         onUpdate: (data: any) => {
+          if (data.type === "processDone") {
+            frameCount++
+            return
+          }
           if (data.type !== "updateMatrix") return
 
           if (data.worldMatrix) {
@@ -538,6 +553,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
 
       controller.processVideo(video)
+      step("Tracking iniciado")
 
       const resizeObserver = new ResizeObserver(() => {
         const w2 = window.innerWidth

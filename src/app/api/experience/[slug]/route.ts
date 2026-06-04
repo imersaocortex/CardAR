@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     const { data: project, error } = await admin
       .from("projects")
-      .select("*, scenes(*, scene_objects(*, scene_buttons(*))), project_markers(*), assets(*)")
+      .select("*, scenes(*, scene_objects(*, scene_buttons(*))), project_markers(*)")
       .eq("slug", slug)
       .single()
 

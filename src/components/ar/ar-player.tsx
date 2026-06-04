@@ -490,14 +490,14 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       const msg = String(err)
       if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {
         setFallback("camera-permission")
-      } else if (msg.includes("MindARThree not available")) {
-        setStartError("Falha ao carregar o motor AR. Tente recarregar a página.")
-      } else if (msg.includes("fetch") || msg.includes("load") || msg.includes("NetworkError")) {
-        setStartError("Falha ao baixar arquivo de tracking. Verifique sua conexão.")
-      } else if (msg.includes("Compile") || msg.includes("compile") || msg.includes("target")) {
+      } else if (msg.includes("Timeout") || msg.includes("fetch") || msg.includes("NetworkError")) {
+        setStartError("Falha ao carregar recursos AR. Verifique sua conexão de internet e tente novamente.")
+      } else if (msg.includes("MindARThree not available") || msg.includes("dynamic") || msg.includes("import")) {
+        setStartError("Falha ao carregar o motor AR. Seu navegador pode não ser compatível.")
+      } else if (msg.includes("compile") || msg.includes("target") || msg.includes("invalid") || msg.includes("parse")) {
         setStartError("Arquivo de marcador inválido. Recompile o marcador no editor.")
       } else {
-        setStartError("Erro ao iniciar AR. Tente recarregar a página.")
+        setStartError("Erro ao iniciar AR: " + msg.slice(0, 120))
       }
       updateState("error")
     }

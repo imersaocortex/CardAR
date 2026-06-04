@@ -379,26 +379,43 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       await Promise.race([startPromise, timeoutPromise])
       videoRef.current = mindarThree.video
 
+      // Force all MindAR internal elements to fill the container
+      const forceFill = (el: HTMLElement) => {
+        el.style.setProperty("position", "absolute", "important")
+        el.style.setProperty("inset", "0", "important")
+        el.style.setProperty("width", "100%", "important")
+        el.style.setProperty("height", "100%", "important")
+        el.style.setProperty("object-fit", "cover", "important")
+      }
+      const container = containerRef.current
+      if (container) {
+        container.querySelectorAll("video, canvas").forEach((el) => forceFill(el as HTMLElement))
+      }
+
       // Force renderer to fill viewport
       const renderer = mindarThree.renderer
-      const w = containerRef.current.clientWidth || window.innerWidth
-      const h = containerRef.current.clientHeight || window.innerHeight
-      if (w > 0 && h > 0) {
-        renderer.setSize(w, h)
-      }
+      const w = window.innerWidth
+      const h = window.innerHeight
+      renderer.setSize(w, h)
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
       // Watch for viewport changes (orientation, keyboard)
       resizeObserverRef.current = new ResizeObserver(() => {
-        const w2 = containerRef.current?.clientWidth || window.innerWidth
-        const h2 = containerRef.current?.clientHeight || window.innerHeight
-        if (w2 > 0 && h2 > 0) {
-          renderer.setSize(w2, h2)
-          mindarThree.camera?.aspect && (mindarThree.camera.aspect = w2 / h2)
-          mindarThree.camera?.updateProjectionMatrix?.()
+        const w2 = window.innerWidth
+        const h2 = window.innerHeight
+        renderer.setSize(w2, h2)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        if (mindarThree.camera?.aspect) {
+          mindarThree.camera.aspect = w2 / h2
+          mindarThree.camera.updateProjectionMatrix?.()
+        }
+        // Re-apply fill to any new elements
+        if (container) {
+          container.querySelectorAll("video, canvas").forEach((el) => forceFill(el as HTMLElement))
         }
       })
-      if (containerRef.current) {
-        resizeObserverRef.current.observe(containerRef.current)
+      if (container) {
+        resizeObserverRef.current.observe(container)
       }
 
       // Transition to scanning state after 1.5s (allows camera to stabilize)

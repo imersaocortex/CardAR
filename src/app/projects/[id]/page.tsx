@@ -370,7 +370,7 @@ export default function StudioPage() {
               <div className="space-y-2">
                 <Label>Marcador atual</Label>
                 <div className="relative rounded-xl overflow-hidden border border-border">
-                  <img src={markerImageUrl} alt="Marcador" className="w-full max-h-48 object-contain bg-muted" />
+                  <img src={"/api/storage/download?url=" + encodeURIComponent(markerImageUrl)} alt="Marcador" className="w-full max-h-48 object-contain bg-muted" />
                 </div>
               </div>
             )}

@@ -489,13 +489,14 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       })
 
       step("Carregando marcador (.mind)...")
-      await Promise.race([
-        controller.addImageTargets(experience.marker.targetUrl),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout ao carregar arquivo de marcador (20s)")), 20000)
-        ),
-      ])
-      step("Marcador carregado. Inicializando motor...")
+      const targetUrl = experience.marker.targetUrl
+      step("URL: " + targetUrl.slice(0, 80))
+      const mindRes = await fetch(targetUrl, { signal: AbortSignal.timeout(15000) })
+      if (!mindRes.ok) throw new Error("Falha ao baixar .mind: " + mindRes.status + " " + mindRes.statusText)
+      const mindBuffer = await mindRes.arrayBuffer()
+      step(".mind baixado (" + (mindBuffer.byteLength / 1024).toFixed(0) + "KB). Compilando...")
+      controller.addImageTargetsFromBuffer(mindBuffer)
+      step("Marcador compilado. Inicializando motor...")
 
       try {
         controller.dummyRun(video)

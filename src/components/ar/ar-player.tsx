@@ -445,13 +445,24 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       step("MindAR importado")
 
       step("Preparando marcador...")
+      const imageUrl = experience.marker!.imageUrl
+      step("Baixando imagem: " + imageUrl.slice(0, 60))
+      const imgRes = await fetch("/api/storage/download?url=" + encodeURIComponent(imageUrl))
+      if (!imgRes.ok) {
+        const errText = await imgRes.text().catch(() => "")
+        throw new Error("Falha ao baixar imagem do marcador (" + imgRes.status + "): " + errText.slice(0, 100))
+      }
+      const imgBlob = await imgRes.blob()
+      const imgBlobUrl = URL.createObjectURL(imgBlob)
+      step("Imagem baixada (" + (imgBlob.size / 1024).toFixed(0) + "KB). Carregando...")
+
       const img = new Image()
-      img.crossOrigin = "anonymous"
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve()
-        img.onerror = () => reject(new Error("Falha ao carregar imagem do marcador"))
-        img.src = experience.marker!.imageUrl
+        img.onerror = () => reject(new Error("Falha ao decodificar imagem"))
+        img.src = imgBlobUrl
       })
+      URL.revokeObjectURL(imgBlobUrl)
       step("Imagem carregada (" + img.naturalWidth + "x" + img.naturalHeight + "). Compilando...")
 
       const compiler = new MindAR.Compiler()

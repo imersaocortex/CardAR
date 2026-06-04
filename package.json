@@ -48,6 +48,9 @@
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

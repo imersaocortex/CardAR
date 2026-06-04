@@ -17,6 +17,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const mindarRef = useRef<any>(null)
   const animFrameRef = useRef<number>(0)
   const anchorObjRef = useRef<any>(null)
+  const startingRef = useRef(false)
 
   const [arState, setArState] = useState<ArState>("loading")
   const [fallback, setFallback] = useState<"camera-permission" | "no-camera" | "webgl" | null>(null)
@@ -94,6 +95,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
   const startAR = useCallback(async () => {
     if (!containerRef.current || !experience.marker?.targetUrl) return
+    if (startingRef.current) return
+    startingRef.current = true
 
     if (!checkWebGL()) {
       setFallback("webgl")
@@ -368,8 +371,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         }
       }
 
-      // Start AR
-      await mindarThree.start()
+      // Start AR with timeout (30s)
+      const startPromise = mindarThree.start()
+      const timeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout ao iniciar AR. Verifique sua conexão e tente novamente.")), 30000)
+      )
+      await Promise.race([startPromise, timeoutPromise])
       videoRef.current = mindarThree.video
 
       // Force renderer to fill viewport
@@ -475,9 +482,11 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
           resizeObserverRef.current.disconnect()
           resizeObserverRef.current = null
         }
+        startingRef.current = false
       }
     } catch (err) {
       console.error("AR start error:", err)
+      startingRef.current = false
       const msg = String(err)
       if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {
         setFallback("camera-permission")

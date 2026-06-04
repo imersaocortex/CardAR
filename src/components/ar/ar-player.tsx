@@ -115,8 +115,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         throw new Error("MindARThree not available")
       }
 
-      // THREE already imported statically above
-
       const mindarThree = new MindARThree({
         container: containerRef.current,
         imageTargetSrc: experience.marker.targetUrl,
@@ -370,6 +368,11 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       await mindarThree.start()
       videoRef.current = mindarThree.video
 
+      // Transition to scanning state after 1.5s (allows camera to stabilize)
+      const scanTimeout = setTimeout(() => {
+        updateState("scanning")
+      }, 1500)
+
       // Handle click events for buttons
       const renderer = mindarThree.renderer
       const raycaster = new THREE.Raycaster()
@@ -436,13 +439,14 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         cancelAnimationFrame(animFrameRef.current)
         renderer.domElement.removeEventListener("click", handleClick)
         mindarThree.stop()
+        clearTimeout(scanTimeout)
       }
     } catch (err) {
       console.error("AR start error:", err)
       if (String(err).includes("getUserMedia") || String(err).includes("permission")) {
         setFallback("camera-permission")
       } else {
-        setFallback("camera-permission")
+        setFallback("no-camera")
       }
       updateState("error")
     }
@@ -513,7 +517,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
       {showOverlay && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
           {arState === "loading" && (
             <div className="text-center">
               <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin mx-auto mb-4" />

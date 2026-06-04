@@ -69,3 +69,21 @@ begin
   update public.projects set views = views + 1 where id = p_project_id;
 end;
 $$;
+
+-- 5. Add missing RLS policies for project_markers (UPDATE, DELETE)
+create policy "Editor+ can update project markers"
+  on public.project_markers for update
+  using (exists (select 1 from public.projects p where p.id = project_id and public.has_org_role(p.organization_id, array['owner','admin','editor'])));
+
+create policy "Editor+ can delete project markers"
+  on public.project_markers for delete
+  using (exists (select 1 from public.projects p where p.id = project_id and public.has_org_role(p.organization_id, array['owner','admin','editor'])));
+
+-- 6. Add missing RLS policies for scene_buttons (UPDATE, DELETE)
+create policy "Editor+ can update scene buttons"
+  on public.scene_buttons for update
+  using (exists (select 1 from public.scene_objects so join public.scenes s on s.id = so.scene_id join public.projects p on p.id = s.project_id where so.id = scene_object_id and public.has_org_role(p.organization_id, array['owner','admin','editor'])));
+
+create policy "Editor+ can delete scene buttons"
+  on public.scene_buttons for delete
+  using (exists (select 1 from public.scene_objects so join public.scenes s on s.id = so.scene_id join public.projects p on p.id = s.project_id where so.id = scene_object_id and public.has_org_role(p.organization_id, array['owner','admin','editor'])));

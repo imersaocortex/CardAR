@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #f0f0f5;
+  --card: #12121a;
+  --card-foreground: #f0f0f5;
+  --popover: #12121a;
+  --popover-foreground: #f0f0f5;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #06b6d4;
+  --secondary-foreground: #ffffff;
+  --muted: #1e1e2a;
+  --muted-foreground: #9090a0;
+  --accent: #2d2d3d;
+  --accent-foreground: #f0f0f5;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #2d2d3d;
+  --input: #2d2d3d;
+  --ring: #7c3aed;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(18, 18, 26, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(124, 58, 237, 0.1);
+  }
+  .glass-hover {
+    transition: all 0.3s ease;
+  }
+  .glass-hover:hover {
+    background: rgba(18, 18, 26, 0.8);
+    border-color: rgba(124, 58, 237, 0.3);
+  }
+  .text-gradient {
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .text-gradient-cyan {
+    background: linear-gradient(135deg, #06b6d4, #22d3ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .border-glow {
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.15);
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(124, 58, 237, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+}
+
+/* Animation keyframes for shadcn/ui */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes zoomIn95 {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes zoomOut95 {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
+}
+@keyframes slideInFromTop {
+  from { transform: translateY(-0.125rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes slideInFromBottom {
+  from { transform: translateY(0.125rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes slideInFromLeft {
+  from { transform: translateX(-0.125rem); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideInFromRight {
+  from { transform: translateX(0.125rem); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOutToLeft {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-50%); opacity: 0; }
+}
+@keyframes slideOutToTop {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-48%); opacity: 0; }
+}
+@keyframes slideInFromLeftHalf {
+  from { transform: translateX(-50%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideInFromTop48 {
+  from { transform: translateY(-48%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-in {
+  animation: fadeIn 0.2s ease-out, zoomIn95 0.2s ease-out;
+}
+.animate-out {
+  animation: fadeOut 0.2s ease-in, zoomOut95 0.2s ease-in;
+}
+.fade-in-0 { opacity: 0; }
+.zoom-in-95 { transform: scale(0.95); }
+.zoom-out-95 { transform: scale(0.95); }
+.data-\[state\=open\]\:animate-in[data-state="open"] {
+  animation: fadeIn 0.2s ease-out, zoomIn95 0.2s ease-out;
+}
+.data-\[state\=closed\]\:animate-out[data-state="closed"] {
+  animation: fadeOut 0.2s ease-in, zoomOut95 0.2s ease-in;
+}
+.data-\[state\=closed\]\:fade-out-0[data-state="closed"] { opacity: 0; }
+.data-\[state\=open\]\:fade-in-0[data-state="open"] { opacity: 1; }
+.data-\[state\=closed\]\:zoom-out-95[data-state="closed"] { transform: scale(0.95); }
+.data-\[state\=open\]\:zoom-in-95[data-state="open"] { transform: scale(1); }
+.data-\[side\=bottom\]\:slide-in-from-top-2[data-side="bottom"] { animation: slideInFromTop 0.2s ease-out; }
+.data-\[side\=top\]\:slide-in-from-bottom-2[data-side="top"] { animation: slideInFromBottom 0.2s ease-out; }
+.data-\[side\=left\]\:slide-in-from-right-2[data-side="left"] { animation: slideInFromRight 0.2s ease-out; }
+.data-\[side\=right\]\:slide-in-from-left-2[data-side="right"] { animation: slideInFromLeft 0.2s ease-out; }

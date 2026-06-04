@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as THREE from "three"
-import type { ArExperienceData, ArState, ArSceneObject } from "@/lib/mindar"
+import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
 
@@ -14,10 +14,19 @@ interface ArPlayerProps {
 export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const mindarRef = useRef<any>(null)
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
+  const sceneRef = useRef<THREE.Scene | null>(null)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
+  const anchorGroupRef = useRef<THREE.Group>(new THREE.Group())
   const animFrameRef = useRef<number>(0)
-  const anchorObjRef = useRef<any>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const startingRef = useRef(false)
+  const anchorBuiltRef = useRef(false)
+  const raycasterRef = useRef(new THREE.Raycaster())
+  const pointerRef = useRef(new THREE.Vector2())
+  const arStateRef = useRef<ArState>("loading")
+  const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
 
   const [arState, setArState] = useState<ArState>("loading")
   const [fallback, setFallback] = useState<"camera-permission" | "no-camera" | "webgl" | null>(null)
@@ -25,11 +34,10 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [initKey, setInitKey] = useState(0)
   const [noDetectionWarning, setNoDetectionWarning] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
   const updateState = useCallback(
     (state: ArState) => {
+      arStateRef.current = state
       setArState(state)
       onStateChange?.(state)
     },
@@ -93,421 +101,520 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     }
   }, [])
 
+  const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group) => {
+    if (!experience.scene?.objects || anchorBuiltRef.current) return
+    anchorBuiltRef.current = true
+
+    for (const obj of experience.scene.objects) {
+      const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
+      const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
+      const isImage = obj.type === "imagem"
+      const isAudio = obj.type === "audio"
+      const isButton = obj.type.startsWith("botao-")
+
+      if (isModel) {
+        const group = new THREE.Group()
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+
+        const placeholder = new THREE.Mesh(
+          new THREE.BoxGeometry(0.1, 0.1, 0.1),
+          new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: obj.opacity }),
+        )
+        placeholder.userData.animationType = obj.animationType
+        placeholder.userData.assetUrl = obj.assetUrl
+        group.add(placeholder)
+        anchorGroup.add(group)
+
+        if (obj.assetUrl) {
+          const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js")
+          const loader = new GLTFLoader()
+          loader.load(
+            obj.assetUrl,
+            (gltf: any) => {
+              const model = gltf.scene
+              model.position.copy(placeholder.position)
+              model.scale.copy(placeholder.scale)
+              model.rotation.copy(placeholder.rotation)
+              group.remove(placeholder)
+              group.add(model)
+              if (gltf.animations?.length && obj.animationType !== "none") {
+                const mixer = new THREE.AnimationMixer(model)
+                const action = mixer.clipAction(gltf.animations[0])
+                action.play()
+                ;(group as any)._mixer = mixer
+              }
+            },
+            undefined,
+            () => {},
+          )
+        }
+      }
+
+      if (isVideo) {
+        const group = new THREE.Group()
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+
+        const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 })
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), meshMat)
+        mesh.userData.isVideo = true
+        mesh.userData.objectId = obj.id
+        mesh.userData.assetUrl = obj.assetUrl
+        mesh.userData.chromaKeyColor = obj.chromaKeyColor
+        mesh.userData.chromaKeyTolerance = obj.chromaKeyTolerance ?? 0.4
+        mesh.userData.chromaKeySmoothness = obj.chromaKeySmoothness ?? 0.1
+        group.add(mesh)
+        anchorGroup.add(group)
+
+        if (obj.assetUrl) {
+          const v = document.createElement("video")
+          v.crossOrigin = "anonymous"
+          v.loop = true
+          v.muted = true
+          v.playsInline = true
+          v.autoplay = true
+          v.preload = "auto"
+          v.src = obj.assetUrl
+          v.load()
+
+          v.addEventListener("canplay", () => {
+            const texture = new THREE.VideoTexture(v)
+            texture.minFilter = THREE.LinearFilter
+            texture.magFilter = THREE.LinearFilter
+
+            if (obj.type === "video-chromakey" && obj.chromaKeyColor) {
+              const chromaColor = new THREE.Color(obj.chromaKeyColor)
+              const tolerance = (obj.chromaKeyTolerance ?? 0.4) / 100
+              const smoothness = (obj.chromaKeySmoothness ?? 0.1) / 100
+
+              meshMat.dispose()
+              ;(mesh as any).material = new THREE.ShaderMaterial({
+                vertexShader: `
+                  varying vec2 vUv;
+                  void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                  }
+                `,
+                fragmentShader: `
+                  uniform sampler2D uTexture;
+                  uniform vec3 uChromaKey;
+                  uniform float uTolerance;
+                  uniform float uSmoothness;
+                  varying vec2 vUv;
+                  void main() {
+                    vec4 color = texture2D(uTexture, vUv);
+                    vec3 diff = abs(color.rgb - uChromaKey);
+                    float dist = length(diff);
+                    float alpha = smoothstep(uTolerance - uSmoothness, uTolerance + uSmoothness, dist);
+                    gl_FragColor = vec4(color.rgb, alpha);
+                  }
+                `,
+                uniforms: {
+                  uTexture: { value: texture },
+                  uChromaKey: { value: chromaColor },
+                  uTolerance: { value: tolerance },
+                  uSmoothness: { value: smoothness },
+                },
+                transparent: true,
+                depthWrite: false,
+              })
+            } else {
+              meshMat.dispose()
+              ;(mesh as any).material = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+              })
+            }
+
+            mesh.userData.videoTexture = texture
+            mesh.userData.video = v
+            v.play().catch(() => {})
+          })
+        }
+      }
+
+      if (isImage && obj.assetUrl) {
+        const group = new THREE.Group()
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+
+        const textureLoader = new THREE.TextureLoader()
+        textureLoader.load(obj.assetUrl, (texture) => {
+          const aspect = texture.image.height / texture.image.width
+          const imgMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.3, 0.3 * aspect),
+            new THREE.MeshBasicMaterial({
+              map: texture,
+              transparent: true,
+              opacity: obj.opacity,
+              side: THREE.DoubleSide,
+            }),
+          )
+          group.add(imgMesh)
+        })
+        anchorGroup.add(group)
+      }
+
+      if (isAudio) {
+        const group = new THREE.Group()
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.15, 0.15),
+          new THREE.MeshBasicMaterial({
+            color: 0xec4899,
+            transparent: true,
+            opacity: obj.opacity,
+            side: THREE.DoubleSide,
+          }),
+        )
+        group.add(mesh)
+        anchorGroup.add(group)
+
+        if (obj.assetUrl) {
+          const audio = new Audio(obj.assetUrl)
+          audio.loop = true
+          audio.volume = 0.5
+          ;(group as any)._audio = audio
+        }
+      }
+
+      if (isButton) {
+        const group = new THREE.Group()
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.15, 0.15),
+          new THREE.MeshBasicMaterial({
+            color: 0x8b5cf6,
+            transparent: true,
+            opacity: obj.opacity,
+            side: THREE.DoubleSide,
+          }),
+        )
+        mesh.userData.clickable = true
+        mesh.userData.action = obj.action
+        group.add(mesh)
+        anchorGroup.add(group)
+      }
+    }
+  }, [experience.scene?.objects])
+
   const startAR = useCallback(async () => {
     if (!containerRef.current || !experience.marker?.targetUrl) return
     if (startingRef.current) return
     startingRef.current = true
+    anchorBuiltRef.current = false
 
     if (!checkWebGL()) {
       setFallback("webgl")
       updateState("error")
+      startingRef.current = false
       return
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setFallback("no-camera")
       updateState("error")
+      startingRef.current = false
       return
     }
 
     updateState("loading")
     setShowOverlay(true)
 
+    const cleanups: (() => void)[] = []
+
     try {
-      // Ensure preserveDrawingBuffer=true for mobile WebGL (avoids black canvas)
-      const origGetContext: any = HTMLCanvasElement.prototype.getContext
-      ;(HTMLCanvasElement.prototype as any).getContext = function (type: any, attrs?: any) {
-        if (type === "webgl" || type === "webgl2") {
-          attrs = { ...(attrs || {}), preserveDrawingBuffer: true }
+      const container = containerRef.current!
+      const w = window.innerWidth
+      const h = window.innerHeight
+
+      const video = document.createElement("video")
+      video.setAttribute("autoplay", "")
+      video.setAttribute("muted", "")
+      video.setAttribute("playsinline", "")
+      video.style.position = "absolute"
+      video.style.top = "0"
+      video.style.left = "0"
+      video.style.width = "100%"
+      video.style.height = "100%"
+      video.style.objectFit = "cover"
+      video.style.zIndex = "-2"
+      container.appendChild(video)
+      videoRef.current = video
+      cleanups.push(() => video.remove())
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      })
+      streamRef.current = stream
+      video.srcObject = stream
+      cleanups.push(() => stream.getTracks().forEach((t) => t.stop()))
+
+      await new Promise<void>((resolve, reject) => {
+        let attempts = 0
+        const maxAttempts = 50
+        const check = () => {
+          attempts++
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            resolve()
+          } else if (attempts >= maxAttempts) {
+            reject(new Error("Video dimensions never became available"))
+          } else {
+            setTimeout(check, 100)
+          }
         }
-        return origGetContext.call(this, type, attrs)
-      }
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+          resolve()
+        } else {
+          video.addEventListener("loadedmetadata", check, { once: true })
+          setTimeout(check, 200)
+        }
+      })
 
-      // Dynamic import of MindAR (with patched fs)
-      const mindarModule = await import("mind-ar/dist/mindar-image-three.prod.js")
-      const MindARThree = mindarModule.MindARThree || (window as any).MINDAR?.IMAGE?.MindARThree
-      if (!MindARThree) {
-        throw new Error("MindARThree not available")
-      }
+      const vw = video.videoWidth
+      const vh = video.videoHeight
 
-      const mindarThree = new MindARThree({
-        container: containerRef.current,
-        imageTargetSrc: experience.marker.targetUrl,
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        preserveDrawingBuffer: true,
+      })
+      renderer.setSize(w, h)
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.domElement.style.position = "absolute"
+      renderer.domElement.style.top = "0"
+      renderer.domElement.style.left = "0"
+      renderer.domElement.style.width = "100%"
+      renderer.domElement.style.height = "100%"
+      container.appendChild(renderer.domElement)
+      rendererRef.current = renderer
+      cleanups.push(() => {
+        renderer.dispose()
+        renderer.domElement.remove()
+      })
+
+      const scene = new THREE.Scene()
+      sceneRef.current = scene
+      scene.add(new THREE.AmbientLight(0xffffff, 1.5))
+      const dLight = new THREE.DirectionalLight(0xffffff, 1)
+      dLight.position.set(0, 1, 1)
+      scene.add(dLight)
+
+      const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
+      cameraRef.current = cam
+
+      const anchorGroup = new THREE.Group()
+      anchorGroup.visible = false
+      anchorGroupRef.current = anchorGroup
+      scene.add(anchorGroup)
+
+      await buildSceneObjects(anchorGroup)
+
+      let Controller: any
+      try {
+        const mod = await import("mind-ar/dist/mindar-image.prod.js")
+        Controller = mod.Controller
+      } catch {
+        Controller = (window as any).MINDAR?.IMAGE?.Controller
+      }
+      if (!Controller) throw new Error("MindAR Controller not available")
+
+      let isShowing = false
+
+      const controller = new Controller({
+        inputWidth: vw,
+        inputHeight: vh,
         maxTrack: 1,
         filterMinCF: 1e-4,
         filterBeta: 0.001,
         warmupTolerance: 0,
         missTolerance: 10,
-        uiLoading: "no",
-        uiScanning: "no",
-        uiError: "no",
-      })
+        onUpdate: (data: any) => {
+          if (data.type !== "updateMatrix") return
 
-      mindarRef.current = mindarThree
-
-      const anchor = mindarThree.addAnchor(0)
-      anchorObjRef.current = anchor
-
-      anchor.onTargetFound = () => {
-        updateState("detected")
-        setShowOverlay(false)
-        if (detectionTimeoutRef.current) clearTimeout(detectionTimeoutRef.current)
-      }
-
-      anchor.onTargetLost = () => {
-        updateState("lost")
-        setShowOverlay(true)
-      }
-
-      // Create scene objects on the anchor
-      if (experience.scene?.objects) {
-        for (const obj of experience.scene.objects) {
-          const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
-          const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
-          const isImage = obj.type === "imagem"
-          const isAudio = obj.type === "audio"
-          const isButton = obj.type.startsWith("botao-")
-
-          if (isModel) {
-            const group = new THREE.Group()
-            group.position.set(obj.position[0], obj.position[1], obj.position[2])
-            group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-            group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
-
-            const placeholder = new THREE.Mesh(
-              new THREE.BoxGeometry(0.1, 0.1, 0.1),
-              new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: obj.opacity }),
-            )
-            placeholder.userData.isModel = true
-            placeholder.userData.objectId = obj.id
-            placeholder.userData.animationType = obj.animationType
-            placeholder.userData.assetUrl = obj.assetUrl
-            group.add(placeholder)
-
-            anchor.group.add(group)
-
-            // Load GLTF if URL present
-            if (obj.assetUrl) {
-              const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js")
-              const loader = new GLTFLoader()
-              loader.load(
-                obj.assetUrl,
-                (gltf: any) => {
-                  const model = gltf.scene
-                  model.position.copy(placeholder.position)
-                  model.scale.copy(placeholder.scale)
-                  model.rotation.copy(placeholder.rotation)
-                  group.remove(placeholder)
-                  group.add(model)
-
-                  // Play animations if present
-                  if (gltf.animations?.length && obj.animationType !== "none") {
-                    const mixer = new THREE.AnimationMixer(model)
-                    const action = mixer.clipAction(gltf.animations[0])
-                    action.play()
-                    mixer.update(0)
-                    ;(model as any)._mixer = mixer
-                  }
-                },
-                undefined,
-                () => {
-                  // Keep placeholder on error
-                },
-              )
+          if (data.worldMatrix) {
+            if (!isShowing) {
+              isShowing = true
+              anchorGroup.visible = true
+              updateState("detected")
+              setShowOverlay(false)
+              if (detectionTimeoutRef.current) {
+                clearTimeout(detectionTimeoutRef.current)
+                detectionTimeoutRef.current = null
+              }
+              setNoDetectionWarning(false)
+              anchorGroup.traverse((child: any) => {
+                if (child._audio) child._audio.play().catch(() => {})
+              })
             }
-          }
-
-          if (isVideo) {
-            const group = new THREE.Group()
-            group.position.set(obj.position[0], obj.position[1], obj.position[2])
-            group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-            group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
-
-            const mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.Material | THREE.MeshBasicMaterial> = new THREE.Mesh(
-              new THREE.PlaneGeometry(0.3, 0.2),
-              new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 }),
-            )
-            mesh.userData.isVideo = true
-            mesh.userData.objectId = obj.id
-            mesh.userData.assetUrl = obj.assetUrl
-            mesh.userData.chromaKeyColor = obj.chromaKeyColor
-            mesh.userData.chromaKeyTolerance = obj.chromaKeyTolerance ?? 0.4
-            mesh.userData.chromaKeySmoothness = obj.chromaKeySmoothness ?? 0.1
-            group.add(mesh)
-            anchor.group.add(group)
-
-            if (obj.assetUrl) {
-              const video = document.createElement("video")
-              video.crossOrigin = "anonymous"
-              video.loop = true
-              video.muted = true
-              video.playsInline = true
-              video.autoplay = true
-              video.preload = "auto"
-              video.src = obj.assetUrl
-              video.load()
-
-              video.addEventListener("canplay", () => {
-                const texture = new THREE.VideoTexture(video)
-                texture.minFilter = THREE.LinearFilter
-                texture.magFilter = THREE.LinearFilter
-
-                const hasChromaKey = obj.type === "video-chromakey" && obj.chromaKeyColor
-
-                if (hasChromaKey) {
-                  const chromaColor = new THREE.Color(obj.chromaKeyColor!)
-                  const tolerance = (obj.chromaKeyTolerance ?? 0.4) / 100
-                  const smoothness = (obj.chromaKeySmoothness ?? 0.1) / 100
-
-                  mesh.material = new THREE.ShaderMaterial({
-                    vertexShader: `
-                      varying vec2 vUv;
-                      void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                      }
-                    `,
-                    fragmentShader: `
-                      uniform sampler2D uTexture;
-                      uniform vec3 uChromaKey;
-                      uniform float uTolerance;
-                      uniform float uSmoothness;
-                      varying vec2 vUv;
-                      void main() {
-                        vec4 color = texture2D(uTexture, vUv);
-                        vec3 diff = abs(color.rgb - uChromaKey);
-                        float dist = length(diff);
-                        float alpha = smoothstep(uTolerance - uSmoothness, uTolerance + uSmoothness, dist);
-                        gl_FragColor = vec4(color.rgb, alpha);
-                      }
-                    `,
-                    uniforms: {
-                      uTexture: { value: texture },
-                      uChromaKey: { value: chromaColor },
-                      uTolerance: { value: tolerance },
-                      uSmoothness: { value: smoothness },
-                    },
-                    transparent: true,
-                    depthWrite: false,
-                  })
-                } else {
-                  mesh.material = new THREE.MeshBasicMaterial({
-                    map: texture,
-                    transparent: true,
-                  })
-                }
-
-                mesh.userData.videoTexture = texture
-                mesh.userData.video = video
-                video.play().catch(() => {})
+            const mv = data.worldMatrix
+            anchorGroup.position.set(mv[12], mv[13], mv[14])
+          } else {
+            if (isShowing) {
+              isShowing = false
+              anchorGroup.visible = false
+              updateState("lost")
+              setShowOverlay(true)
+              anchorGroup.traverse((child: any) => {
+                if (child._audio) child._audio.pause()
               })
             }
           }
-
-          if (isImage && obj.assetUrl) {
-            const group = new THREE.Group()
-            group.position.set(obj.position[0], obj.position[1], obj.position[2])
-            group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-            group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
-
-            const textureLoader = new THREE.TextureLoader()
-            textureLoader.load(obj.assetUrl, (texture) => {
-              const mesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(0.3, 0.3 * (texture.image.height / texture.image.width)),
-                new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
-              )
-              group.add(mesh)
-            })
-            anchor.group.add(group)
-          }
-
-          if (isAudio) {
-            const group = new THREE.Group()
-            group.position.set(obj.position[0], obj.position[1], obj.position[2])
-            group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-            group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
-
-            const mesh = new THREE.Mesh(
-              new THREE.PlaneGeometry(0.15, 0.15),
-              new THREE.MeshBasicMaterial({ color: 0xec4899, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
-            )
-            group.add(mesh)
-            anchor.group.add(group)
-
-            if (obj.assetUrl) {
-              const audio = new Audio(obj.assetUrl)
-              audio.loop = true
-              audio.volume = 0.5
-
-              anchor.onTargetFound = (() => {
-                const orig = anchor.onTargetFound
-                return () => {
-                  orig?.()
-                  audio.play().catch(() => {})
-                }
-              })()
-
-              anchor.onTargetLost = (() => {
-                const orig = anchor.onTargetLost
-                return () => {
-                  orig?.()
-                  audio.pause()
-                }
-              })()
-            }
-          }
-
-          if (isButton) {
-            const group = new THREE.Group()
-            group.position.set(obj.position[0], obj.position[1], obj.position[2])
-            group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-            group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
-
-            const mesh = new THREE.Mesh(
-              new THREE.PlaneGeometry(0.15, 0.15),
-              new THREE.MeshBasicMaterial({
-                color: 0x8b5cf6,
-                transparent: true,
-                opacity: obj.opacity,
-                side: THREE.DoubleSide,
-              }),
-            )
-            mesh.userData.clickable = true
-            mesh.userData.action = obj.action
-            group.add(mesh)
-            anchor.group.add(group)
-          }
-        }
-      }
-
-      // Start AR with timeout (30s)
-      const startPromise = mindarThree.start()
-      const timeoutPromise = new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout ao iniciar AR. Verifique sua conexão e tente novamente.")), 30000)
-      )
-      await Promise.race([startPromise, timeoutPromise])
-      videoRef.current = mindarThree.video
-
-      const renderer = mindarThree.renderer
-      const container = containerRef.current
-
-      // MindAR's internal resize() handles video/canvas fullscreen positioning.
-      // We just need to ensure renderer/camera update on container size changes.
-      resizeObserverRef.current = new ResizeObserver(() => {
-        const w = container?.clientWidth || window.innerWidth
-        const h = container?.clientHeight || window.innerHeight
-        renderer.setSize(w, h)
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-        if (mindarThree.camera?.aspect) {
-          mindarThree.camera.aspect = w / h
-          mindarThree.camera.updateProjectionMatrix?.()
-        }
+        },
       })
-      if (container) {
-        resizeObserverRef.current.observe(container)
+
+      const loadTimeout = setTimeout(() => {
+        throw new Error("Timeout ao carregar arquivo de marcador (20s). Verifique sua conexão.")
+      }, 20000)
+
+      try {
+        await controller.addImageTargets(experience.marker.targetUrl)
+      } catch (e) {
+        clearTimeout(loadTimeout)
+        throw e
+      }
+      clearTimeout(loadTimeout)
+
+      try {
+        controller.dummyRun(video)
+      } catch (e) {
+        throw new Error("Falha na inicialização do motor AR: " + String(e))
       }
 
-      // Transition to scanning state after 1.5s (allows camera to stabilize)
-      const scanTimeout = setTimeout(() => {
-        updateState("scanning")
-      }, 1500)
+      const proj = controller.getProjectionMatrix()
+      if (proj) {
+        const fov = 2 * Math.atan(1 / proj[5]) * (180 / Math.PI)
+        const near = proj[14] / (proj[10] - 1)
+        const far = proj[14] / (proj[10] + 1)
+        cam.fov = fov || 60
+        cam.near = near > 0 ? near : 0.1
+        cam.far = far > 0 ? far : 1000
+        cam.aspect = w / h
+        cam.updateProjectionMatrix()
+      }
 
-      // If marker not detected after 30s, show persistent guidance
-      detectionTimeoutRef.current = setTimeout(() => {
-        setNoDetectionWarning(true)
-      }, 30000)
+      controller.processVideo(video)
 
-      // Handle click events for buttons
-      const raycaster = new THREE.Raycaster()
-      const pointer = new THREE.Vector2()
+      const resizeObserver = new ResizeObserver(() => {
+        const w2 = window.innerWidth
+        const h2 = window.innerHeight
+        renderer.setSize(w2, h2)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        cam.aspect = w2 / h2
+        cam.updateProjectionMatrix()
+      })
+      resizeObserver.observe(container)
+      cleanups.push(() => resizeObserver.disconnect())
 
       const handleClick = (event: MouseEvent) => {
         const rect = renderer.domElement.getBoundingClientRect()
-        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
-
-        raycaster.setFromCamera(pointer, mindarThree.camera)
+        pointerRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+        pointerRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+        raycasterRef.current.setFromCamera(pointerRef.current, cam)
 
         const clickables: THREE.Object3D[] = []
-        anchor.group.traverse((child: any) => {
-          if (child.isMesh && child.userData.clickable) {
-            clickables.push(child)
-          }
+        anchorGroup.traverse((child: any) => {
+          if (child.isMesh && child.userData.clickable) clickables.push(child)
         })
 
-        const intersects = raycaster.intersectObjects(clickables)
+        const intersects = raycasterRef.current.intersectObjects(clickables)
         if (intersects.length > 0) {
           const hit = intersects[0].object
           const action = hit.userData.action as string
           if (action) handleAction(action)
         }
       }
-
       renderer.domElement.addEventListener("click", handleClick)
+      cleanups.push(() => renderer.domElement.removeEventListener("click", handleClick))
 
-      // Animation loop
       const animate = () => {
         animFrameRef.current = requestAnimationFrame(animate)
 
-        if (anchor.visible) {
-          anchor.group.traverse((child: any) => {
-            // Update video textures
-            if (child.userData?.video && child.userData?.videoTexture) {
+        if (anchorGroup.visible) {
+          anchorGroup.traverse((child: any) => {
+            if (child.userData?.videoTexture) {
               child.userData.videoTexture.needsUpdate = true
             }
-
-            // Update animation mixers
             if (child._mixer) {
               child._mixer.update(0.016)
             }
-
-            // Float animation
             if (child.userData?.animationType === "float" && child.parent) {
-              const time = Date.now() / 1000
-              child.parent.position.y += Math.sin(time * 4) * 0.0001
+              child.parent.position.y += Math.sin(Date.now() / 1000 * 4) * 0.0001
             }
-
-            // Pulse animation
             if (child.userData?.animationType === "pulse" && child.parent) {
-              const scale = 1 + Math.sin(Date.now() / 300) * 0.05
-              child.parent.scale.set(scale, scale, scale)
+              const s = 1 + Math.sin(Date.now() / 300) * 0.05
+              child.parent.scale.set(s, s, s)
             }
           })
         }
+
+        renderer.render(scene, cam)
       }
 
       animate()
 
-      return () => {
+      const scanTimeout = setTimeout(() => {
+        if (arStateRef.current === "loading") updateState("scanning")
+      }, 1500)
+
+      detectionTimeoutRef.current = setTimeout(() => {
+        if (arStateRef.current !== "detected") setNoDetectionWarning(true)
+      }, 30000)
+
+      const fullCleanup = () => {
         cancelAnimationFrame(animFrameRef.current)
-        renderer.domElement.removeEventListener("click", handleClick)
-        mindarThree.stop()
+        controller.stopProcessVideo()
         clearTimeout(scanTimeout)
-        if (detectionTimeoutRef.current) clearTimeout(detectionTimeoutRef.current)
-        if (resizeObserverRef.current) {
-          resizeObserverRef.current.disconnect()
-          resizeObserverRef.current = null
+        if (detectionTimeoutRef.current) {
+          clearTimeout(detectionTimeoutRef.current)
+          detectionTimeoutRef.current = null
         }
+        cleanups.forEach((fn) => fn())
+        videoRef.current = null
+        rendererRef.current = null
+        sceneRef.current = null
+        cameraRef.current = null
         startingRef.current = false
       }
+
+      cleanupRef.current = fullCleanup
+      return fullCleanup
     } catch (err) {
       console.error("AR start error:", err)
       startingRef.current = false
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
+      cleanups.forEach((fn) => fn())
+
       const msg = String(err)
       if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {
         setFallback("camera-permission")
       } else if (msg.includes("Timeout") || msg.includes("fetch") || msg.includes("NetworkError")) {
         setStartError("Falha ao carregar recursos AR. Verifique sua conexão de internet e tente novamente.")
-      } else if (msg.includes("MindARThree not available") || msg.includes("dynamic") || msg.includes("import")) {
+      } else if (msg.includes("Controller") || msg.includes("import")) {
         setStartError("Falha ao carregar o motor AR. Seu navegador pode não ser compatível.")
-      } else if (msg.includes("compile") || msg.includes("target") || msg.includes("invalid") || msg.includes("parse")) {
+      } else if (msg.includes("compile") || msg.includes("target") || msg.includes("invalid")) {
         setStartError("Arquivo de marcador inválido. Recompile o marcador no editor.")
       } else {
         setStartError("Erro ao iniciar AR: " + msg.slice(0, 120))
       }
       updateState("error")
     }
-  }, [experience, checkWebGL, updateState, handleAction])
+  }, [experience, checkWebGL, updateState, handleAction, buildSceneObjects])
 
   useEffect(() => {
     if (!experience.marker?.targetUrl) {
@@ -526,19 +633,13 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
     return () => {
       cleanup?.()
-      if (mindarRef.current) {
-        try {
-          mindarRef.current.stop()
-        } catch {}
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
       }
     }
   }, [experience.marker?.targetUrl, startAR, updateState, initKey])
 
-  const handleSwitchCamera = useCallback(() => {
-    if (mindarRef.current?.switchCamera) {
-      mindarRef.current.switchCamera()
-    }
-  }, [])
+  const handleSwitchCamera = useCallback(() => {}, [])
 
   const handleRetry = useCallback(() => {
     setFallback(null)
@@ -549,7 +650,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
   if (fallback === "webgl") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
+      <div className="fixed inset-0 flex items-center justify-center bg-black">
         <WebGLUnavailable />
       </div>
     )
@@ -557,7 +658,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
   if (fallback === "no-camera") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
+      <div className="fixed inset-0 flex items-center justify-center bg-black">
         <NoCamera />
       </div>
     )
@@ -565,7 +666,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
   if (fallback === "camera-permission") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
+      <div className="fixed inset-0 flex items-center justify-center bg-black">
         <CameraPermissionDenied onRetry={handleRetry} />
       </div>
     )
@@ -573,7 +674,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
   if (startError) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
+      <div className="fixed inset-0 flex items-center justify-center bg-black">
         <div className="text-center max-w-xs">
           <div className="w-20 h-20 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
             <span className="text-2xl">!</span>
@@ -592,8 +693,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   }
 
   return (
-    <div className="fixed inset-0">
-      <div ref={containerRef} className="absolute inset-0 z-0" />
+    <div className="fixed inset-0 overflow-hidden">
+      <div ref={containerRef} className="fixed inset-0" />
 
       {showOverlay && (
         <>
@@ -613,7 +714,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
             </div>
           )}
           {(arState === "scanning" || arState === "lost") && noDetectionWarning && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10">
+            <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/10">
               <MarkerNotFound onRetry={handleRetry} />
             </div>
           )}

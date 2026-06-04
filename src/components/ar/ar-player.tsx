@@ -27,7 +27,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [startError, setStartError] = useState<string | null>(null)
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
-  const mutationObserversRef = useRef<MutationObserver[]>([])
 
   const updateState = useCallback(
     (state: ArState) => {
@@ -126,10 +125,10 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         container: containerRef.current,
         imageTargetSrc: experience.marker.targetUrl,
         maxTrack: 1,
-        filterMinCF: 0.1,
-        filterBeta: 500,
-        warmupTolerance: 5,
-        missTolerance: 5,
+        filterMinCF: 1e-4,
+        filterBeta: 0.001,
+        warmupTolerance: 0,
+        missTolerance: 10,
         uiLoading: "no",
         uiScanning: "no",
         uiError: "no",
@@ -380,64 +379,18 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       await Promise.race([startPromise, timeoutPromise])
       videoRef.current = mindarThree.video
 
-      // Disable MindAR's internal resize (it overrides our CSS with calculated pixel sizes)
-      mindarThree.resize = () => {}
-
-      // Force all MindAR internal elements to fill container
-      const forceFill = (el: HTMLElement) => {
-        el.removeAttribute("width")
-        el.removeAttribute("height")
-        el.style.position = "absolute"
-        el.style.inset = "0"
-        el.style.width = "100%"
-        el.style.height = "100%"
-        // Override any inline pixel values MindAR set
-        el.style.top = "0"
-        el.style.left = "0"
-      }
-      const container = containerRef.current
-      if (container) {
-        // Override video styling directly
-        const video = mindarThree.video
-        if (video) {
-          video.removeAttribute("width")
-          video.removeAttribute("height")
-          video.style.position = "absolute"
-          video.style.inset = "0"
-          video.style.width = "100%"
-          video.style.height = "100%"
-          video.style.top = "0"
-          video.style.left = "0"
-          video.style.objectFit = "cover"
-        }
-        // Override canvas styling
-        const canvases = container.querySelectorAll("canvas")
-        canvases.forEach((c) => {
-          const ce = c as HTMLElement
-          ce.style.position = "absolute"
-          ce.style.inset = "0"
-          ce.style.width = "100%"
-          ce.style.height = "100%"
-          ce.style.top = "0"
-          ce.style.left = "0"
-        })
-      }
-
-      // Force renderer to fill viewport
       const renderer = mindarThree.renderer
-      const w = window.innerWidth
-      const h = window.innerHeight
-      renderer.setSize(w, h)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      const container = containerRef.current
 
-      // Watch for viewport changes (orientation, keyboard)
+      // MindAR's internal resize() handles video/canvas fullscreen positioning.
+      // We just need to ensure renderer/camera update on container size changes.
       resizeObserverRef.current = new ResizeObserver(() => {
-        const w2 = window.innerWidth
-        const h2 = window.innerHeight
-        renderer.setSize(w2, h2)
+        const w = container?.clientWidth || window.innerWidth
+        const h = container?.clientHeight || window.innerHeight
+        renderer.setSize(w, h)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
         if (mindarThree.camera?.aspect) {
-          mindarThree.camera.aspect = w2 / h2
+          mindarThree.camera.aspect = w / h
           mindarThree.camera.updateProjectionMatrix?.()
         }
       })
@@ -526,15 +479,11 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
           resizeObserverRef.current.disconnect()
           resizeObserverRef.current = null
         }
-        mutationObserversRef.current.forEach((mo) => mo.disconnect())
-        mutationObserversRef.current = []
         startingRef.current = false
       }
     } catch (err) {
       console.error("AR start error:", err)
       startingRef.current = false
-      mutationObserversRef.current.forEach((mo) => mo.disconnect())
-      mutationObserversRef.current = []
       const msg = String(err)
       if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {
         setFallback("camera-permission")

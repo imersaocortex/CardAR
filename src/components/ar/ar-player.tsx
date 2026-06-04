@@ -114,6 +114,15 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     setShowOverlay(true)
 
     try {
+      // Ensure preserveDrawingBuffer=true for mobile WebGL (avoids black canvas)
+      const origGetContext: any = HTMLCanvasElement.prototype.getContext
+      ;(HTMLCanvasElement.prototype as any).getContext = function (type: any, attrs?: any) {
+        if (type === "webgl" || type === "webgl2") {
+          attrs = { ...(attrs || {}), preserveDrawingBuffer: true }
+        }
+        return origGetContext.call(this, type, attrs)
+      }
+
       // Dynamic import of MindAR (with patched fs)
       const mindarModule = await import("mind-ar/dist/mindar-image-three.prod.js")
       const MindARThree = mindarModule.MindARThree || (window as any).MINDAR?.IMAGE?.MindARThree

@@ -21,11 +21,13 @@ export default function ExperiencePage() {
         if (!res.ok) {
           const text = await res.text()
           setError(text.includes("não") ? "Experiência não encontrada" : "Erro ao carregar")
+          setLoading(false)
           return
         }
         const data = await res.json()
         if (!data.project) {
           setError("Experiência não encontrada")
+          setLoading(false)
           return
         }
         setExperience(data.project)

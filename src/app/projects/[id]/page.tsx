@@ -152,11 +152,54 @@ export default function StudioPage() {
       setMarkerFile(null)
       setMarkerPreview(null)
       toast({ title: "Marcador salvo", variant: "success" })
+
+      // Auto-compile marker for tracking
+      setUploadingMarker(false)
+      await handleCompileMarker(urlData.publicUrl)
     } catch (err: any) {
       toast({ title: "Erro ao enviar marcador", description: err.message, variant: "destructive" })
+      setUploadingMarker(false)
+    }
+  }, [markerFile, projectId])
+
+  const handleCompileMarker = useCallback(async (imageUrl?: string) => {
+    const url = imageUrl || markerImageUrl
+    if (!url || !projectId) return
+
+    setUploadingMarker(true)
+    try {
+      const { compileMarkerImage } = await import("@/lib/mindar/compile")
+      const buffer = await compileMarkerImage(url)
+      const blob = new Blob([buffer], { type: "application/octet-stream" })
+      const fileName = `target_${projectId}_${Date.now()}.mind`
+
+      const supabase = createClient()
+      const { error: uploadError } = await supabase.storage
+        .from("public-previews")
+        .upload(fileName, blob, { upsert: true, contentType: "application/octet-stream" })
+
+      if (uploadError) throw new Error(uploadError.message)
+
+      const { data: urlData } = await supabase.storage
+        .from("public-previews")
+        .getPublicUrl(fileName)
+
+      if (!urlData?.publicUrl) throw new Error("Erro ao obter URL")
+
+      const { error: updateError } = await supabase
+        .from("project_markers")
+        .update({ target_url: urlData.publicUrl })
+        .eq("project_id", projectId)
+
+      if (updateError) throw new Error(updateError.message)
+
+      setMarkerTargetUrl(urlData.publicUrl)
+      toast({ title: "Marcador compilado", description: "Tracking AR pronto para uso.", variant: "success" })
+    } catch (err: any) {
+      toast({ title: "Erro ao compilar marcador", description: err.message, variant: "destructive" })
     }
     setUploadingMarker(false)
-  }, [markerFile, projectId])
+  }, [markerImageUrl, projectId])
 
   const handleMarkerRemove = useCallback(async () => {
     if (!projectId) return
@@ -164,17 +207,25 @@ export default function StudioPage() {
 
     const { data: existing } = await supabase
       .from("project_markers")
-      .select("id, image_url")
+      .select("id, image_url, target_url")
       .eq("project_id", projectId)
       .single()
 
     if (existing?.image_url) {
-      const url = new URL(existing.image_url)
-      const pathParts = url.pathname.split("/")
-      const fileName = pathParts[pathParts.length - 1]
-      if (fileName) {
-        await supabase.storage.from("markers").remove([fileName])
+      const imgUrl = new URL(existing.image_url)
+      const imgFile = imgUrl.pathname.split("/").pop()
+      if (imgFile) {
+        await supabase.storage.from("markers").remove([imgFile])
       }
+
+      if (existing.target_url) {
+        const tgtUrl = new URL(existing.target_url)
+        const tgtFile = tgtUrl.pathname.split("/").pop()
+        if (tgtFile) {
+          await supabase.storage.from("public-previews").remove([tgtFile])
+        }
+      }
+
       await supabase.from("project_markers").delete().eq("id", existing.id)
     }
 
@@ -356,6 +407,14 @@ export default function StudioPage() {
               </div>
             )}
 
+            {markerImageUrl && !markerTargetUrl && (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+                <p className="text-xs text-amber-600">
+                  Marcador precisa ser compilado para funcionar no AR.
+                </p>
+              </div>
+            )}
+
             {!markerImageUrl && !markerFile && (
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
                 <p className="text-xs text-amber-600">
@@ -374,6 +433,11 @@ export default function StudioPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {markerImageUrl && !markerTargetUrl && (
+                <Button variant="secondary" size="sm" onClick={() => handleCompileMarker()} disabled={uploadingMarker}>
+                  {uploadingMarker ? "Compilando..." : "Compilar Marcador"}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => setMarkerDialogOpen(false)}>
                 Fechar
               </Button>

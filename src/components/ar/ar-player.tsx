@@ -120,7 +120,10 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     setObjectCount(experience.scene.objects.length)
 
     const ref = getMarkerDimensions(experience.type || "square_1x1")
-    const scaleFactor = ref.physicalWidth / ref.width
+    const aspect = ref.physicalHeight / ref.physicalWidth
+    const sx = 1 / ref.width
+    const sy = aspect / ref.height
+    const sz = 1 / ref.width
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -132,9 +135,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       if (!obj.visible) continue
 
       const group = new THREE.Group()
-      group.position.set(obj.position[0] * scaleFactor, obj.position[1] * scaleFactor, obj.position[2] * scaleFactor)
+      group.position.set(obj.position[0] * sx, obj.position[1] * sy, obj.position[2] * sz)
       group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-      group.scale.set(obj.scale[0] * scaleFactor, obj.scale[1] * scaleFactor, obj.scale[2] * scaleFactor)
+      group.scale.set(obj.scale[0] * sx, obj.scale[1] * sy, obj.scale[2] * sz)
 
       if (isModel) {
         const placeholder = new THREE.Mesh(

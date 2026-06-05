@@ -608,17 +608,11 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
       step("Motor inicializado. Iniciando tracking...")
 
-      const proj = controller.getProjectionMatrix()
-      if (proj) {
-        const fov = 2 * Math.atan(1 / proj[5]) * (180 / Math.PI)
-        const near = proj[14] / (proj[10] - 1)
-        const far = proj[14] / (proj[10] + 1)
-        cam.fov = fov || 60
-        cam.near = near > 0 ? near : 0.1
-        cam.far = far > 0 ? far : 1000
-        cam.aspect = w / h
-        cam.updateProjectionMatrix()
-      }
+      cam.fov = 60
+      cam.near = 0.1
+      cam.far = 1000
+      cam.aspect = w / h
+      cam.updateProjectionMatrix()
 
       controller.processVideo(video)
       step("Tracking iniciado")

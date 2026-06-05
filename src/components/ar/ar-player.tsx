@@ -141,7 +141,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const placeholder = new THREE.Mesh(
-          new THREE.BoxGeometry(0.1, 0.1, 0.1),
+          new THREE.BoxGeometry(1, 1, 1),
           new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: obj.opacity }),
         )
         placeholder.userData.animationType = obj.animationType
@@ -181,7 +181,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 })
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), meshMat)
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), meshMat)
         mesh.userData.isVideo = true
         mesh.userData.objectId = obj.id
         mesh.userData.assetUrl = obj.assetUrl
@@ -266,7 +266,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const placeholder = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.15, 0.15),
+          new THREE.PlaneGeometry(1, 1),
           new THREE.MeshBasicMaterial({ color: 0xec4899, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
         )
         group.add(placeholder)
@@ -277,7 +277,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
           textureLoader.load(obj.assetUrl, (texture) => {
             const aspect = texture.image.height / texture.image.width
             const imgMesh = new THREE.Mesh(
-              new THREE.PlaneGeometry(0.3, 0.3 * aspect),
+              new THREE.PlaneGeometry(1, 1),
               new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,

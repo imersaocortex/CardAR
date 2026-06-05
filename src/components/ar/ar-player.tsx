@@ -689,8 +689,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       controller.processVideo(video)
       const proj = controller.getProjectionMatrix()
       if (proj) {
-        cam.projectionMatrix.fromArray(proj)
-        cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert()
+        const fovY = 2 * Math.atan(1 / proj[5])
+        cam.fov = fovY * 180 / Math.PI
+        cam.aspect = w / h
+        cam.near = 0.01
+        cam.far = 1000
+        cam.updateProjectionMatrix()
       }
       step("Tracking iniciado")
 
@@ -699,10 +703,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         const h2 = window.innerHeight
         renderer.setSize(w2, h2)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-        if (proj) {
-          cam.projectionMatrix.fromArray(proj)
-          cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert()
-        }
+        cam.aspect = w2 / h2
+        cam.updateProjectionMatrix()
       })
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())

@@ -437,12 +437,19 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       dLight.position.set(0, 1, 1)
       scene.add(dLight)
 
-      const testCube = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 0.1, 0.1),
-        new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
+      const debugSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 }),
       )
-      testCube.position.set(0, 0, -0.5)
-      scene.add(testCube)
+      debugSphere.position.set(0, 0, -3)
+      scene.add(debugSphere)
+      const debugSphere2 = new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 }),
+      )
+      debugSphere2.position.set(0, 0, -1)
+      scene.add(debugSphere2)
+      scene.add(new THREE.AxesHelper(2))
 
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
@@ -454,12 +461,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       scene.add(anchorGroup)
 
       const anchorTest = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 0.3, 0.3),
-        new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
+        new THREE.BoxGeometry(0.5, 0.5, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.5 }),
       )
       anchorTest.position.set(0, 0, 0)
       anchorGroup.add(anchorTest)
-      console.log("[AR] green test cube added to anchorGroup")
+      console.log("[AR] yellow test cube added to anchorGroup")
 
       await buildSceneObjects(anchorGroup)
       step("Cena 3D pronta")

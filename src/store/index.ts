@@ -6,7 +6,7 @@ import { mockElements, mockLayers } from "@/lib/mock-data"
 import { createClient } from "@/lib/supabase/client"
 
 export const projectTypeDimensions: Record<ProjectType, { width: number; height: number; label: string }> = {
-  cartao: { width: 0.088, height: 0.048, label: "Cartão de Visita (88mm × 48mm)" },
+  cartao: { width: 0.85, height: 0.55, label: "Cartão de Visita (88mm × 48mm)" },
   panfleto: { width: 2.1, height: 2.97, label: "Panfleto A4 (210mm × 297mm)" },
   post: { width: 1, height: 1, label: "Post 1×1 (formato quadrado)" },
 }

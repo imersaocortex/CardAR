@@ -453,6 +453,13 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       anchorGroupRef.current = anchorGroup
       scene.add(anchorGroup)
 
+      const anchorTest = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.5, 0.01),
+        new THREE.MeshStandardMaterial({ color: 0x00ff00, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
+      )
+      anchorTest.position.set(0, 0, 0)
+      anchorGroup.add(anchorTest)
+
       await buildSceneObjects(anchorGroup)
       step("Cena 3D pronta")
 

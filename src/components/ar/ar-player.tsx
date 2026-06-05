@@ -113,17 +113,16 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     }
   }, [])
 
-  const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group) => {
+  const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group, imageWidth: number, imageHeight: number) => {
     if (!experience.scene?.objects || anchorBuiltRef.current) return
     anchorBuiltRef.current = true
 
     setObjectCount(experience.scene.objects.length)
 
     const ref = getMarkerDimensions(experience.type || "square_1x1")
-    const aspect = ref.physicalHeight / ref.physicalWidth
-    const sx = 1 / ref.width
-    const sy = aspect / ref.height
-    const sz = 1 / ref.width
+    const fx = imageWidth / (1000 * ref.width)
+    const fy = imageHeight / (1000 * ref.height)
+    const fz = imageWidth / (1000 * ref.width)
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -136,15 +135,15 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       const group = new THREE.Group()
       group.position.set(
-        obj.position[0] * sx,
-        obj.position[2] * sz,
-        obj.position[1] * sy,
+        obj.position[0] * fx,
+        obj.position[1] * fy,
+        obj.position[2] * fz,
       )
-      group.rotation.set(obj.rotation[0], obj.rotation[2], obj.rotation[1])
+      group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
       group.scale.set(
-        obj.scale[0] * sx,
-        obj.scale[2] * sz,
-        obj.scale[1] * sy,
+        obj.scale[0] * fx,
+        obj.scale[1] * fy,
+        obj.scale[2] * fz,
       )
 
       if (isModel) {
@@ -546,9 +545,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       anchorGroupRef.current = anchorGroup
       scene.add(anchorGroup)
 
-      await buildSceneObjects(anchorGroup)
-      step("Cena 3D pronta")
-
       step("Importando MindAR...")
       let MindAR: any
       try {
@@ -680,7 +676,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       })
 
       step("Adicionando marcador ao tracker...")
-      controller.addImageTargetsFromBuffer(finalBuffer)
+      const { dimensions: markerDims } = controller.addImageTargetsFromBuffer(finalBuffer)
+      const markerImageWidth = markerDims[0][0] as number
+      const markerImageHeight = markerDims[0][1] as number
+      step(`Dimensões do marcador: ${markerImageWidth}x${markerImageHeight}px`)
+      await buildSceneObjects(anchorGroup, markerImageWidth, markerImageHeight)
+      step("Cena 3D pronta (" + experience.scene?.objects?.length + " objetos)")
       step("Marcador pronto. Inicializando motor...")
 
       try {

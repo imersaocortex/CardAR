@@ -112,10 +112,17 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     if (!experience.scene?.objects || anchorBuiltRef.current) return
     anchorBuiltRef.current = true
 
+    console.log("[AR] scene.objects count:", experience.scene.objects.length)
+    if (experience.scene.objects.length === 0) {
+      console.warn("[AR] No objects in scene - nothing to display")
+    }
+
     const dims = getMarkerDimensions(experience.type || "square_1x1")
     const mw = dims.width
+    console.log("[AR] type:", experience.type, "markerWidth:", mw)
 
     for (const obj of experience.scene.objects) {
+      console.log("[AR] creating object:", obj.name, "type:", obj.type, "pos:", obj.position, "scale:", obj.scale)
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
       const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
       const isImage = obj.type === "imagem"
@@ -428,6 +435,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       dLight.position.set(0, 1, 1)
       scene.add(dLight)
 
+
+
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
 
@@ -549,12 +558,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            const mat = new THREE.Matrix4().makeScale(1, 1, -1).multiply(new THREE.Matrix4().fromArray(mv))
-            const pos = new THREE.Vector3()
-            const quat = new THREE.Quaternion()
-            mat.decompose(pos, quat, new THREE.Vector3())
-            anchorGroup.position.copy(pos)
-            anchorGroup.quaternion.copy(quat)
+            anchorGroup.position.set(mv[12], mv[13], -mv[14])
           } else {
             if (isShowing) {
               isShowing = false

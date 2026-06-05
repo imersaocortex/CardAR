@@ -433,25 +433,22 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       })
 
       const scene = new THREE.Scene()
-      scene.background = new THREE.Color(0x112244)
       sceneRef.current = scene
       scene.add(new THREE.AmbientLight(0xffffff, 1.5))
       const dLight = new THREE.DirectionalLight(0xffffff, 1)
       dLight.position.set(0, 1, 1)
       scene.add(dLight)
 
-      const debugSphere = new THREE.Mesh(
-        new THREE.SphereGeometry(1, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.5 }),
-      )
-      debugSphere.position.set(0, 0, -3)
-      scene.add(debugSphere)
-      const debugSphere2 = new THREE.Mesh(
-        new THREE.SphereGeometry(0.2, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 }),
-      )
-      debugSphere2.position.set(0, 0, -1)
-      scene.add(debugSphere2)
+      const dbg = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => {
+        const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }))
+        m.position.set(x, y, z)
+        scene.add(m)
+      }
+      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0xff0000, 0, 0, -0.5)
+      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0x00ff00, 0, 0.5, -1)
+      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0x0000ff, 0.5, 0, -1.5)
+      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0xffff00, -0.5, 0, -2)
+      dbg(new THREE.BoxGeometry(0.1, 0.1, 0.1), 0xff00ff, 0, 0, -3)
       scene.add(new THREE.AxesHelper(2))
 
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)

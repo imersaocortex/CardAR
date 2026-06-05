@@ -123,6 +123,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     const fx = imageWidth / (1000 * ref.width)
     const fy = imageHeight / (1000 * ref.height)
     const fz = imageWidth / (1000 * ref.width)
+    const cx = imageWidth / 2000
+    const cy = imageHeight / 2000
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -135,8 +137,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       const group = new THREE.Group()
       group.position.set(
-        obj.position[0] * fx,
-        obj.position[1] * fy,
+        obj.position[0] * fx + cx,
+        obj.position[1] * fy + cy,
         obj.position[2] * fz,
       )
       group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])

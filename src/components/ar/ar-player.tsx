@@ -136,9 +136,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isModel) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const placeholder = new THREE.Mesh(
           new THREE.BoxGeometry(0.1, 0.1, 0.1),
@@ -176,9 +176,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isVideo) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 })
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), meshMat)
@@ -259,34 +259,43 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         }
       }
 
-      if (isImage && obj.assetUrl) {
+      if (isImage) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
-        const textureLoader = new THREE.TextureLoader()
-        textureLoader.load(obj.assetUrl, (texture) => {
-          const aspect = texture.image.height / texture.image.width
-          const imgMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.3, 0.3 * aspect),
-            new THREE.MeshBasicMaterial({
-              map: texture,
-              transparent: true,
-              opacity: obj.opacity,
-              side: THREE.DoubleSide,
-            }),
-          )
-          group.add(imgMesh)
-        })
+        const placeholder = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.15, 0.15),
+          new THREE.MeshBasicMaterial({ color: 0xec4899, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
+        )
+        group.add(placeholder)
         anchorGroup.add(group)
+
+        if (obj.assetUrl) {
+          const textureLoader = new THREE.TextureLoader()
+          textureLoader.load(obj.assetUrl, (texture) => {
+            const aspect = texture.image.height / texture.image.width
+            const imgMesh = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.3, 0.3 * aspect),
+              new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                opacity: obj.opacity,
+                side: THREE.DoubleSide,
+              }),
+            )
+            group.remove(placeholder)
+            group.add(imgMesh)
+          })
+        }
       }
 
       if (isAudio) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(0.15, 0.15),
@@ -310,9 +319,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isButton) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(0.15, 0.15),
@@ -440,7 +449,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       dLight.position.set(0, 1, 1)
       scene.add(dLight)
 
-      scene.add(new THREE.AxesHelper(0.5))
+
 
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
@@ -450,14 +459,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       anchorGroup.visible = false
       anchorGroupRef.current = anchorGroup
       scene.add(anchorGroup)
-
-      const anchorTest = new THREE.Mesh(
-        new THREE.BoxGeometry(0.5, 0.5, 0.5),
-        new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.5 }),
-      )
-      anchorTest.position.set(0, 0, 0)
-      anchorGroup.add(anchorTest)
-      console.log("[AR] yellow test cube added to anchorGroup")
 
       await buildSceneObjects(anchorGroup)
       step("Cena 3D pronta")
@@ -572,8 +573,14 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            anchorGroup.position.set(mv[12] / 1000, mv[13] / 1000, mv[14] / 1000)
-            setWorldPos(`${(mv[12]/1000).toFixed(3)},${(mv[13]/1000).toFixed(3)},${(mv[14]/1000).toFixed(3)}`)
+            const mr = new THREE.Matrix4().fromArray(mv)
+            const mp = new THREE.Vector3()
+            const mq = new THREE.Quaternion()
+            const ms = new THREE.Vector3()
+            mr.decompose(mp, mq, ms)
+            anchorGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
+            anchorGroup.quaternion.copy(mq)
+            setWorldPos(`${(mp.x/1000).toFixed(3)},${(mp.y/1000).toFixed(3)},${(mp.z/1000).toFixed(3)}`)
           } else {
             if (isShowing) {
               isShowing = false

@@ -132,9 +132,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       if (!obj.visible) continue
 
       const group = new THREE.Group()
-      group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
+      group.position.set(obj.position[0], obj.position[1], obj.position[2])
       group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-      group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+      group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
 
       if (isModel) {
         const placeholder = new THREE.Mesh(

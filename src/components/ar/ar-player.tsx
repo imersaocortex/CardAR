@@ -133,9 +133,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isModel) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
 
         const placeholder = new THREE.Mesh(
           new THREE.BoxGeometry(0.1, 0.1, 0.1),
@@ -173,9 +173,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isVideo) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
 
         const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 })
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), meshMat)
@@ -258,9 +258,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isImage && obj.assetUrl) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
 
         const textureLoader = new THREE.TextureLoader()
         textureLoader.load(obj.assetUrl, (texture) => {
@@ -281,9 +281,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isAudio) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
 
         const mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(0.15, 0.15),
@@ -307,9 +307,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isButton) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
+        group.position.set(obj.position[0], obj.position[1], obj.position[2])
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
 
         const mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(0.15, 0.15),
@@ -454,11 +454,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       scene.add(anchorGroup)
 
       const anchorTest = new THREE.Mesh(
-        new THREE.BoxGeometry(0.5, 0.5, 0.01),
-        new THREE.MeshStandardMaterial({ color: 0x00ff00, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
+        new THREE.BoxGeometry(0.3, 0.3, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
       )
       anchorTest.position.set(0, 0, 0)
       anchorGroup.add(anchorTest)
+      console.log("[AR] green test cube added to anchorGroup")
 
       await buildSceneObjects(anchorGroup)
       step("Cena 3D pronta")
@@ -573,7 +574,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            anchorGroup.position.set(mv[12], mv[13], -mv[14])
+            console.log("[AR] worldMatrix:", mv[12].toFixed(3), mv[13].toFixed(3), mv[14].toFixed(3), mv[15])
+            anchorGroup.position.set(0, 0, -1)
           } else {
             if (isShowing) {
               isShowing = false

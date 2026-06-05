@@ -119,8 +119,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
     setObjectCount(experience.scene.objects.length)
 
-    const dims = getMarkerDimensions(experience.type || "square_1x1")
-    const mw = dims.width
+    const ref = getMarkerDimensions(experience.type || "square_1x1")
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -132,9 +131,17 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       if (!obj.visible) continue
 
       const group = new THREE.Group()
-      group.position.set(obj.position[0], obj.position[1], obj.position[2])
-      group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-      group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+      group.position.set(
+        obj.position[0] / ref.width,
+        obj.position[2] / ref.width,
+        obj.position[1] / ref.height,
+      )
+      group.rotation.set(obj.rotation[0], obj.rotation[2], obj.rotation[1])
+      group.scale.set(
+        obj.scale[0] / ref.width,
+        obj.scale[2] / ref.width,
+        obj.scale[1] / ref.height,
+      )
 
       if (isModel) {
         const placeholder = new THREE.Mesh(
@@ -647,13 +654,14 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
                 if (child._audio) child._audio.play().catch(() => {})
               })
             }
-            const mv = data.worldMatrix
-            const mr = new THREE.Matrix4().fromArray(mv)
+            const mr = new THREE.Matrix4().fromArray(data.worldMatrix)
             const mp = new THREE.Vector3()
             const mq = new THREE.Quaternion()
-            mr.decompose(mp, mq, new THREE.Vector3())
+            const ms = new THREE.Vector3()
+            mr.decompose(mp, mq, ms)
             anchorGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
             anchorGroup.quaternion.copy(mq)
+            anchorGroup.scale.set(ms.x / 1000, ms.y / 1000, ms.z / 1000)
             setWorldPos(`${(mp.x/1000).toFixed(3)},${(mp.y/1000).toFixed(3)},${(mp.z/1000).toFixed(3)}`)
           } else {
             if (isShowing) {

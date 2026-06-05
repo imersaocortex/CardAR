@@ -394,6 +394,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       const vw = video.videoWidth
       const vh = video.videoHeight
+      video.width = vw
+      video.height = vh
       step("Câmera pronta (" + vw + "x" + vh + ")")
 
       const renderer = new THREE.WebGLRenderer({

@@ -30,6 +30,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null)
   const frameCountRef = useRef(0)
   const [renderFrame, setRenderFrame] = useState(0)
+  const [worldPos, setWorldPos] = useState("")
 
   const [arState, setArState] = useState<ArState>("loading")
   const [fallback, setFallback] = useState<"camera-permission" | "no-camera" | "webgl" | null>(null)
@@ -572,6 +573,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
             }
             const mv = data.worldMatrix
             anchorGroup.position.set(mv[12], mv[13], mv[14])
+            setWorldPos(`${mv[12].toFixed(2)},${mv[13].toFixed(2)},${mv[14].toFixed(2)}`)
           } else {
             if (isShowing) {
               isShowing = false
@@ -878,7 +880,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
           {anchorGroupRef.current?.visible ? "✓VIS" : "✗VIS"}
         </span>
         <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
-          BG:{(sceneRef.current?.background as THREE.Color)?.getHexString() || "none"}
+          {worldPos || "no mv"}
         </span>
       </div>
     </div>

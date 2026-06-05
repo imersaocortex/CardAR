@@ -120,13 +120,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     setObjectCount(experience.scene.objects.length)
 
     const ref = getMarkerDimensions(experience.type || "square_1x1")
-    const aspect = ref.physicalHeight / ref.physicalWidth
-    const sx = 1 / ref.width
-    const sy = aspect / ref.height
-    const sz = 1 / ref.width
-
-    const gw = ref.width * 0.8
-    const gh = ref.height * 0.8
+    const mw = ref.width
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -138,13 +132,13 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       if (!obj.visible) continue
 
       const group = new THREE.Group()
-      group.position.set(obj.position[0] * sx, obj.position[1] * sy, obj.position[2] * sz)
+      group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
       group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-      group.scale.set(obj.scale[0] * sx, obj.scale[1] * sy, obj.scale[2] * sz)
+      group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
       if (isModel) {
         const placeholder = new THREE.Mesh(
-          new THREE.BoxGeometry(gw, gw, gw * 0.5),
+          new THREE.BoxGeometry(0.8, 0.8, 0.8),
           new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.3, metalness: 0.2, transparent: true, opacity: obj.opacity }),
         )
         placeholder.userData.animationType = obj.animationType
@@ -175,7 +169,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isVideo) {
         const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), meshMat)
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85), meshMat)
         mesh.userData.isVideo = true
         mesh.userData.objectId = obj.id
         mesh.userData.assetUrl = obj.assetUrl
@@ -256,7 +250,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isImage) {
         const placeholder = new THREE.Mesh(
-          new THREE.PlaneGeometry(gw, gh),
+          new THREE.PlaneGeometry(1.5, 1.5),
           new THREE.MeshBasicMaterial({ color: 0xec4899, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
         )
         group.add(placeholder)
@@ -265,7 +259,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
           const textureLoader = new THREE.TextureLoader()
           textureLoader.load(obj.assetUrl, (texture) => {
             const imgMesh = new THREE.Mesh(
-              new THREE.PlaneGeometry(gw, gh),
+              new THREE.PlaneGeometry(1.5, 1.5),
               new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
@@ -281,7 +275,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isAudio) {
         const mesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(gw * 0.5, gh * 0.5),
+          new THREE.PlaneGeometry(0.6, 0.6),
           new THREE.MeshStandardMaterial({
             color: 0xec4899,
             roughness: 0.3,

@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as THREE from "three"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
+import { getMarkerDimensions } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
 
@@ -111,6 +112,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     if (!experience.scene?.objects || anchorBuiltRef.current) return
     anchorBuiltRef.current = true
 
+    const dims = getMarkerDimensions(experience.type || "square_1x1")
+    const mw = dims.width
+
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
       const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
@@ -120,9 +124,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isModel) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const placeholder = new THREE.Mesh(
           new THREE.BoxGeometry(0.1, 0.1, 0.1),
@@ -160,9 +164,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isVideo) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 })
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), meshMat)
@@ -245,9 +249,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isImage && obj.assetUrl) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const textureLoader = new THREE.TextureLoader()
         textureLoader.load(obj.assetUrl, (texture) => {
@@ -268,9 +272,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isAudio) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(0.15, 0.15),
@@ -294,9 +298,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       if (isButton) {
         const group = new THREE.Group()
-        group.position.set(obj.position[0], obj.position[1], obj.position[2])
+        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
         group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
         const mesh = new THREE.Mesh(
           new THREE.PlaneGeometry(0.15, 0.15),
@@ -545,7 +549,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            anchorGroup.position.set(mv[12], mv[13], mv[14])
+            const mat = new THREE.Matrix4().makeScale(1, 1, -1).multiply(new THREE.Matrix4().fromArray(mv))
+            const pos = new THREE.Vector3()
+            const quat = new THREE.Quaternion()
+            mat.decompose(pos, quat, new THREE.Vector3())
+            anchorGroup.position.copy(pos)
+            anchorGroup.quaternion.copy(quat)
           } else {
             if (isShowing) {
               isShowing = false

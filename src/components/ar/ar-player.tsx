@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as THREE from "three"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
+import { getMarkerDimensions } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
 
@@ -118,6 +119,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
     setObjectCount(experience.scene.objects.length)
 
+    const dims = getMarkerDimensions(experience.type || "square_1x1")
+    const mw = dims.width
+
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
       const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
@@ -128,9 +132,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       if (!obj.visible) continue
 
       const group = new THREE.Group()
-      group.position.set(obj.position[0], obj.position[1], obj.position[2])
+      group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
       group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-      group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+      group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
 
       if (isModel) {
         const placeholder = new THREE.Mesh(
@@ -374,6 +378,37 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         mesh.userData.clickable = true
         mesh.userData.action = obj.action
         group.add(mesh)
+
+        const socialLabels2: Record<string, string> = {
+          "botao-whatsapp": "WhatsApp",
+          "botao-site": "Site",
+          "botao-instagram": "Instagram",
+          "botao-ligar": "Ligar",
+          "botao-email": "Email",
+        }
+
+        if (obj.showCaption) {
+          const capCanvas = document.createElement("canvas")
+          capCanvas.width = 256
+          capCanvas.height = 64
+          const capCtx = capCanvas.getContext("2d")!
+          capCtx.fillStyle = "rgba(0,0,0,0.5)"
+          capCtx.roundRect(0, 0, 256, 64, 12); capCtx.fill()
+          capCtx.fillStyle = "white"
+          capCtx.font = "bold 28px sans-serif"
+          capCtx.textAlign = "center"
+          capCtx.textBaseline = "middle"
+          capCtx.fillText(socialLabels2[obj.type] || obj.name || obj.type, 128, 34)
+
+          const capTex = new THREE.CanvasTexture(capCanvas)
+          capTex.needsUpdate = true
+          const capPlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.6, 0.15),
+            new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthWrite: false, opacity: obj.opacity }),
+          )
+          capPlane.position.set(0, -0.36, 0.02)
+          group.add(capPlane)
+        }
       }
 
       anchorGroup.add(group)

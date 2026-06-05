@@ -621,10 +621,10 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         inputWidth: vw,
         inputHeight: vh,
         maxTrack: 1,
-        filterMinCF: 1e-4,
-        filterBeta: 0.001,
+        filterMinCF: 0.005,
+        filterBeta: 0.01,
         warmupTolerance: 0,
-        missTolerance: 10,
+        missTolerance: 5,
         onUpdate: (data: any) => {
           if (data.type === "processDone") {
             frameCount++
@@ -648,8 +648,13 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            anchorGroup.position.set(mv[12] / 1000, mv[13] / 1000, mv[14] / 1000)
-            setWorldPos(`${(mv[12]/1000).toFixed(3)},${(mv[13]/1000).toFixed(3)},${(mv[14]/1000).toFixed(3)}`)
+            const mr = new THREE.Matrix4().fromArray(mv)
+            const mp = new THREE.Vector3()
+            const mq = new THREE.Quaternion()
+            mr.decompose(mp, mq, new THREE.Vector3())
+            anchorGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
+            anchorGroup.quaternion.copy(mq)
+            setWorldPos(`${(mp.x/1000).toFixed(3)},${(mp.y/1000).toFixed(3)},${(mp.z/1000).toFixed(3)}`)
           } else {
             if (isShowing) {
               isShowing = false

@@ -36,6 +36,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const [noDetectionWarning, setNoDetectionWarning] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [initStep, setInitStep] = useState("")
+  const [objectCount, setObjectCount] = useState(0)
+  const [threeReady, setThreeReady] = useState(false)
 
   const step = useCallback((msg: string) => {
     console.log("[AR]", msg)
@@ -117,12 +119,12 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       console.warn("[AR] No objects in scene - nothing to display")
     }
 
+    setObjectCount(experience.scene.objects.length)
+
     const dims = getMarkerDimensions(experience.type || "square_1x1")
     const mw = dims.width
-    console.log("[AR] type:", experience.type, "markerWidth:", mw)
 
     for (const obj of experience.scene.objects) {
-      console.log("[AR] creating object:", obj.name, "type:", obj.type, "pos:", obj.position, "scale:", obj.scale)
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
       const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
       const isImage = obj.type === "imagem"
@@ -435,10 +437,16 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       dLight.position.set(0, 1, 1)
       scene.add(dLight)
 
-
+      const testCube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.1, 0.1),
+        new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
+      )
+      testCube.position.set(0, 0, -0.5)
+      scene.add(testCube)
 
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
+      setThreeReady(true)
 
       const anchorGroup = new THREE.Group()
       anchorGroup.visible = false
@@ -847,6 +855,18 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
             />
           </div>
         </div>
+      </div>
+
+      <div className="absolute bottom-2 left-2 z-30 flex gap-2">
+        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-black/50 text-white/70">
+          3D: {objectCount} obj
+        </span>
+        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-black/50 text-white/70">
+          {threeReady ? "✓ Three" : "✗ Three"}
+        </span>
+        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-black/50 text-white/70">
+          {anchorGroupRef.current?.visible ? "✓ Visible" : "✗ Visible"}
+        </span>
       </div>
     </div>
   )

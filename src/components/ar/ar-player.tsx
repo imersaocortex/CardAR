@@ -28,6 +28,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
   const arStateRef = useRef<ArState>("loading")
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
+  const frameCountRef = useRef(0)
+  const [renderFrame, setRenderFrame] = useState(0)
 
   const [arState, setArState] = useState<ArState>("loading")
   const [fallback, setFallback] = useState<"camera-permission" | "no-camera" | "webgl" | null>(null)
@@ -431,6 +433,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       })
 
       const scene = new THREE.Scene()
+      scene.background = new THREE.Color(0x112244)
       sceneRef.current = scene
       scene.add(new THREE.AmbientLight(0xffffff, 1.5))
       const dLight = new THREE.DirectionalLight(0xffffff, 1)
@@ -657,6 +660,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
 
       const animate = () => {
         animFrameRef.current = requestAnimationFrame(animate)
+        frameCountRef.current++
+        if (frameCountRef.current % 30 === 0) setRenderFrame(frameCountRef.current)
 
         if (anchorGroup.visible) {
           anchorGroup.traverse((child: any) => {
@@ -873,15 +878,21 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         </div>
       </div>
 
-      <div className="absolute bottom-2 left-2 z-30 flex gap-2">
-        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-black/50 text-white/70">
-          3D: {objectCount} obj
+      <div className="absolute bottom-2 left-2 z-30 flex flex-wrap gap-1 max-w-[90vw]">
+        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
+          F:{renderFrame}
         </span>
-        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-black/50 text-white/70">
-          {threeReady ? "✓ Three" : "✗ Three"}
+        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
+          3D:{objectCount}
         </span>
-        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-black/50 text-white/70">
-          {anchorGroupRef.current?.visible ? "✓ Visible" : "✗ Visible"}
+        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
+          {threeReady ? "✓THREE" : "✗THREE"}
+        </span>
+        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
+          {anchorGroupRef.current?.visible ? "✓VIS" : "✗VIS"}
+        </span>
+        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
+          BG:{(sceneRef.current?.background as THREE.Color)?.getHexString() || "none"}
         </span>
       </div>
     </div>

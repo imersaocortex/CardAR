@@ -49,7 +49,7 @@ export interface ArExperienceData {
 export function getMarkerDimensions(type: string): { width: number; height: number } {
   switch (type) {
     case "business_card":
-      return { width: 0.85, height: 0.55 }
+      return { width: 0.088, height: 0.048 }
     case "flyer_a4":
       return { width: 2.1, height: 2.97 }
     case "square_1x1":

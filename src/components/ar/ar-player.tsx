@@ -572,8 +572,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            anchorGroup.position.set(mv[12], mv[13], mv[14])
-            setWorldPos(`${mv[12].toFixed(2)},${mv[13].toFixed(2)},${mv[14].toFixed(2)}`)
+            anchorGroup.position.set(mv[12] / 1000, mv[13] / 1000, mv[14] / 1000)
+            setWorldPos(`${(mv[12]/1000).toFixed(3)},${(mv[13]/1000).toFixed(3)},${(mv[14]/1000).toFixed(3)}`)
           } else {
             if (isShowing) {
               isShowing = false
@@ -599,17 +599,11 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
       step("Motor inicializado. Iniciando tracking...")
 
-      const proj = controller.getProjectionMatrix()
-      if (proj) {
-        cam.projectionMatrix.fromArray(proj)
-        cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert()
-      } else {
-        cam.fov = 60
-        cam.near = 0.1
-        cam.far = 1000
-        cam.aspect = w / h
-        cam.updateProjectionMatrix()
-      }
+      cam.fov = 60
+      cam.near = 0.1
+      cam.far = 1000
+      cam.aspect = w / h
+      cam.updateProjectionMatrix()
 
       controller.processVideo(video)
       step("Tracking iniciado")

@@ -187,7 +187,7 @@ export default function StudioPage() {
       const buffer = await compileMarkerImage(objectUrl)
       URL.revokeObjectURL(objectUrl)
 
-      const mindBlob = new Blob([buffer.buffer as ArrayBuffer], { type: "application/octet-stream" })
+      const mindBlob = new Blob([buffer as unknown as BlobPart], { type: "application/octet-stream" })
       const mindFile = `target_${projectId}_${Date.now()}.mind`
 
       const { error: uploadError } = await supabase.storage

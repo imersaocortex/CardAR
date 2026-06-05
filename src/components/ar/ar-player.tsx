@@ -449,7 +449,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       const imageUrl = experience.marker!.imageUrl
 
       // Try .mind file first (pre-compiled), fall back to compiling from image
-      let mindBuffer: ArrayBuffer | null = null
+      let mindBuffer: ArrayBuffer | Uint8Array | null = null
       let loadedAsImage = false
 
       if (targetUrl) {

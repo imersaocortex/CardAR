@@ -43,9 +43,12 @@ export async function GET(req: NextRequest) {
       ext === "mind" ? "application/octet-stream" :
       "application/octet-stream"
 
-    return new NextResponse(data, {
+    const buf = await data.arrayBuffer()
+
+    return new NextResponse(buf, {
       headers: {
         "Content-Type": mime,
+        "Content-Length": buf.byteLength.toString(),
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     })

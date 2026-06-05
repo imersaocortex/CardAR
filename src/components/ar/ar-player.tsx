@@ -120,6 +120,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     setObjectCount(experience.scene.objects.length)
 
     const ref = getMarkerDimensions(experience.type || "square_1x1")
+    const scaleFactor = ref.physicalWidth / ref.width
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -131,17 +132,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       if (!obj.visible) continue
 
       const group = new THREE.Group()
-      group.position.set(
-        obj.position[0] / ref.width,
-        obj.position[2] / ref.width,
-        obj.position[1] / ref.height,
-      )
-      group.rotation.set(obj.rotation[0], obj.rotation[2], obj.rotation[1])
-      group.scale.set(
-        obj.scale[0] / ref.width,
-        obj.scale[2] / ref.width,
-        obj.scale[1] / ref.height,
-      )
+      group.position.set(obj.position[0] * scaleFactor, obj.position[1] * scaleFactor, obj.position[2] * scaleFactor)
+      group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+      group.scale.set(obj.scale[0] * scaleFactor, obj.scale[1] * scaleFactor, obj.scale[2] * scaleFactor)
 
       if (isModel) {
         const placeholder = new THREE.Mesh(
@@ -657,11 +650,9 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
             const mr = new THREE.Matrix4().fromArray(data.worldMatrix)
             const mp = new THREE.Vector3()
             const mq = new THREE.Quaternion()
-            const ms = new THREE.Vector3()
-            mr.decompose(mp, mq, ms)
+            mr.decompose(mp, mq, new THREE.Vector3())
             anchorGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
             anchorGroup.quaternion.copy(mq)
-            anchorGroup.scale.set(ms.x / 1000, ms.y / 1000, ms.z / 1000)
             setWorldPos(`${(mp.x/1000).toFixed(3)},${(mp.y/1000).toFixed(3)},${(mp.z/1000).toFixed(3)}`)
           } else {
             if (isShowing) {

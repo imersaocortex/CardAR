@@ -46,14 +46,14 @@ export interface ArExperienceData {
   } | null
 }
 
-export function getMarkerDimensions(type: string): { width: number; height: number } {
+export function getMarkerDimensions(type: string): { width: number; height: number; physicalWidth: number; physicalHeight: number } {
   switch (type) {
     case "business_card":
-      return { width: 0.85, height: 0.55 }
+      return { width: 0.85, height: 0.55, physicalWidth: 0.088, physicalHeight: 0.048 }
     case "flyer_a4":
-      return { width: 2.1, height: 2.97 }
+      return { width: 2.1, height: 2.97, physicalWidth: 0.210, physicalHeight: 0.297 }
     case "square_1x1":
     default:
-      return { width: 1, height: 1 }
+      return { width: 1, height: 1, physicalWidth: 1, physicalHeight: 1 }
   }
 }

@@ -3,7 +3,6 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as THREE from "three"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
-import { getMarkerDimensions } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
 
@@ -117,15 +116,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
     if (!experience.scene?.objects || anchorBuiltRef.current) return
     anchorBuiltRef.current = true
 
-    console.log("[AR] scene.objects count:", experience.scene.objects.length)
-    if (experience.scene.objects.length === 0) {
-      console.warn("[AR] No objects in scene - nothing to display")
-    }
-
     setObjectCount(experience.scene.objects.length)
-
-    const dims = getMarkerDimensions(experience.type || "square_1x1")
-    const mw = dims.width
 
     for (const obj of experience.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
@@ -134,20 +125,21 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       const isAudio = obj.type === "audio"
       const isButton = obj.type.startsWith("botao-")
 
-      if (isModel) {
-        const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
-        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+      if (!obj.visible) continue
 
+      const group = new THREE.Group()
+      group.position.set(obj.position[0], obj.position[1], obj.position[2])
+      group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
+      group.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+
+      if (isModel) {
         const placeholder = new THREE.Mesh(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.MeshStandardMaterial({ color: 0x8b5cf6, transparent: true, opacity: obj.opacity }),
+          new THREE.BoxGeometry(0.8, 0.8, 0.8),
+          new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.3, metalness: 0.2, transparent: true, opacity: obj.opacity }),
         )
         placeholder.userData.animationType = obj.animationType
         placeholder.userData.assetUrl = obj.assetUrl
         group.add(placeholder)
-        anchorGroup.add(group)
 
         if (obj.assetUrl) {
           const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js")
@@ -156,9 +148,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
             obj.assetUrl,
             (gltf: any) => {
               const model = gltf.scene
-              model.position.copy(placeholder.position)
-              model.scale.copy(placeholder.scale)
-              model.rotation.copy(placeholder.rotation)
               group.remove(placeholder)
               group.add(model)
               if (gltf.animations?.length && obj.animationType !== "none") {
@@ -175,13 +164,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
 
       if (isVideo) {
-        const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
-        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
-
-        const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5 })
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), meshMat)
+        const meshMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85), meshMat)
         mesh.userData.isVideo = true
         mesh.userData.objectId = obj.id
         mesh.userData.assetUrl = obj.assetUrl
@@ -189,7 +173,6 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
         mesh.userData.chromaKeyTolerance = obj.chromaKeyTolerance ?? 0.4
         mesh.userData.chromaKeySmoothness = obj.chromaKeySmoothness ?? 0.1
         group.add(mesh)
-        anchorGroup.add(group)
 
         if (obj.assetUrl) {
           const v = document.createElement("video")
@@ -242,6 +225,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
                   uSmoothness: { value: smoothness },
                 },
                 transparent: true,
+                side: THREE.DoubleSide,
                 depthWrite: false,
               })
             } else {
@@ -249,6 +233,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               ;(mesh as any).material = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
+                side: THREE.DoubleSide,
               })
             }
 
@@ -260,24 +245,17 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
 
       if (isImage) {
-        const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
-        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
-
         const placeholder = new THREE.Mesh(
-          new THREE.PlaneGeometry(1, 1),
+          new THREE.PlaneGeometry(1.5, 1.5),
           new THREE.MeshBasicMaterial({ color: 0xec4899, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
         )
         group.add(placeholder)
-        anchorGroup.add(group)
 
         if (obj.assetUrl) {
           const textureLoader = new THREE.TextureLoader()
           textureLoader.load(obj.assetUrl, (texture) => {
-            const aspect = texture.image.height / texture.image.width
             const imgMesh = new THREE.Mesh(
-              new THREE.PlaneGeometry(1, 1),
+              new THREE.PlaneGeometry(1.5, 1.5),
               new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
@@ -292,22 +270,17 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
 
       if (isAudio) {
-        const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
-        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
-
         const mesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.15, 0.15),
-          new THREE.MeshBasicMaterial({
+          new THREE.PlaneGeometry(0.6, 0.6),
+          new THREE.MeshStandardMaterial({
             color: 0xec4899,
+            roughness: 0.3,
+            metalness: 0.1,
             transparent: true,
             opacity: obj.opacity,
-            side: THREE.DoubleSide,
           }),
         )
         group.add(mesh)
-        anchorGroup.add(group)
 
         if (obj.assetUrl) {
           const audio = new Audio(obj.assetUrl)
@@ -318,25 +291,92 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
 
       if (isButton) {
-        const group = new THREE.Group()
-        group.position.set(obj.position[0] * mw, obj.position[1] * mw, obj.position[2] * mw)
-        group.rotation.set(obj.rotation[0], obj.rotation[1], obj.rotation[2])
-        group.scale.set(obj.scale[0] * mw, obj.scale[1] * mw, obj.scale[2] * mw)
+        function createBrandTexture(type: string): THREE.CanvasTexture {
+          const canvas = document.createElement("canvas")
+          canvas.width = 128
+          canvas.height = 128
+          const ctx = canvas.getContext("2d")!
+
+          const socialColors2: Record<string, string> = {
+            "botao-whatsapp": "#25D366",
+            "botao-site": "#3b82f6",
+            "botao-instagram": "#E4405F",
+            "botao-ligar": "#22c55e",
+            "botao-email": "#ef4444",
+          }
+
+          ctx.beginPath()
+          ctx.arc(64, 64, 60, 0, Math.PI * 2)
+          ctx.fillStyle = socialColors2[type] || "#666"
+          ctx.fill()
+
+          const tex = new THREE.CanvasTexture(canvas)
+          tex.needsUpdate = true
+
+          const svgUrls2: Record<string, string> = {
+            "botao-whatsapp": "/whatsapp-icon.svg",
+            "botao-ligar": "/phone-icon.svg",
+          }
+
+          const svgUrl = svgUrls2[type]
+          if (svgUrl) {
+            const img = new Image()
+            img.onload = () => {
+              ctx.drawImage(img, 12, 12, 104, 104)
+              tex.needsUpdate = true
+            }
+            img.src = svgUrl
+          } else {
+            ctx.fillStyle = "white"
+            ctx.strokeStyle = "white"
+            ctx.lineWidth = 7
+            ctx.lineCap = "round"
+            ctx.lineJoin = "round"
+
+            if (type === "botao-instagram") {
+              ctx.lineWidth = 6
+              ctx.beginPath()
+              ctx.roundRect(30, 36, 68, 56, 14); ctx.stroke()
+              ctx.beginPath()
+              ctx.arc(64, 64, 18, 0, Math.PI * 2); ctx.stroke()
+              ctx.beginPath()
+              ctx.arc(82, 44, 4, 0, Math.PI * 2); ctx.fill()
+            } else if (type === "botao-site") {
+              ctx.lineWidth = 5
+              ctx.beginPath()
+              ctx.arc(64, 64, 34, 0, Math.PI * 2); ctx.stroke()
+              ctx.beginPath()
+              ctx.ellipse(64, 64, 34, 12, 0, 0, Math.PI * 2); ctx.stroke()
+              ctx.beginPath()
+              ctx.moveTo(64, 30); ctx.lineTo(64, 98); ctx.stroke()
+              ctx.beginPath()
+              ctx.moveTo(30, 64); ctx.lineTo(98, 64); ctx.stroke()
+            } else if (type === "botao-email") {
+              ctx.lineWidth = 5
+              ctx.beginPath()
+              ctx.roundRect(30, 44, 68, 44, 6); ctx.stroke()
+              ctx.beginPath()
+              ctx.moveTo(30, 44); ctx.lineTo(64, 72); ctx.lineTo(98, 44); ctx.stroke()
+            }
+          }
+
+          return tex
+        }
 
         const mesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.15, 0.15),
+          new THREE.PlaneGeometry(0.5, 0.5),
           new THREE.MeshBasicMaterial({
-            color: 0x8b5cf6,
+            map: createBrandTexture(obj.type),
             transparent: true,
             opacity: obj.opacity,
-            side: THREE.DoubleSide,
           }),
         )
         mesh.userData.clickable = true
         mesh.userData.action = obj.action
         group.add(mesh)
-        anchorGroup.add(group)
       }
+
+      anchorGroup.add(group)
     }
   }, [experience.scene?.objects])
 

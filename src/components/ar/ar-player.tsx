@@ -439,17 +439,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       dLight.position.set(0, 1, 1)
       scene.add(dLight)
 
-      const dbg = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => {
-        const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }))
-        m.position.set(x, y, z)
-        scene.add(m)
-      }
-      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0xff0000, 0, 0, -0.5)
-      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0x00ff00, 0, 0.5, -1)
-      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0x0000ff, 0.5, 0, -1.5)
-      dbg(new THREE.BoxGeometry(0.3, 0.3, 0.3), 0xffff00, -0.5, 0, -2)
-      dbg(new THREE.BoxGeometry(0.1, 0.1, 0.1), 0xff00ff, 0, 0, -3)
-      scene.add(new THREE.AxesHelper(2))
+      scene.add(new THREE.AxesHelper(0.5))
 
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
@@ -581,8 +571,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
               })
             }
             const mv = data.worldMatrix
-            console.log("[AR] worldMatrix:", mv[12].toFixed(3), mv[13].toFixed(3), mv[14].toFixed(3), mv[15])
-            anchorGroup.position.set(0, 0, -1)
+            anchorGroup.position.set(mv[12], mv[13], mv[14])
           } else {
             if (isShowing) {
               isShowing = false
@@ -608,11 +597,17 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       }
       step("Motor inicializado. Iniciando tracking...")
 
-      cam.fov = 60
-      cam.near = 0.1
-      cam.far = 1000
-      cam.aspect = w / h
-      cam.updateProjectionMatrix()
+      const proj = controller.getProjectionMatrix()
+      if (proj) {
+        cam.projectionMatrix.fromArray(proj)
+        cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert()
+      } else {
+        cam.fov = 60
+        cam.near = 0.1
+        cam.far = 1000
+        cam.aspect = w / h
+        cam.updateProjectionMatrix()
+      }
 
       controller.processVideo(video)
       step("Tracking iniciado")

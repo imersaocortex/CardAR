@@ -10,9 +10,10 @@ import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } fr
 interface ArPlayerProps {
   experience: ArExperienceData
   onStateChange?: (state: ArState) => void
+  onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
 }
 
-export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
+export function ArPlayer({ experience, onStateChange, onInteraction }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -87,6 +88,8 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       actionValue = action
     }
 
+    onInteraction?.("button_click", { action_type: actionType, action_value: actionValue })
+
     switch (actionType) {
       case "url":
       case "link":
@@ -111,7 +114,7 @@ export function ArPlayer({ experience, onStateChange }: ArPlayerProps) {
       default:
         window.open(actionValue, "_blank", "noopener,noreferrer")
     }
-  }, [])
+  }, [onInteraction])
 
   const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group, imageWidth: number, imageHeight: number) => {
     if (!experience.scene?.objects || anchorBuiltRef.current) return

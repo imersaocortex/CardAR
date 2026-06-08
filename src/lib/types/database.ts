@@ -715,6 +715,82 @@ export interface Database {
           updated_by?: string | null
         }
       }
+      project_analytics: {
+        Row: {
+          id: string
+          project_id: string
+          organization_id: string
+          session_id: string | null
+          event_type: string
+          metadata: Json
+          ip_address: string | null
+          country: string | null
+          city: string | null
+          region: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          organization_id: string
+          session_id?: string | null
+          event_type?: string
+          metadata?: Json
+          ip_address?: string | null
+          country?: string | null
+          city?: string | null
+          region?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          organization_id?: string
+          session_id?: string | null
+          event_type?: string
+          metadata?: Json
+          ip_address?: string | null
+          country?: string | null
+          city?: string | null
+          region?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+      }
+      subscription_status_history: {
+        Row: {
+          id: string
+          subscription_id: string
+          organization_id: string
+          old_status: string | null
+          new_status: string
+          changed_by: string | null
+          reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          subscription_id: string
+          organization_id: string
+          old_status?: string | null
+          new_status: string
+          changed_by?: string | null
+          reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          subscription_id?: string
+          organization_id?: string
+          old_status?: string | null
+          new_status?: string
+          changed_by?: string | null
+          reason?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: Record<string, never>
     Functions: {

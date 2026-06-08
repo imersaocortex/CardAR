@@ -2,11 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Search, Users, FolderKanban, CreditCard } from "lucide-react"
+import {
+  Search, Users, FolderKanban, CreditCard, ChevronDown, ChevronUp,
+  Globe, Eye, MousePointerClick, FileText, Loader2,
+} from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface Customer {
   id: string
@@ -30,6 +34,7 @@ interface Customer {
     id: string
     status: string
     current_period_end: string
+    trial_ends_at: string | null
     plan: { id: string; name: string; slug: string; price: number }
   } | null
   usage_limits: {
@@ -41,11 +46,50 @@ interface Customer {
   projects_count: number
 }
 
+interface OrgDetail {
+  organization: any
+  projects: any[]
+  subscription: any
+  usage: any
+  analytics: {
+    total_views: number
+    total_clicks: number
+    total_events: number
+    unique_countries: number
+    recent_events: any[]
+  }
+  payments: any[]
+}
+
+const statusOptions = [
+  { value: "active", label: "Ativo", color: "success" as const },
+  { value: "trialing", label: "Trial", color: "secondary" as const },
+  { value: "past_due", label: "Vencido", color: "warning" as const },
+  { value: "canceled", label: "Cancelado", color: "destructive" as const },
+]
+
+const statusVariant: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
+  active: "success",
+  past_due: "warning",
+  canceled: "destructive",
+  trialing: "secondary",
+  incomplete: "warning",
+}
+
+const formatBytes = (bytes: number) => {
+  if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)} GB`
+  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)} MB`
+  return `${bytes} B`
+}
+
 export function CustomersTab() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [orgDetail, setOrgDetail] = useState<OrgDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [changingStatus, setChangingStatus] = useState<string | null>(null)
 
   const loadCustomers = async (q: string) => {
     setLoading(true)
@@ -71,18 +115,41 @@ export function CustomersTab() {
     loadCustomers(search)
   }
 
-  const statusVariant: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
-    active: "success",
-    past_due: "warning",
-    canceled: "destructive",
-    trialing: "secondary",
-    incomplete: "warning",
+  const loadOrgDetail = async (customer: Customer) => {
+    setSelectedCustomer(customer)
+    setLoadingDetail(true)
+    setOrgDetail(null)
+    try {
+      const res = await fetch(`/api/admin/orgs/${customer.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setOrgDetail(data)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+    setLoadingDetail(false)
   }
 
-  const formatBytes = (bytes: number) => {
-    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)} GB`
-    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)} MB`
-    return `${bytes} B`
+  const handleStatusChange = async (newStatus: string, reason: string) => {
+    if (!orgDetail?.subscription?.id) return
+    setChangingStatus(newStatus)
+    try {
+      const res = await fetch(`/api/admin/subscriptions/${orgDetail.subscription.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, reason }),
+      })
+      if (res.ok) {
+        // Reload detail
+        if (selectedCustomer) await loadOrgDetail(selectedCustomer)
+        // Reload list
+        await loadCustomers(search)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+    setChangingStatus(null)
   }
 
   return (
@@ -105,9 +172,7 @@ export function CustomersTab() {
                     className="pl-9 w-64"
                   />
                 </div>
-                <Button type="submit" variant="secondary" size="sm">
-                  Buscar
-                </Button>
+                <Button type="submit" variant="secondary" size="sm">Buscar</Button>
               </form>
             </div>
           </CardHeader>
@@ -143,17 +208,12 @@ export function CustomersTab() {
                       const usagePercent = usage
                         ? Math.round((usage.projects_used / Math.max(usage.projects_limit, 1)) * 100)
                         : 0
-                      const assetPercent = usage
-                        ? Math.round((usage.assets_used_bytes / Math.max(usage.assets_limit_bytes, 1)) * 100)
-                        : 0
 
                       return (
                         <tr
                           key={customer.id}
                           className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
-                          onClick={() => setSelectedCustomer(
-                            selectedCustomer?.id === customer.id ? null : customer,
-                          )}
+                          onClick={() => loadOrgDetail(customer)}
                         >
                           <td className="py-3 px-4">
                             <div>
@@ -206,9 +266,7 @@ export function CustomersTab() {
                             <div className="space-y-1">
                               <div className="flex items-center gap-2 text-xs">
                                 <FolderKanban className="h-3 w-3 text-muted-foreground" />
-                                <span>
-                                  {usage?.projects_used || 0}/{usage?.projects_limit || 0}
-                                </span>
+                                <span>{usage?.projects_used || 0}/{usage?.projects_limit || 0}</span>
                                 {usage && usage.projects_limit > 0 && (
                                   <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                                     <div
@@ -240,37 +298,228 @@ export function CustomersTab() {
         </Card>
       </motion.div>
 
+      {/* Detail Panel */}
       {selectedCustomer && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="glass border-border/50">
             <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
-                {selectedCustomer.name} — Membros
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  {selectedCustomer.name}
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setOrgDetail(null) }}>
+                  Fechar
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {selectedCustomer.organization_members.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Nenhum membro</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {selectedCustomer.organization_members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/20">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium shrink-0">
-                        {(member.profiles?.name || "?")[0]}
+              {loadingDetail ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : orgDetail ? (
+                <div className="space-y-6">
+                  {/* Subscription Management */}
+                  <div className="p-4 rounded-xl bg-muted/20">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                      Gerenciar Assinatura
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="text-sm space-y-1">
+                        <span className="text-muted-foreground">Plano:</span>
+                        <p className="font-medium">{orgDetail.subscription?.plan?.name || "—"}</p>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{member.profiles?.name || "—"}</p>
-                        <p className="text-xs text-muted-foreground truncate">{member.profiles?.email || "—"}</p>
-                        <Badge variant="secondary" className="mt-1 text-[10px]">
-                          {member.role === "owner" ? "Proprietário" :
-                           member.role === "admin" ? "Admin" :
-                           member.role === "editor" ? "Editor" : "Visualizador"}
-                        </Badge>
+                      <div className="text-sm space-y-1">
+                        <span className="text-muted-foreground">Status atual:</span>
+                        <p>
+                          <Badge variant={statusVariant[orgDetail.subscription?.status] || "secondary"}>
+                            {orgDetail.subscription?.status || "N/A"}
+                          </Badge>
+                        </p>
+                      </div>
+                      <div className="text-sm space-y-1">
+                        <span className="text-muted-foreground">Trial até:</span>
+                        <p>{orgDetail.subscription?.trial_ends_at
+                          ? new Date(orgDetail.subscription.trial_ends_at).toLocaleDateString("pt-BR")
+                          : "—"}
+                        </p>
+                      </div>
+                      <div className="text-sm space-y-1">
+                        <span className="text-muted-foreground">Período atual até:</span>
+                        <p>{orgDetail.subscription?.current_period_end
+                          ? new Date(orgDetail.subscription.current_period_end).toLocaleDateString("pt-BR")
+                          : "—"}
+                        </p>
                       </div>
                     </div>
-                  ))}
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Alterar status:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {statusOptions.map((opt) => {
+                          const isCurrent = orgDetail.subscription?.status === opt.value
+                          return (
+                            <Button
+                              key={opt.value}
+                              variant={isCurrent ? "default" : "outline"}
+                              size="sm"
+                              disabled={isCurrent || changingStatus === opt.value}
+                              onClick={() => handleStatusChange(opt.value, `Alterado pelo admin para ${opt.label}`)}
+                              className="text-xs"
+                            >
+                              {changingStatus === opt.value ? "Alterando..." : opt.label}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Usage */}
+                  {orgDetail.usage && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-3 rounded-lg bg-muted/20">
+                        <p className="text-xs text-muted-foreground">Projetos</p>
+                        <p className="text-lg font-bold">{orgDetail.usage.projects_used}/{orgDetail.usage.projects_limit >= 999999 ? "∞" : orgDetail.usage.projects_limit}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/20">
+                        <p className="text-xs text-muted-foreground">Assets</p>
+                        <p className="text-lg font-bold">{formatBytes(orgDetail.usage.assets_used_bytes)}/{orgDetail.usage.assets_limit_label || formatBytes(orgDetail.usage.assets_limit_bytes)}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/20">
+                        <p className="text-xs text-muted-foreground">Visualizações</p>
+                        <p className="text-lg font-bold flex items-center gap-1">
+                          <Eye className="h-4 w-4 text-primary" />
+                          {orgDetail.analytics.total_views}
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/20">
+                        <p className="text-xs text-muted-foreground">Cliques</p>
+                        <p className="text-lg font-bold flex items-center gap-1">
+                          <MousePointerClick className="h-4 w-4 text-primary" />
+                          {orgDetail.analytics.total_clicks}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Members */}
+                  <div>
+                    <h3 className="font-semibold mb-3">Membros</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {orgDetail.organization?.organization_members?.map((member: any) => (
+                        <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/20">
+                          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium shrink-0">
+                            {(member.profiles?.name || "?")[0]}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{member.profiles?.name || "—"}</p>
+                            <p className="text-xs text-muted-foreground truncate">{member.profiles?.email || "—"}</p>
+                            <Badge variant="secondary" className="mt-1 text-[10px]">
+                              {member.role === "owner" ? "Proprietário" :
+                               member.role === "admin" ? "Admin" :
+                               member.role === "editor" ? "Editor" : "Visualizador"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Projects */}
+                  <div>
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <FolderKanban className="h-4 w-4 text-primary" />
+                      Projetos ({orgDetail.projects.length})
+                    </h3>
+                    <ScrollArea className="max-h-60">
+                      <div className="space-y-2">
+                        {orgDetail.projects.map((project: any) => (
+                          <div key={project.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/20">
+                            <div>
+                              <p className="text-sm font-medium">{project.name}</p>
+                              <p className="text-xs text-muted-foreground">{project.type} — {project.views} views</p>
+                            </div>
+                            <Badge variant={project.status === "published" ? "success" : "secondary"}>
+                              {project.status === "published" ? "Publicado" : "Rascunho"}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {/* Analytics */}
+                  {orgDetail.analytics.total_events > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-primary" />
+                        Analytics — Últimos Eventos
+                      </h3>
+                      <ScrollArea className="max-h-48">
+                        <div className="space-y-1">
+                          {orgDetail.analytics.recent_events.map((event: any) => (
+                            <div key={event.id} className="flex items-center justify-between text-xs p-2 rounded bg-muted/10">
+                              <span className="font-medium">
+                                {event.event_type === "view" ? "👁️ Visualização" :
+                                 event.event_type === "click" ? "🖱️ Clique" :
+                                 event.event_type === "button_click" ? "🔘 Botão" : event.event_type}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {event.country && event.city ? `${event.city}, ${event.country}` :
+                                 event.country || event.city || "Localização desconhecida"}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {new Date(event.created_at).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+
+                  {/* Payments */}
+                  {orgDetail.payments.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        Pagamentos
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left py-2 px-2 text-muted-foreground">ID</th>
+                              <th className="text-left py-2 px-2 text-muted-foreground">Valor</th>
+                              <th className="text-left py-2 px-2 text-muted-foreground">Vencimento</th>
+                              <th className="text-left py-2 px-2 text-muted-foreground">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orgDetail.payments.map((payment: any) => (
+                              <tr key={payment.id} className="border-b border-border/50">
+                                <td className="py-2 px-2 font-mono">{payment.asaas_payment_id?.slice(0, 12)}...</td>
+                                <td className="py-2 px-2">R$ {(payment.value / 100).toFixed(2)}</td>
+                                <td className="py-2 px-2 text-muted-foreground">
+                                  {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                                </td>
+                                <td className="py-2 px-2">
+                                  <Badge variant={statusVariant[payment.status] || "secondary"}>
+                                    {payment.status}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <p className="text-muted-foreground text-sm text-center py-4">Erro ao carregar detalhes</p>
               )}
             </CardContent>
           </Card>

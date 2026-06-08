@@ -1,11 +1,35 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams } from "next/navigation"
 import { Loader2, X } from "lucide-react"
 import { ArPlayer } from "@/components/ar/ar-player"
 import { NoCamera, MarkerNotCompiled } from "@/components/ar/ar-fallbacks"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
+
+function generateSessionId(): string {
+  return "sess_" + Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
+}
+
+async function sendAnalytics(
+  projectId: string,
+  eventType: string,
+  metadata?: Record<string, any>,
+  sessionId?: string,
+) {
+  try {
+    await fetch("/api/analytics/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        session_id: sessionId,
+        event_type: eventType,
+        metadata: metadata || {},
+      }),
+    })
+  } catch {}
+}
 
 export default function ExperiencePage() {
   const params = useParams()
@@ -13,8 +37,13 @@ export default function ExperiencePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [arState, setArState] = useState<ArState>("loading")
+  const sessionIdRef = useRef(generateSessionId())
+  const trackedRef = useRef({ view: false, detected: false })
 
   useEffect(() => {
+    trackedRef.current = { view: false, detected: false }
+    sessionIdRef.current = generateSessionId()
+
     async function load() {
       try {
         const res = await fetch(`/api/experience/${params.slug}`)
@@ -31,6 +60,10 @@ export default function ExperiencePage() {
           return
         }
         setExperience(data.project)
+
+        // Track initial view
+        sendAnalytics(data.project.id, "view", {}, sessionIdRef.current)
+        trackedRef.current.view = true
       } catch {
         setError("Erro ao carregar experiência")
       }
@@ -41,7 +74,18 @@ export default function ExperiencePage() {
 
   const handleStateChange = useCallback((state: ArState) => {
     setArState(state)
-  }, [])
+
+    // Track marker detection
+    if (state === "detected" && experience && !trackedRef.current.detected) {
+      trackedRef.current.detected = true
+      sendAnalytics(experience.id, "click", { action: "marker_detected" }, sessionIdRef.current)
+    }
+  }, [experience])
+
+  const handleInteraction = useCallback((eventType: string, metadata?: Record<string, any>) => {
+    if (!experience) return
+    sendAnalytics(experience.id, eventType, metadata, sessionIdRef.current)
+  }, [experience])
 
   if (loading) {
     return (
@@ -75,7 +119,11 @@ export default function ExperiencePage() {
 
   return (
     <div className="fixed inset-0 z-0">
-      <ArPlayer experience={experience} onStateChange={handleStateChange} />
+      <ArPlayer
+        experience={experience}
+        onStateChange={handleStateChange}
+        onInteraction={handleInteraction}
+      />
     </div>
   )
 }

@@ -15,7 +15,7 @@ import { useAuthStore } from "@/store/auth-store"
 import { toast } from "@/hooks/use-toast"
 
 export default function ProfilePage() {
-  const { profile, organization } = useAuthStore()
+  const { profile, organization, initialize } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -107,6 +107,8 @@ export default function ProfilePage() {
 
       if (error) throw error
 
+      // Reload auth store to reflect changes immediately
+      await initialize()
       toast({ title: "Perfil atualizado com sucesso!" })
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" })

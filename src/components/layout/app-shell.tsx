@@ -14,10 +14,17 @@ type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "pen
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const { isAuthenticated, isLoading } = useAuthStore()
+  const { initialize, isAuthenticated, isLoading } = useAuthStore()
   const [subStatus, setSubStatus] = useState<SubscriptionStatus>("none")
   const [dismissed, setDismissed] = useState(false)
   const [trialDaysLeft, setTrialDaysLeft] = useState(0)
+
+  // Initialize auth store on mount (loads profile, org, etc.)
+  useEffect(() => {
+    if (isLoading) {
+      initialize()
+    }
+  }, [isLoading, initialize])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

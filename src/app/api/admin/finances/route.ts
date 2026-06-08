@@ -58,6 +58,15 @@ export async function GET() {
 
   const subList = (allSubs || []) as any[]
 
+  // Filter to only include orgs that have at least one member (remove orphans)
+  const subOrgIds = [...new Set(subList.map((s: any) => s.organization_id))]
+  const { data: validOrgs } = await admin
+    .from("organization_members")
+    .select("organization_id")
+    .in("organization_id", subOrgIds)
+  const validOrgIds = new Set((validOrgs || []).map((m: any) => m.organization_id))
+  const filteredSubs = subList.filter((s: any) => validOrgIds.has(s.organization_id))
+
   // Fetch plans
   const { data: allPlans } = await admin
     .from("plans")
@@ -70,7 +79,7 @@ export async function GET() {
   }
 
   // Get org names
-  const orgIds = [...new Set(subList.map((s: any) => s.organization_id))]
+  const orgIds = [...new Set(filteredSubs.map((s: any) => s.organization_id))]
   let orgMap: Record<string, string> = {}
   if (orgIds.length > 0) {
     const { data: orgs } = await admin
@@ -82,14 +91,14 @@ export async function GET() {
     }
   }
 
-  const activeSubs = subList.filter((s: any) => s.status === "active")
+  const activeSubs = filteredSubs.filter((s: any) => s.status === "active")
   const mrr = activeSubs.reduce((s: number, sub: any) => {
     const plan = planMap[sub.plan_id]
     return s + (plan?.price || 0)
   }, 0)
 
-  const totalSubs = subList.length
-  const churned = subList.filter((s: any) => s.status === "canceled").length
+  const totalSubs = filteredSubs.length
+  const churned = filteredSubs.filter((s: any) => s.status === "canceled").length
 
   const statusCounts: Record<string, number> = {}
   for (const p of paymentList) {

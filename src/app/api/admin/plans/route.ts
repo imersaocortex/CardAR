@@ -74,6 +74,8 @@ export async function POST(request: Request) {
       assets_limit_label: parsed.data.assets_limit_label,
       features: parsed.data.features,
       active: parsed.data.active,
+      has_watermark: parsed.data.has_watermark,
+      allowed_media_types: parsed.data.allowed_media_types,
     })
     .select()
     .single()

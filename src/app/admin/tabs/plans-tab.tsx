@@ -61,6 +61,8 @@ export function PlansTab() {
     active: true,
     billing_cycle: "monthly",
     trial_days: 0,
+    has_watermark: true,
+    allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
   })
 
   const loadPlans = async () => {
@@ -92,6 +94,8 @@ export function PlansTab() {
       active: true,
       billing_cycle: "monthly",
       trial_days: 0,
+      has_watermark: true,
+      allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
     })
     setDialogOpen(true)
   }
@@ -109,6 +113,10 @@ export function PlansTab() {
       active: plan.active,
       billing_cycle: (plan as any).billing_cycle || "monthly",
       trial_days: (plan as any).trial_days || 0,
+      has_watermark: (plan as any).has_watermark !== false,
+      allowed_media_types: Array.isArray((plan as any).allowed_media_types)
+        ? (plan as any).allowed_media_types.join(", ")
+        : "image/png,image/jpeg,model/gltf-binary",
     })
     setDialogOpen(true)
   }
@@ -154,6 +162,8 @@ export function PlansTab() {
         active: form.active,
         billing_cycle: form.billing_cycle,
         trial_days: form.trial_days,
+        has_watermark: form.has_watermark,
+        allowed_media_types: form.allowed_media_types.split(",").map((t) => t.trim()).filter(Boolean),
       }
 
       if (editingPlan) {
@@ -433,6 +443,26 @@ export function PlansTab() {
                   placeholder="0"
                 />
               </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Switch
+                id="plan-watermark"
+                checked={!form.has_watermark}
+                onCheckedChange={(v) => setForm((p) => ({ ...p, has_watermark: !v }))}
+              />
+              <Label htmlFor="plan-watermark">Remover marca d'água</Label>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="plan-media-types">Tipos de Mídia Permitidos</Label>
+              <Input
+                id="plan-media-types"
+                value={form.allowed_media_types}
+                onChange={(e) => setForm((p) => ({ ...p, allowed_media_types: e.target.value }))}
+                placeholder="image/png,image/jpeg,model/gltf-binary"
+              />
+              <p className="text-xs text-muted-foreground">Separe os tipos MIME por vírgula</p>
             </div>
 
             <div className="flex items-center gap-3">

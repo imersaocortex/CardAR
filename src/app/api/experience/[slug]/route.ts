@@ -23,12 +23,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     const { data: subscription } = await admin
       .from("subscriptions")
-      .select("status")
+      .select("status, plan_id")
       .eq("organization_id", project.organization_id)
       .maybeSingle()
 
     if (subscription && subscription.status === "canceled") {
       return NextResponse.json({ error: "Projeto não disponível" }, { status: 404 })
+    }
+
+    // Check plan for watermark feature
+    let hasWatermark = true
+    if (subscription?.plan_id) {
+      const { data: plan } = await admin
+        .from("plans")
+        .select("has_watermark")
+        .eq("id", subscription.plan_id)
+        .single()
+      if (plan) {
+        hasWatermark = plan.has_watermark
+      }
     }
 
     await admin.rpc("increment_project_views", { p_project_id: project.id })
@@ -40,6 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       : null
 
     return NextResponse.json({
+      hasWatermark,
       project: {
         id: project.id,
         name: project.name,

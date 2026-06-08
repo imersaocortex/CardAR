@@ -90,6 +90,9 @@ export async function createProject(formData: FormData) {
     if (sub.status === "canceled") {
       return { error: "Assinatura cancelada. Escolha um plano para criar projetos." }
     }
+    if (sub.status === "pending") {
+      return { error: "Assinatura pendente de pagamento. Acesse a página de cobrança para pagar." }
+    }
     if (sub.status === "trialing" && trialExpired) {
       return { error: "Período de teste expirado. Assine um plano para continuar." }
     }

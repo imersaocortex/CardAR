@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client"
 import { AlertTriangle, Crown, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "none"
+type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "pending" | "none"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -68,6 +68,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }
       } else if (sub.status === "past_due") {
         setSubStatus("past_due")
+      } else if (sub.status === "pending") {
+        setSubStatus("pending")
       } else {
         setSubStatus("canceled")
       }
@@ -116,6 +118,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <AlertTriangle className="h-4 w-4 text-destructive" />
                   <span>
                     Sua assinatura foi cancelada. Escolha um plano para reativar seus projetos.
+                  </span>
+                </>
+              )}
+              {subStatus === "pending" && (
+                <>
+                  <AlertTriangle className="h-4 w-4 text-primary" />
+                  <span>
+                    Assinatura pendente de pagamento. Efetue o pagamento para liberar a criação de projetos.
                   </span>
                 </>
               )}

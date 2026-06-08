@@ -36,9 +36,39 @@ export async function POST(request: Request) {
 
   if (!file) return NextResponse.json({ error: "Arquivo não enviado" }, { status: 400 })
 
-  const allowedTypes = ["image/png", "image/jpeg", "model/gltf-binary", "model/gltf+json", "video/mp4"]
+  // Check allowed media types from the organization's plan
+  const { data: membership } = await supabase
+    .from("organization_members")
+    .select("organization_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single()
+
+  if (!membership) return NextResponse.json({ error: "Sem organização" }, { status: 404 })
+
+  const orgId = membership.organization_id
+  const admin = createAdminClient()
+
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("plan_id")
+    .eq("organization_id", orgId)
+    .single()
+
+  let allowedTypes = ["image/png", "image/jpeg", "model/gltf-binary", "model/gltf+json", "video/mp4"]
+  if (sub?.plan_id) {
+    const { data: plan } = await admin
+      .from("plans")
+      .select("allowed_media_types")
+      .eq("id", sub.plan_id)
+      .single()
+    if (plan?.allowed_media_types && Array.isArray(plan.allowed_media_types) && plan.allowed_media_types.length > 0) {
+      allowedTypes = plan.allowed_media_types
+    }
+  }
+
   if (!allowedTypes.includes(file.type)) {
-    return NextResponse.json({ error: "Tipo de arquivo não permitido" }, { status: 400 })
+    return NextResponse.json({ error: "Seu plano não permite este tipo de arquivo" }, { status: 403 })
   }
 
   const is3D = file.type.startsWith("model/")
@@ -56,18 +86,6 @@ export async function POST(request: Request) {
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 400 })
 
   const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(storagePath)
-
-  const { data: membership } = await supabase
-    .from("organization_members")
-    .select("organization_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single()
-
-  if (!membership) return NextResponse.json({ error: "Sem organização" }, { status: 404 })
-
-  const orgId = membership.organization_id
-  const admin = createAdminClient()
 
   const { data: limitOk } = await admin.rpc("check_asset_limit", {
     p_organization_id: orgId,

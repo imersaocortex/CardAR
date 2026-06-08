@@ -120,6 +120,34 @@ export default function BillingPage() {
     setLoading(false)
   }
 
+  const handleFirstPayment = async () => {
+    setUpgrading("first_payment")
+    try {
+      const res = await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "first_payment" }),
+      })
+      const data = await res.json()
+      if (data.error) {
+        if (data.redirect) {
+          window.location.href = data.redirect
+          return
+        }
+        toast({ title: data.error, variant: "destructive" })
+      } else {
+        if (data.checkout_url) {
+          window.open(data.checkout_url, "_blank")
+        }
+        toast({ title: "Checkout criado! Finalize o pagamento." })
+        loadData()
+      }
+    } catch {
+      toast({ title: "Erro ao gerar pagamento", variant: "destructive" })
+    }
+    setUpgrading(null)
+  }
+
   const handleUpgrade = async (planId: string) => {
     setUpgrading(planId)
     try {
@@ -186,6 +214,7 @@ export default function BillingPage() {
   }
 
   const isTrialing = subscription?.status === "trialing"
+  const isPending = subscription?.status === "pending"
   const isCanceled = subscription?.status === "canceled" || subscription?.status === "none"
 
   return (
@@ -204,6 +233,25 @@ export default function BillingPage() {
               <strong>Período de teste ativo.</strong> Você tem <strong>{trialDaysLeft} dias</strong> restantes no plano {subscription?.plans?.name}.
               Após o término, escolha um plano abaixo para continuar usando a plataforma.
             </div>
+          </div>
+        )}
+
+        {isPending && (
+          <div className="mb-6 p-4 rounded-xl bg-primary/10 border border-primary/20 flex items-center gap-3">
+            <CreditCard className="h-5 w-5 text-primary shrink-0" />
+            <div className="text-sm flex-1">
+              <strong>Assinatura pendente de pagamento.</strong> Você está no plano <strong>Starter</strong>.
+              Efetue o pagamento para liberar a criação de projetos.
+            </div>
+            <Button
+              variant="gradient"
+              size="sm"
+              onClick={handleFirstPayment}
+              disabled={upgrading === "first_payment"}
+            >
+              {upgrading === "first_payment" ? "Gerando..." : "Pagar Agora"}
+              <ExternalLink className="h-4 w-4 ml-1" />
+            </Button>
           </div>
         )}
 
@@ -249,7 +297,7 @@ export default function BillingPage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Status</span>
-                  <p className="font-semibold capitalize">{isTrialing ? "Trial" : subscription?.status || "Inativo"}</p>
+                  <p className="font-semibold capitalize">{isTrialing ? "Trial" : isPending ? "Pendente" : subscription?.status || "Inativo"}</p>
                 </div>
               </div>
             </CardContent>

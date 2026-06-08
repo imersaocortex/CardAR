@@ -90,17 +90,41 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       if (payment.status === "RECEIVED" || payment.status === "CONFIRMED") {
         const { data: currentSub } = await admin
           .from("subscriptions")
-          .select("current_period_end")
+          .select("current_period_end, status, plan_id")
           .eq("organization_id", sub.organization_id)
           .single()
 
         if (currentSub) {
+          const updates: Record<string, any> = { status: "active" }
+
+          // Extend current period by 1 month
           const newEnd = new Date(currentSub.current_period_end)
           newEnd.setMonth(newEnd.getMonth() + 1)
+          updates.current_period_end = newEnd.toISOString()
+
           await admin
             .from("subscriptions")
-            .update({ current_period_end: newEnd.toISOString(), status: "active" })
+            .update(updates)
             .eq("organization_id", sub.organization_id)
+
+          // If this was a pending subscription (first payment), update usage limits
+          if (currentSub.status === "pending") {
+            const { data: plan } = await admin
+              .from("plans")
+              .select("projects_limit, assets_limit_bytes")
+              .eq("id", currentSub.plan_id)
+              .single()
+
+            if (plan) {
+              await admin
+                .from("usage_limits")
+                .update({
+                  projects_limit: plan.projects_limit,
+                  assets_limit_bytes: plan.assets_limit_bytes,
+                })
+                .eq("organization_id", sub.organization_id)
+            }
+          }
         }
       }
 

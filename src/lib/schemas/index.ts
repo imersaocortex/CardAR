@@ -100,6 +100,8 @@ export const createPlanSchema = z.object({
   active: z.boolean().default(true),
   billing_cycle: z.enum(["monthly", "yearly"]).default("monthly"),
   trial_days: z.number().int().min(0).default(0),
+  has_watermark: z.boolean().default(true),
+  allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
 })
 
 export const updatePlanSchema = createPlanSchema.partial()

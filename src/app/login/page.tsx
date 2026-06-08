@@ -62,7 +62,7 @@ export default function LoginPage() {
     }
 
     await initialize()
-    router.push("/dashboard")
+    router.push("/billing")
   }
 
   return (

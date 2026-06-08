@@ -40,6 +40,35 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `PAYMENT_OVERDUE` → subscription `status=past_due`
 - `SUBSCRIPTION_ACTIVE/CANCELED/EXPIRED` → maps to subscription status
 
+### Admin Subscription Control
+- `admin/customers-tab.tsx` — enhanced with detail panel on row click showing:
+  - Subscription status with manual override buttons (Ativo/Trial/Vencido/Cancelado)
+  - Usage, analytics summary, projects list, payment history
+- `PUT /api/admin/subscriptions/[id]` — changes subscription status, logs to `subscription_status_history`, syncs usage_limits
+- `GET /api/admin/orgs/[orgId]` — full org detail with projects, analytics, payments
+- `subscription_status_history` table — audit trail of all status changes with admin user
+
+### Client Dashboard (Reports & Plan Details)
+- `dashboard/page.tsx` — two tabs: Visão Geral and Relatórios
+- Plan details widget showing plan name, projects used/limit with progress bar, views, status
+- Reports tab with per-project analytics selector
+- Analytics summary: views, clicks, unique sessions, countries
+- Location breakdown by country and city (horizontal bars)
+- Event type breakdown, button click breakdown
+- Views timeline (last 30 days bar chart)
+- PDF export via `window.print()` (browser native)
+
+### Interaction Tracking (Analytics)
+- `project_analytics` table: project_id, session_id, event_type (view/click/button_click), metadata, ip_address, country, city, region, user_agent
+- `POST /api/analytics/log` — logs interaction from public experience (no auth required, uses IP geo via Vercel headers + ip-api.com fallback)
+- `GET /api/analytics/[projectId]` — returns aggregated analytics (summary, countries, cities, timeline, event/button breakdown)
+- `ArPlayer` now accepts `onInteraction` callback prop
+- Experience page sends `view` on load, `click` (marker_detected) on detection, `button_click` on button action
+- Session-based tracking with generated session IDs
+
+### Migration Required
+Run `006_project_analytics_admin.sql` in Supabase SQL Editor for: `project_analytics`, `subscription_status_history` tables + `metadata` column on subscriptions.
+
 ### Build
 - `npm run build` — must pass before committing
 - No tests yet (no test framework configured)

@@ -66,6 +66,8 @@ export async function GET(request: Request) {
 
   const result = orgList.map((org: any) => ({
     ...org,
+    subscription: Array.isArray(org.subscription) ? org.subscription[0] || null : org.subscription || null,
+    usage_limits: Array.isArray(org.usage_limits) ? org.usage_limits[0] || null : org.usage_limits || null,
     projects_count: projectMap[org.id] || 0,
   }))
 

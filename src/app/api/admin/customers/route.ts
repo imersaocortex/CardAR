@@ -21,54 +21,70 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const search = searchParams.get("search") || ""
 
-  let query = admin
+  // Query organizations with members
+  let orgQuery = admin
     .from("organizations")
     .select(`
       *,
       organization_members(
         *,
         profiles(id, name, email, avatar_url, role, created_at)
-      ),
-      subscription:subscriptions(
-        id,
-        status,
-        current_period_end,
-        plan:plans(id, name, slug, price)
-      ),
-      usage_limits(*)
+      )
     `)
     .limit(100)
     .order("created_at", { ascending: false })
 
   if (search) {
-    query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`)
+    orgQuery = orgQuery.or(`name.ilike.%${search}%,slug.ilike.%${search}%`)
   }
 
-  const { data: orgs, error } = await query
-
+  const { data: orgs, error } = await orgQuery
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   const orgList = Array.isArray(orgs) ? orgs : []
 
-  const { data: projectCounts } = await admin
-    .from("projects")
-    .select("organization_id, id")
-    .limit(10000)
+  // Fetch subscriptions and usage_limits separately (avoid embedding issues)
+  const orgIds = orgList.map((o: any) => o.id)
 
-  const projectMap: Record<string, number> = {}
-  if (projectCounts && Array.isArray(projectCounts)) {
-    for (const p of projectCounts) {
-      projectMap[p.organization_id] = (projectMap[p.organization_id] || 0) + 1
-    }
+  let subscriptions: any[] = []
+  let usageLimits: any[] = []
+  let projectCounts: any[] = []
+
+  if (orgIds.length > 0) {
+    const [subsRes, usageRes, projRes] = await Promise.all([
+      admin.from("subscriptions").select("*, plan:plans(id, name, slug, price)").in("organization_id", orgIds),
+      admin.from("usage_limits").select("*").in("organization_id", orgIds),
+      admin.from("projects").select("organization_id").in("organization_id", orgIds),
+    ])
+    subscriptions = (subsRes.data || []) as any[]
+    usageLimits = (usageRes.data || []) as any[]
+    projectCounts = (projRes.data || []) as any[]
+  }
+
+  // Build lookup maps
+  const subMap: Record<string, any> = {}
+  for (const s of subscriptions) {
+    if (s.plan && Array.isArray(s.plan)) s.plan = s.plan[0] || null
+    subMap[s.organization_id] = s
+  }
+
+  const usageMap: Record<string, any> = {}
+  for (const u of usageLimits) {
+    usageMap[u.organization_id] = u
+  }
+
+  const projectCountMap: Record<string, number> = {}
+  for (const p of projectCounts) {
+    projectCountMap[p.organization_id] = (projectCountMap[p.organization_id] || 0) + 1
   }
 
   const result = orgList.map((org: any) => ({
     ...org,
-    subscription: Array.isArray(org.subscription) ? org.subscription[0] || null : org.subscription || null,
-    usage_limits: Array.isArray(org.usage_limits) ? org.usage_limits[0] || null : org.usage_limits || null,
-    projects_count: projectMap[org.id] || 0,
+    subscription: subMap[org.id] || null,
+    usage_limits: usageMap[org.id] || null,
+    projects_count: projectCountMap[org.id] || 0,
   }))
 
   return NextResponse.json(result)

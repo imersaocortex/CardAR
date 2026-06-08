@@ -18,25 +18,28 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
+
+  // Fetch payments
   const { data: payments } = await admin
     .from("asaas_payments")
     .select("*, organizations(name)")
     .order("created_at", { ascending: false })
     .limit(500)
 
-  const now = new Date()
-  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
+  const paymentList = (payments || []) as any[]
 
-  const confirmedPayments = (payments || []).filter(
+  const confirmedPayments = paymentList.filter(
     (p: any) => p.status === "CONFIRMED" || p.status === "RECEIVED",
   )
   const thisMonthPayments = confirmedPayments.filter(
-    (p: any) => p.paid_date >= thisMonth,
+    (p: any) => p.paid_date && p.paid_date >= thisMonthStart,
   )
   const lastMonthPayments = confirmedPayments.filter(
-    (p: any) => p.paid_date >= lastMonth && p.paid_date <= lastMonthEnd,
+    (p: any) => p.paid_date && p.paid_date >= lastMonthStart && p.paid_date <= lastMonthEnd,
   )
 
   const totalRevenue = confirmedPayments.reduce((s: number, p: any) => s + p.value, 0)
@@ -47,45 +50,67 @@ export async function GET() {
     ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
     : 0
 
-  const { data: subscriptions } = await admin
+  // Fetch subscriptions separately to avoid embedding issues
+  const { data: allSubs } = await admin
     .from("subscriptions")
-    .select("*, organizations(name), plan:plans(id, name, price)")
-    .eq("status", "active")
+    .select("id, organization_id, status, plan_id")
+    .limit(500)
 
-  const mrr = (subscriptions || []).reduce((s: number, sub: any) => s + (sub.plan?.price || 0), 0)
+  const subList = (allSubs || []) as any[]
 
-  const activeSubs = (subscriptions || []).length
-  const { count: totalSubs } = await admin
-    .from("subscriptions")
-    .select("id", { count: "exact", head: true })
+  // Fetch plans
+  const { data: allPlans } = await admin
+    .from("plans")
+    .select("id, name, price")
+    .limit(50)
 
-  const churned = ((totalSubs || 0) - activeSubs)
-
-  const statusCounts: Record<string, number> = {}
-  for (const p of payments || []) {
-    const s = (p as any).status
-    statusCounts[s] = (statusCounts[s] || 0) + 1
+  const planMap: Record<string, any> = {}
+  for (const p of (allPlans || []) as any[]) {
+    planMap[p.id] = p
   }
 
-  const { data: pendingCount } = await admin
-    .from("asaas_payments")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "PENDING")
+  // Get org names
+  const orgIds = [...new Set(subList.map((s: any) => s.organization_id))]
+  let orgMap: Record<string, string> = {}
+  if (orgIds.length > 0) {
+    const { data: orgs } = await admin
+      .from("organizations")
+      .select("id, name")
+      .in("id", orgIds)
+    for (const o of (orgs || []) as any[]) {
+      orgMap[o.id] = o.name
+    }
+  }
 
-  const overduePayments = (payments || []).filter((p: any) => p.status === "OVERDUE")
+  const activeSubs = subList.filter((s: any) => s.status === "active")
+  const mrr = activeSubs.reduce((s: number, sub: any) => {
+    const plan = planMap[sub.plan_id]
+    return s + (plan?.price || 0)
+  }, 0)
+
+  const totalSubs = subList.length
+  const churned = subList.filter((s: any) => s.status === "canceled").length
+
+  const statusCounts: Record<string, number> = {}
+  for (const p of paymentList) {
+    statusCounts[p.status] = (statusCounts[p.status] || 0) + 1
+  }
+
+  const pendingCount = paymentList.filter((p: any) => p.status === "PENDING").length
+  const overduePayments = paymentList.filter((p: any) => p.status === "OVERDUE")
   const overdueAmount = overduePayments.reduce((s: number, p: any) => s + p.value, 0)
 
+  // Top orgs by project count
   const { data: topOrgs } = await admin
     .from("projects")
-    .select("organization_id, organizations(name)")
+    .select("organization_id")
     .limit(10000)
 
   const orgProjectCount: Record<string, { name: string; count: number }> = {}
-  for (const p of topOrgs || []) {
-    const oid = (p as any).organization_id
-    const oname = (p as any).organizations?.name || "Unknown"
+  for (const p of (topOrgs || []) as any[]) {
+    const oid = p.organization_id
     if (!orgProjectCount[oid]) {
-      orgProjectCount[oid] = { name: oname, count: 0 }
+      orgProjectCount[oid] = { name: orgMap[oid] || "Unknown", count: 0 }
     }
     orgProjectCount[oid].count++
   }
@@ -94,6 +119,13 @@ export async function GET() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5)
 
+  // Build subscription list with org names
+  const subscriptionsWithOrgs = activeSubs.map((s: any) => ({
+    ...s,
+    organizations: { name: orgMap[s.organization_id] || "Unknown" },
+    plan: planMap[s.plan_id] || null,
+  }))
+
   return NextResponse.json({
     summary: {
       total_revenue: totalRevenue,
@@ -101,17 +133,18 @@ export async function GET() {
       last_month_revenue: lastMonthRevenue,
       revenue_change_percent: Math.round(revenueChange * 100) / 100,
       mrr,
-      active_subscriptions: activeSubs,
-      total_subscriptions: totalSubs || 0,
+      active_subscriptions: activeSubs.length,
+      total_subscriptions: totalSubs,
       churned,
-      pending_payments: pendingCount || 0,
+      pending_payments: pendingCount,
       overdue_amount: overdueAmount,
       overdue_count: overduePayments.length,
     },
-    payments: (payments || []).slice(0, 50),
+    payments: paymentList.slice(0, 50),
     payment_status_breakdown: statusCounts,
     top_organizations: topByProjects,
     revenue_by_month: buildMonthlyRevenue(confirmedPayments),
+    subscriptions: subscriptionsWithOrgs,
   })
 }
 

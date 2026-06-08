@@ -47,11 +47,16 @@ export async function GET(
       .order("created_at", { ascending: false }),
   ])
 
-  const { data: subscription } = await admin
+  const { data: subscriptionRaw } = await admin
     .from("subscriptions")
     .select("*, plan:plans(*)")
     .eq("organization_id", orgId)
     .single()
+
+  // Fix plan if returned as array
+  const subscription = subscriptionRaw
+    ? { ...subscriptionRaw, plan: Array.isArray(subscriptionRaw.plan) ? subscriptionRaw.plan[0] || null : subscriptionRaw.plan }
+    : null
 
   const { data: usage } = await admin
     .from("usage_limits")

@@ -100,21 +100,23 @@ export async function GET(request: Request) {
     }
   }
 
-  const result = orgList.map((org: any) => {
-    const orgMembers = members.filter((m: any) => m.organization_id === org.id)
-    const sub = subMap[org.id] || null
+  const result = orgList
+    .map((org: any) => {
+      const orgMembers = members.filter((m: any) => m.organization_id === org.id)
+      const sub = subMap[org.id] || null
 
-    return {
-      ...org,
-      organization_members: orgMembers.map((m: any) => ({
-        ...m,
-        profiles: profileMap[m.user_id] || null,
-      })),
-      subscription: sub ? { ...sub, plan: sub.plan_id ? planMap[sub.plan_id] || null : null } : null,
-      usage_limits: usageMap[org.id] || null,
-      projects_count: projectCountMap[org.id] || 0,
-    }
-  })
+      return {
+        ...org,
+        organization_members: orgMembers.map((m: any) => ({
+          ...m,
+          profiles: profileMap[m.user_id] || null,
+        })),
+        subscription: sub ? { ...sub, plan: sub.plan_id ? planMap[sub.plan_id] || null : null } : null,
+        usage_limits: usageMap[org.id] || null,
+        projects_count: projectCountMap[org.id] || 0,
+      }
+    })
+    .filter((org: any) => org.organization_members.length > 0)
 
   return NextResponse.json(result)
 }

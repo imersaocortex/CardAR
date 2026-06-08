@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createCustomer, createSubscription, cancelSubscription } from "@/lib/asaas"
+import { createCustomer, updateCustomer, createSubscription, createCheckout, cancelSubscription } from "@/lib/asaas"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -31,7 +31,25 @@ export async function GET() {
     .eq("organization_id", orgId)
     .order("due_date", { ascending: false })
 
-  return NextResponse.json({ subscription, payments: payments || [] })
+  const { data: usage } = await supabase
+    .from("usage_limits")
+    .select("*")
+    .eq("organization_id", orgId)
+    .single()
+
+  const { data: asaasCheckouts } = await supabase
+    .from("asaas_checkouts")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  return NextResponse.json({
+    subscription,
+    payments: payments || [],
+    usage,
+    checkout: asaasCheckouts?.[0] || null,
+  })
 }
 
 export async function POST(request: Request) {
@@ -60,9 +78,16 @@ export async function POST(request: Request) {
     const { data: plan } = await admin.from("plans").select("*").eq("id", plan_id).single()
     if (!plan) return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 })
 
+    // Get profile data for ASAAS
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single()
+
     // Check if ASAAS is configured
     if (process.env.ASAAS_API_KEY) {
-      // Get or create ASAAS customer
+      // Get or create ASAAS customer with profile data
       let asaasCustomerId: string
       const { data: existingCustomer } = await admin
         .from("asaas_customers")
@@ -72,8 +97,39 @@ export async function POST(request: Request) {
 
       if (existingCustomer) {
         asaasCustomerId = existingCustomer.asaas_customer_id
+        // Update customer data if profile has changed
+        if (profile?.cpf_cnpj || profile?.phone) {
+          try {
+            await updateCustomer(asaasCustomerId, {
+              name: profile?.name || user.email || orgId,
+              email: user.email!,
+              cpfCnpj: profile?.cpf_cnpj || undefined,
+              phone: profile?.phone || undefined,
+              address: profile?.address || undefined,
+              addressNumber: profile?.address_number || undefined,
+              complement: profile?.address_complement || undefined,
+              province: profile?.address_neighborhood || undefined,
+              city: profile?.address_city || undefined,
+              state: profile?.address_state || undefined,
+              postalCode: profile?.address_zipcode || undefined,
+            })
+          } catch {}
+        }
       } else {
-        asaasCustomerId = await createCustomer(orgId, user.email || orgId, user.email!)
+        asaasCustomerId = await createCustomer(
+          orgId,
+          profile?.name || user.email || orgId,
+          user.email!,
+          profile?.cpf_cnpj || undefined,
+          profile?.phone || undefined,
+          profile?.address || undefined,
+          profile?.address_number || undefined,
+          profile?.address_complement || undefined,
+          profile?.address_neighborhood || undefined,
+          profile?.address_city || undefined,
+          profile?.address_state || undefined,
+          profile?.address_zipcode || undefined,
+        )
         await admin.from("asaas_customers").insert({
           organization_id: orgId,
           asaas_customer_id: asaasCustomerId,
@@ -91,8 +147,28 @@ export async function POST(request: Request) {
         try { await cancelSubscription(currentSub.asaas_subscription_id) } catch {}
       }
 
-      // Create new subscription at ASAAS
-      const asaasSub = await createSubscription(asaasCustomerId, plan.price)
+      // Determine cycle for ASAAS
+      const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
+      const billingType = body.billingType || "PIX"
+
+      // Create subscription at ASAAS
+      const asaasSub = await createSubscription(
+        asaasCustomerId,
+        plan.price,
+        billingType,
+        `AR Business Studio - ${plan.name}`,
+        asaasCycle,
+      )
+
+      // Create ASAAS checkout for payment
+      const checkout = await createCheckout(
+        asaasSub.id,
+        asaasCustomerId,
+        billingType,
+        plan.price,
+        asaasSub.nextDueDate,
+        asaasCycle,
+      )
 
       // Update local subscription
       await admin
@@ -101,8 +177,18 @@ export async function POST(request: Request) {
           plan_id: plan.id,
           asaas_subscription_id: asaasSub.id,
           status: "active",
+          trial_ends_at: null,
         })
         .eq("organization_id", orgId)
+
+      // Save checkout info
+      await admin.from("asaas_checkouts").insert({
+        organization_id: orgId,
+        plan_id: plan.id,
+        asaas_checkout_id: checkout.id,
+        checkout_url: checkout.url,
+        status: "pending",
+      })
 
       // Update usage limits
       await admin
@@ -112,11 +198,13 @@ export async function POST(request: Request) {
           assets_limit_bytes: plan.assets_limit_bytes,
         })
         .eq("organization_id", orgId)
+
+      return NextResponse.json({ success: true, checkout_url: checkout.url })
     } else {
       // No ASAAS — just update locally (sandbox mode)
       await admin
         .from("subscriptions")
-        .update({ plan_id: plan.id, status: "active" })
+        .update({ plan_id: plan.id, status: "active", trial_ends_at: null })
         .eq("organization_id", orgId)
 
       await admin
@@ -126,9 +214,9 @@ export async function POST(request: Request) {
           assets_limit_bytes: plan.assets_limit_bytes,
         })
         .eq("organization_id", orgId)
-    }
 
-    return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true })
+    }
   }
 
   if (action === "cancel") {

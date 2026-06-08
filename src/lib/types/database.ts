@@ -10,6 +10,15 @@ export interface Database {
           email: string
           avatar_url: string | null
           role: string
+          phone: string | null
+          cpf_cnpj: string | null
+          address: string | null
+          address_number: string | null
+          address_complement: string | null
+          address_neighborhood: string | null
+          address_city: string | null
+          address_state: string | null
+          address_zipcode: string | null
           created_at: string
           updated_at: string
         }
@@ -19,6 +28,15 @@ export interface Database {
           email: string
           avatar_url?: string | null
           role?: string
+          phone?: string | null
+          cpf_cnpj?: string | null
+          address?: string | null
+          address_number?: string | null
+          address_complement?: string | null
+          address_neighborhood?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_zipcode?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -28,6 +46,15 @@ export interface Database {
           email?: string
           avatar_url?: string | null
           role?: string
+          phone?: string | null
+          cpf_cnpj?: string | null
+          address?: string | null
+          address_number?: string | null
+          address_complement?: string | null
+          address_neighborhood?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_zipcode?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -89,6 +116,8 @@ export interface Database {
           assets_limit_label: string
           features: string[]
           active: boolean
+          billing_cycle: string
+          trial_days: number
           created_at: string
         }
         Insert: {
@@ -101,6 +130,8 @@ export interface Database {
           assets_limit_label: string
           features?: string[]
           active?: boolean
+          billing_cycle?: string
+          trial_days?: number
           created_at?: string
         }
         Update: {
@@ -113,6 +144,8 @@ export interface Database {
           assets_limit_label?: string
           features?: string[]
           active?: boolean
+          billing_cycle?: string
+          trial_days?: number
           created_at?: string
         }
       }
@@ -125,6 +158,7 @@ export interface Database {
           status: string
           current_period_start: string
           current_period_end: string
+          trial_ends_at: string | null
           created_at: string
           updated_at: string
         }
@@ -136,6 +170,7 @@ export interface Database {
           status?: string
           current_period_start?: string
           current_period_end?: string
+          trial_ends_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -147,6 +182,42 @@ export interface Database {
           status?: string
           current_period_start?: string
           current_period_end?: string
+          trial_ends_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      asaas_checkouts: {
+        Row: {
+          id: string
+          organization_id: string
+          subscription_id: string | null
+          plan_id: string
+          asaas_checkout_id: string | null
+          checkout_url: string | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          subscription_id?: string | null
+          plan_id: string
+          asaas_checkout_id?: string | null
+          checkout_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          subscription_id?: string | null
+          plan_id?: string
+          asaas_checkout_id?: string | null
+          checkout_url?: string | null
+          status?: string
           created_at?: string
           updated_at?: string
         }

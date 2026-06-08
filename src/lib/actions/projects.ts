@@ -75,6 +75,26 @@ export async function createProject(formData: FormData) {
 
   const admin = createAdminClient()
 
+  // Check subscription status
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("status, trial_ends_at")
+    .eq("organization_id", orgId)
+    .single()
+
+  if (sub) {
+    const trialExpired = sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
+    if (sub.status === "past_due") {
+      return { error: "Assinatura vencida. Regularize o pagamento para criar projetos." }
+    }
+    if (sub.status === "canceled") {
+      return { error: "Assinatura cancelada. Escolha um plano para criar projetos." }
+    }
+    if (sub.status === "trialing" && trialExpired) {
+      return { error: "Período de teste expirado. Assine um plano para continuar." }
+    }
+  }
+
   const { data: limitOk } = await admin.rpc("check_project_limit", {
     p_organization_id: orgId,
   })

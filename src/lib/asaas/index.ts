@@ -7,6 +7,19 @@ interface AsaasCustomer {
   email: string
   cpfCnpj?: string
   phone?: string
+  address?: string
+  addressNumber?: string
+  complement?: string
+  province?: string
+  city?: string
+  state?: string
+  postalCode?: string
+}
+
+interface AsaasCheckout {
+  id: string
+  url: string
+  subscription: string
 }
 
 interface AsaasSubscription {
@@ -51,12 +64,43 @@ async function asaasFetch<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json()
 }
 
-export async function createCustomer(organizationId: string, name: string, email: string): Promise<string> {
+export async function createCustomer(
+  organizationId: string,
+  name: string,
+  email: string,
+  cpfCnpj?: string,
+  phone?: string,
+  address?: string,
+  addressNumber?: string,
+  complement?: string,
+  neighborhood?: string,
+  city?: string,
+  state?: string,
+  zipcode?: string,
+): Promise<string> {
+  const body: Record<string, any> = { name, email }
+  if (cpfCnpj) body.cpfCnpj = cpfCnpj.replace(/\D/g, "")
+  if (phone) body.phone = phone.replace(/\D/g, "")
+  if (address) body.address = address
+  if (addressNumber) body.addressNumber = addressNumber
+  if (complement) body.complement = complement
+  if (neighborhood) body.province = neighborhood
+  if (city) body.city = city
+  if (state) body.state = state
+  if (zipcode) body.postalCode = zipcode.replace(/\D/g, "")
+
   const customer = await asaasFetch<AsaasCustomer>("/customers", {
     method: "POST",
-    body: JSON.stringify({ name, email }),
+    body: JSON.stringify(body),
   })
   return customer.id
+}
+
+export async function updateCustomer(customerId: string, data: Partial<AsaasCustomer>): Promise<AsaasCustomer> {
+  return asaasFetch<AsaasCustomer>(`/customers/${customerId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
 }
 
 export async function getCustomer(customerId: string): Promise<AsaasCustomer> {
@@ -68,6 +112,7 @@ export async function createSubscription(
   value: number,
   billingType: string = "PIX",
   description?: string,
+  cycle: string = "MONTHLY",
 ): Promise<AsaasSubscription> {
   return asaasFetch<AsaasSubscription>("/subscriptions", {
     method: "POST",
@@ -76,8 +121,29 @@ export async function createSubscription(
       billingType,
       value,
       nextDueDate: getNextDueDate(),
-      cycle: "MONTHLY",
+      cycle,
       description: description || "AR Business Studio",
+    }),
+  })
+}
+
+export async function createCheckout(
+  subscriptionId: string,
+  customerId: string,
+  billingType: string = "PIX",
+  value: number,
+  dueDate: string,
+  cycle: string = "MONTHLY",
+): Promise<AsaasCheckout> {
+  return asaasFetch<AsaasCheckout>("/checkouts", {
+    method: "POST",
+    body: JSON.stringify({
+      subscription: subscriptionId,
+      customer: customerId,
+      billingType,
+      value,
+      dueDateLimitDays: 5,
+      maxInstallmentCount: 1,
     }),
   })
 }

@@ -98,9 +98,24 @@ export const createPlanSchema = z.object({
   assets_limit_label: z.string().min(1).max(20),
   features: z.array(z.string()).default([]),
   active: z.boolean().default(true),
+  billing_cycle: z.enum(["monthly", "yearly"]).default("monthly"),
+  trial_days: z.number().int().min(0).default(0),
 })
 
 export const updatePlanSchema = createPlanSchema.partial()
+
+export const updateProfileSchema = z.object({
+  name: z.string().min(2, "Mínimo 2 caracteres").max(100).optional(),
+  phone: z.string().max(20).nullable().optional(),
+  cpf_cnpj: z.string().max(20).nullable().optional(),
+  address: z.string().max(200).nullable().optional(),
+  address_number: z.string().max(20).nullable().optional(),
+  address_complement: z.string().max(100).nullable().optional(),
+  address_neighborhood: z.string().max(100).nullable().optional(),
+  address_city: z.string().max(100).nullable().optional(),
+  address_state: z.string().max(2).nullable().optional(),
+  address_zipcode: z.string().max(10).nullable().optional(),
+})
 
 export const asaasWebhookSchema = z.object({
   event: z.string(),

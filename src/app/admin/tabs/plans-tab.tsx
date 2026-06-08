@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 
 interface Plan {
@@ -58,6 +59,8 @@ export function PlansTab() {
     assets_limit_label: "500 MB",
     features: [...defaultFeatures],
     active: true,
+    billing_cycle: "monthly",
+    trial_days: 0,
   })
 
   const loadPlans = async () => {
@@ -87,6 +90,8 @@ export function PlansTab() {
       assets_limit_label: "500 MB",
       features: [...defaultFeatures],
       active: true,
+      billing_cycle: "monthly",
+      trial_days: 0,
     })
     setDialogOpen(true)
   }
@@ -102,6 +107,8 @@ export function PlansTab() {
       assets_limit_label: plan.assets_limit_label,
       features: [...plan.features],
       active: plan.active,
+      billing_cycle: (plan as any).billing_cycle || "monthly",
+      trial_days: (plan as any).trial_days || 0,
     })
     setDialogOpen(true)
   }
@@ -145,6 +152,8 @@ export function PlansTab() {
         assets_limit_label: form.assets_limit_label,
         features: form.features.filter((f) => f.trim()),
         active: form.active,
+        billing_cycle: form.billing_cycle,
+        trial_days: form.trial_days,
       }
 
       if (editingPlan) {
@@ -395,6 +404,35 @@ export function PlansTab() {
                 <Plus className="h-3 w-3 mr-1" />
                 Adicionar
               </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="plan-billing">Ciclo de Cobrança</Label>
+                <Select
+                  value={form.billing_cycle}
+                  onValueChange={(v) => setForm((p) => ({ ...p, billing_cycle: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Mensal</SelectItem>
+                    <SelectItem value="yearly">Anual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-trial">Dias de Trial</Label>
+                <Input
+                  id="plan-trial"
+                  type="number"
+                  min="0"
+                  value={form.trial_days}
+                  onChange={(e) => setForm((p) => ({ ...p, trial_days: Number(e.target.value) }))}
+                  placeholder="0"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-3">

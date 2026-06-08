@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Check, Crown, ArrowRight, CreditCard } from "lucide-react"
+import { Check, Crown, ArrowRight, CreditCard, ExternalLink, Sparkles, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -19,21 +19,33 @@ interface Plan {
   projects_limit: number
   assets_limit_label: string
   features: string[]
+  billing_cycle: string
+  trial_days: number
 }
 
 interface Subscription {
   id: string
   plan_id: string
   status: string
+  trial_ends_at: string | null
   plans: Plan
+}
+
+interface Checkout {
+  id: string
+  checkout_url: string | null
+  status: string
 }
 
 export default function BillingPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [payments, setPayments] = useState<any[]>([])
+  const [checkout, setCheckout] = useState<Checkout | null>(null)
+  const [usage, setUsage] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [upgrading, setUpgrading] = useState<string | null>(null)
+  const [trialDaysLeft, setTrialDaysLeft] = useState(0)
 
   useEffect(() => {
     loadData()
@@ -60,21 +72,48 @@ export default function BillingPage() {
         .single()
 
       if (memberships) {
+        const orgId = memberships.organization_id
+
         const { data: subData } = await supabase
           .from("subscriptions")
           .select("*, plans(*)")
-          .eq("organization_id", memberships.organization_id)
+          .eq("organization_id", orgId)
           .single()
 
         setSubscription(subData as any)
 
+        if (subData?.trial_ends_at) {
+          const end = new Date(subData.trial_ends_at)
+          const now = new Date()
+          const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+          setTrialDaysLeft(Math.max(0, diff))
+        }
+
         const { data: payData } = await supabase
           .from("asaas_payments")
           .select("*")
-          .eq("organization_id", memberships.organization_id)
+          .eq("organization_id", orgId)
           .order("due_date", { ascending: false })
 
         setPayments(payData || [])
+
+        const { data: checkoutData } = await supabase
+          .from("asaas_checkouts")
+          .select("*")
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single()
+
+        setCheckout(checkoutData as any)
+
+        const { data: usageData } = await supabase
+          .from("usage_limits")
+          .select("*")
+          .eq("organization_id", orgId)
+          .single()
+
+        setUsage(usageData)
       }
     }
 
@@ -94,13 +133,38 @@ export default function BillingPage() {
       if (data.error) {
         toast({ title: data.error, variant: "destructive" })
       } else {
-        toast({ title: "Plano alterado com sucesso!" })
+        if (data.checkout_url) {
+          window.open(data.checkout_url, "_blank")
+        }
+        toast({ title: "Assinatura realizada com sucesso!" })
         loadData()
       }
     } catch {
       toast({ title: "Erro ao alterar plano", variant: "destructive" })
     }
     setUpgrading(null)
+  }
+
+  const handleCancel = async () => {
+    if (!confirm("Tem certeza que deseja cancelar a assinatura?")) return
+
+    try {
+      const res = await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      })
+
+      const data = await res.json()
+      if (data.error) {
+        toast({ title: data.error, variant: "destructive" })
+      } else {
+        toast({ title: "Assinatura cancelada" })
+        loadData()
+      }
+    } catch {
+      toast({ title: "Erro ao cancelar", variant: "destructive" })
+    }
   }
 
   const statusVariant: Record<string, "success" | "warning" | "destructive"> = {
@@ -121,17 +185,83 @@ export default function BillingPage() {
     )
   }
 
+  const isTrialing = subscription?.status === "trialing"
+  const isCanceled = subscription?.status === "canceled" || subscription?.status === "none"
+
   return (
     <AppShell>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold">Faturamento</h1>
-          <p className="text-muted-foreground text-sm mt-1">Gerencie seu plano e histórico de pagamentos</p>
+          <p className="text-muted-foreground text-sm mt-1">Gerencie seu plano, assinatura e histórico de pagamentos</p>
         </div>
 
+        {/* Trial / Status Banner */}
+        {isTrialing && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
+            <Sparkles className="h-5 w-5 text-amber-400 shrink-0" />
+            <div className="text-sm">
+              <strong>Período de teste ativo.</strong> Você tem <strong>{trialDaysLeft} dias</strong> restantes no plano {subscription?.plans?.name}.
+              Após o término, escolha um plano abaixo para continuar usando a plataforma.
+            </div>
+          </div>
+        )}
+
+        {subscription?.status === "past_due" && (
+          <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+            <div className="text-sm">
+              <strong>Assinatura vencida.</strong> Regularize o pagamento para reativar seu plano.
+              {checkout?.checkout_url && (
+                <a href={checkout.checkout_url} target="_blank" className="ml-2 underline hover:text-primary">
+                  Ir para pagamento <ExternalLink className="h-3 w-3 inline" />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isCanceled && (
+          <div className="mb-6 p-4 rounded-xl bg-muted border border-border flex items-center gap-3">
+            <Crown className="h-5 w-5 text-muted-foreground shrink-0" />
+            <div className="text-sm text-muted-foreground">
+              Você está no plano <strong>Starter</strong>. Escolha um plano abaixo para desbloquear todos os recursos.
+            </div>
+          </div>
+        )}
+
+        {/* Usage info */}
+        {usage && (
+          <Card className="glass border-border/50 mb-6">
+            <CardContent className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Projetos</span>
+                  <p className="font-semibold">{usage.projects_used} / {usage.projects_limit === 999999 ? "∞" : usage.projects_limit}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Assets</span>
+                  <p className="font-semibold">{Math.round(usage.assets_used_bytes / 1048576)}MB / {usage.assets_limit_label}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Plano</span>
+                  <p className="font-semibold">{subscription?.plans?.name || "Starter"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status</span>
+                  <p className="font-semibold capitalize">{isTrialing ? "Trial" : subscription?.status || "Inativo"}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Plan selection */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           {plans.map((plan, i) => {
             const isCurrent = subscription?.plans?.id === plan.id
+            const cycleLabel = plan.billing_cycle === "yearly" ? " /ano" : " /mês"
+
             return (
               <motion.div
                 key={plan.id}
@@ -149,20 +279,27 @@ export default function BillingPage() {
                 <div className="flex items-center gap-2 mb-4">
                   {plan.slug === "agency" && <Crown className="h-5 w-5 text-amber-400" />}
                   <h3 className="text-lg font-bold">{plan.name}</h3>
+                  {plan.trial_days > 0 && !isCurrent && (
+                    <Badge variant="secondary" className="text-xs">{plan.trial_days} dias grátis</Badge>
+                  )}
                 </div>
                 <p className="text-3xl font-bold mb-4">
                   R$ {plan.price}
-                  <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                  <span className="text-sm font-normal text-muted-foreground">{cycleLabel}</span>
                 </p>
 
                 <div className="space-y-2 mb-6">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Projetos</span>
-                    <span className="font-medium">{plan.projects_limit === 999999 ? "Ilimitados" : String(plan.projects_limit)}</span>
+                    <span className="font-medium">{plan.projects_limit >= 999999 ? "Ilimitados" : String(plan.projects_limit)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Assets</span>
                     <span className="font-medium">{plan.assets_limit_label}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Ciclo</span>
+                    <span className="font-medium">{plan.billing_cycle === "yearly" ? "Anual" : "Mensal"}</span>
                   </div>
                 </div>
 
@@ -175,20 +312,45 @@ export default function BillingPage() {
                   ))}
                 </ul>
 
-                <Button
-                  variant={isCurrent ? "outline" : "gradient"}
-                  className="w-full"
-                  onClick={() => handleUpgrade(plan.id)}
-                  disabled={isCurrent || upgrading === plan.id}
-                >
-                  {upgrading === plan.id ? "Processando..." : isCurrent ? "Plano Atual" : "Fazer Upgrade"}
-                  {!isCurrent && <ArrowRight className="h-4 w-4" />}
-                </Button>
+                {isCurrent ? (
+                  <div className="space-y-2">
+                    <Button variant="outline" className="w-full" disabled>
+                      Plano Atual
+                    </Button>
+                    {(isTrialing || subscription?.status === "past_due") && checkout?.checkout_url && (
+                      <Button variant="gradient" className="w-full" asChild>
+                        <a href={checkout.checkout_url} target="_blank">
+                          Finalizar Pagamento
+                          <ExternalLink className="h-4 w-4 ml-2" />
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    variant="gradient"
+                    className="w-full"
+                    onClick={() => handleUpgrade(plan.id)}
+                    disabled={upgrading === plan.id}
+                  >
+                    {upgrading === plan.id ? "Processando..." : plan.slug === "starter" ? "Plano Gratuito" : "Assinar Agora"}
+                    {upgrading !== plan.id && <ArrowRight className="h-4 w-4 ml-2" />}
+                  </Button>
+                )}
               </motion.div>
             )
           })}
         </div>
 
+        {subscription && !isCanceled && (
+          <div className="flex justify-center mb-10">
+            <Button variant="outline" size="sm" onClick={handleCancel} className="text-destructive">
+              Cancelar Assinatura
+            </Button>
+          </div>
+        )}
+
+        {/* Payment History */}
         <Card className="glass border-border/50">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">

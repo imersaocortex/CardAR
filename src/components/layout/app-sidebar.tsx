@@ -9,6 +9,7 @@ import {
   FolderKanban,
   Box,
   CreditCard,
+  User,
   Zap,
   Settings,
   Shield,
@@ -58,6 +59,7 @@ export function AppSidebar() {
     { label: "Projetos", href: "/projects", icon: FolderKanban },
     { label: "Assets", href: "/assets", icon: Box },
     { label: "Faturamento", href: "/billing", icon: CreditCard },
+    { label: "Perfil", href: "/profile", icon: User },
     ...(showAdmin
       ? [
           { label: "Administrador", href: "/admin", icon: Shield },

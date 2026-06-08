@@ -21,16 +21,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const search = searchParams.get("search") || ""
 
-  // Query organizations with members
+  // Fetch organizations
   let orgQuery = admin
     .from("organizations")
-    .select(`
-      *,
-      organization_members(
-        *,
-        profiles(id, name, email, avatar_url, role, created_at)
-      )
-    `)
+    .select("id, name, slug, created_at")
     .limit(100)
     .order("created_at", { ascending: false })
 
@@ -44,29 +38,45 @@ export async function GET(request: Request) {
   }
 
   const orgList = Array.isArray(orgs) ? orgs : []
-
-  // Fetch subscriptions and usage_limits separately (avoid embedding issues)
   const orgIds = orgList.map((o: any) => o.id)
 
+  // Fetch members, subscriptions, usage_limits, and profiles separately
+  let members: any[] = []
   let subscriptions: any[] = []
   let usageLimits: any[] = []
   let projectCounts: any[] = []
+  let allProfiles: any[] = []
 
   if (orgIds.length > 0) {
-    const [subsRes, usageRes, projRes] = await Promise.all([
-      admin.from("subscriptions").select("*, plan:plans(id, name, slug, price)").in("organization_id", orgIds),
+    const [membersRes, subsRes, usageRes, projRes] = await Promise.all([
+      admin.from("organization_members").select("*").in("organization_id", orgIds),
+      admin.from("subscriptions").select("id, organization_id, status, current_period_end, plan_id").in("organization_id", orgIds),
       admin.from("usage_limits").select("*").in("organization_id", orgIds),
       admin.from("projects").select("organization_id").in("organization_id", orgIds),
     ])
+    members = (membersRes.data || []) as any[]
     subscriptions = (subsRes.data || []) as any[]
     usageLimits = (usageRes.data || []) as any[]
     projectCounts = (projRes.data || []) as any[]
   }
 
-  // Build lookup maps
+  // Fetch all profiles referenced by members
+  const memberUserIds = [...new Set(members.map((m: any) => m.user_id))]
+  if (memberUserIds.length > 0) {
+    const { data: pData } = await admin
+      .from("profiles")
+      .select("id, name, email, avatar_url, role, created_at")
+      .in("id", memberUserIds)
+    allProfiles = (pData || []) as any[]
+  }
+
+  const profileMap: Record<string, any> = {}
+  for (const p of allProfiles) {
+    profileMap[p.id] = p
+  }
+
   const subMap: Record<string, any> = {}
   for (const s of subscriptions) {
-    if (s.plan && Array.isArray(s.plan)) s.plan = s.plan[0] || null
     subMap[s.organization_id] = s
   }
 
@@ -80,12 +90,31 @@ export async function GET(request: Request) {
     projectCountMap[p.organization_id] = (projectCountMap[p.organization_id] || 0) + 1
   }
 
-  const result = orgList.map((org: any) => ({
-    ...org,
-    subscription: subMap[org.id] || null,
-    usage_limits: usageMap[org.id] || null,
-    projects_count: projectCountMap[org.id] || 0,
-  }))
+  // Build plans map
+  const planIds = [...new Set(subscriptions.map((s: any) => s.plan_id).filter(Boolean))]
+  const planMap: Record<string, any> = {}
+  if (planIds.length > 0) {
+    const { data: plans } = await admin.from("plans").select("id, name, slug, price").in("id", planIds)
+    for (const p of (plans || []) as any[]) {
+      planMap[p.id] = p
+    }
+  }
+
+  const result = orgList.map((org: any) => {
+    const orgMembers = members.filter((m: any) => m.organization_id === org.id)
+    const sub = subMap[org.id] || null
+
+    return {
+      ...org,
+      organization_members: orgMembers.map((m: any) => ({
+        ...m,
+        profiles: profileMap[m.user_id] || null,
+      })),
+      subscription: sub ? { ...sub, plan: sub.plan_id ? planMap[sub.plan_id] || null : null } : null,
+      usage_limits: usageMap[org.id] || null,
+      projects_count: projectCountMap[org.id] || 0,
+    }
+  })
 
   return NextResponse.json(result)
 }

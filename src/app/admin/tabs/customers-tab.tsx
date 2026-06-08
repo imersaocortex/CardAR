@@ -90,16 +90,27 @@ export function CustomersTab() {
   const [orgDetail, setOrgDetail] = useState<OrgDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [changingStatus, setChangingStatus] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   const loadCustomers = async (q: string) => {
     setLoading(true)
+    setApiError(null)
     try {
       const params = q ? `?search=${encodeURIComponent(q)}` : ""
       const res = await fetch(`/api/admin/customers${params}`)
       const data = await res.json()
-      setCustomers(Array.isArray(data) ? data : [])
-    } catch (err) {
+      if (!res.ok) {
+        setApiError(data.error || `Erro HTTP ${res.status}`)
+        setCustomers([])
+      } else if (!Array.isArray(data)) {
+        setApiError("Resposta inesperada da API")
+        setCustomers([])
+      } else {
+        setCustomers(data)
+      }
+    } catch (err: any) {
       console.error(err)
+      setApiError(err.message || "Erro de rede")
       setCustomers([])
     } finally {
       setLoading(false)
@@ -196,7 +207,20 @@ export function CustomersTab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.length === 0 && (
+                    {apiError && (
+                      <tr>
+                        <td colSpan={7} className="text-center py-4">
+                          <p className="text-destructive text-sm font-medium">Erro: {apiError}</p>
+                          <button
+                            onClick={() => loadCustomers(search)}
+                            className="text-primary text-xs underline mt-1 hover:no-underline"
+                          >
+                            Tentar novamente
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                    {!apiError && customers.length === 0 && (
                       <tr>
                         <td colSpan={7} className="text-center py-12 text-muted-foreground">
                           Nenhum cliente encontrado

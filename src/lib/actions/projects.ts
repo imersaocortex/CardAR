@@ -99,14 +99,19 @@ export async function createProject(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Update usage
-  await admin
+  // Increment project usage
+  const { data: usage } = await admin
     .from("usage_limits")
-    .update({ projects_used: 0 })
+    .select("projects_used")
     .eq("organization_id", orgId)
+    .single()
 
-  // Recalculate
-  await admin.rpc("check_project_limit", { p_organization_id: orgId })
+  if (usage) {
+    await admin
+      .from("usage_limits")
+      .update({ projects_used: (usage.projects_used || 0) + 1 })
+      .eq("organization_id", orgId)
+  }
 
   revalidatePath("/projects")
   return { data }
@@ -134,12 +139,35 @@ export async function updateProject(id: string, formData: FormData) {
 
 export async function deleteProject(id: string) {
   const supabase = await createServerSupabaseClient()
+  const { data: project } = await supabase
+    .from("projects")
+    .select("organization_id")
+    .eq("id", id)
+    .single()
+
+  if (!project) return { error: "Projeto não encontrado" }
+
   const { error } = await supabase
     .from("projects")
     .delete()
     .eq("id", id)
 
   if (error) return { error: error.message }
+
+  // Decrement project usage
+  const admin = createAdminClient()
+  const { data: usage } = await admin
+    .from("usage_limits")
+    .select("projects_used")
+    .eq("organization_id", project.organization_id)
+    .single()
+
+  if (usage) {
+    await admin
+      .from("usage_limits")
+      .update({ projects_used: Math.max(0, (usage.projects_used || 0) - 1) })
+      .eq("organization_id", project.organization_id)
+  }
 
   revalidatePath("/projects")
   return { success: true }

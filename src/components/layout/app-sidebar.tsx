@@ -15,10 +15,26 @@ import {
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth-store"
 
+interface Branding {
+  site_name?: string
+  logo_url?: string | null
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
   const { isPlatformAdmin: storeIsAdmin } = useAuthStore()
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  const [branding, setBranding] = useState<Branding | null>(null)
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((res) => res.json())
+      .then((data) => setBranding(data.branding))
+      .catch(() => {})
+  }, [])
+
+  const siteName = branding?.site_name || "AR Business Studio"
+  const logoUrl = branding?.logo_url
 
   useEffect(() => {
     async function checkAdmin() {
@@ -53,10 +69,14 @@ export function AppSidebar() {
   return (
     <aside className="fixed left-0 top-0 z-50 h-screen w-64 border-r border-border/40 bg-background hidden lg:flex flex-col">
       <div className="flex items-center gap-2 h-16 px-6 border-b border-border/40">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary">
-          <Zap className="h-4 w-4 text-white" />
-        </div>
-        <span className="font-bold">AR Business Studio</span>
+        {logoUrl ? (
+          <img src={logoUrl} alt={siteName} className="h-8 w-auto" />
+        ) : (
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary">
+            <Zap className="h-4 w-4 text-white" />
+          </div>
+        )}
+        <span className="font-bold">{siteName}</span>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">

@@ -20,6 +20,7 @@ import { cn, mapProjectStatus } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { toast } from "@/hooks/use-toast"
+import { createProject, deleteProject } from "@/lib/actions/projects"
 
 interface Project {
   id: string
@@ -82,69 +83,48 @@ export default function ProjectsPage() {
   const handleCreate = async () => {
     setCreating(true)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setCreating(false); return }
 
-    const { data: membership } = await supabase
-      .from("organization_members")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .in("role", ["owner", "admin", "editor"])
-      .limit(1)
-      .single()
+    const formData = new FormData()
+    formData.append("name", newProject.name || "Novo Projeto")
+    formData.append("type", newProject.type)
 
-    if (!membership) {
-      toast({ title: "Sem permissão", variant: "destructive" })
+    const result = await createProject(formData)
+
+    if (result.error) {
+      toast({ title: result.error, variant: "destructive" })
       setCreating(false)
       return
     }
 
-    const slug = Math.random().toString(36).substring(2, 12)
+    if (result.data) {
+      // Upload marker image if provided
+      if (markerFile) {
+        const ext = markerFile.name.endsWith(".png") ? "png" : "jpg"
+        const fileName = `marker_${result.data.id}_${Date.now()}.${ext}`
 
-    const { data, error } = await supabase
-      .from("projects")
-      .insert({
-        organization_id: membership.organization_id,
-        name: newProject.name || "Novo Projeto",
-        type: newProject.type,
-        slug,
-        created_by: user.id,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      toast({ title: error.message, variant: "destructive" })
-      setCreating(false)
-      return
-    }
-
-    // Upload marker image if provided
-    if (markerFile && data) {
-      const ext = markerFile.name.endsWith(".png") ? "png" : "jpg"
-      const fileName = `marker_${data.id}_${Date.now()}.${ext}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("markers")
-        .upload(fileName, markerFile, { upsert: true })
-
-      if (!uploadError) {
-        const { data: urlData } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("markers")
-          .getPublicUrl(fileName)
+          .upload(fileName, markerFile, { upsert: true })
 
-        if (urlData?.publicUrl) {
-          await supabase.from("project_markers").upsert({
-            project_id: data.id,
-            image_url: urlData.publicUrl,
-            width: 0,
-            height: 0,
-          }, { onConflict: "project_id" })
+        if (!uploadError) {
+          const { data: urlData } = await supabase.storage
+            .from("markers")
+            .getPublicUrl(fileName)
+
+          if (urlData?.publicUrl) {
+            await supabase.from("project_markers").upsert({
+              project_id: result.data.id,
+              image_url: urlData.publicUrl,
+              width: 0,
+              height: 0,
+            }, { onConflict: "project_id" })
+          }
         }
       }
+
+      loadProjects()
     }
 
-    setProjects([data, ...projects])
     setShowNewModal(false)
     setNewProject({ name: "", type: "business_card" })
     setMarkerFile(null)
@@ -153,35 +133,17 @@ export default function ProjectsPage() {
   }
 
   const handleDuplicate = async (project: Project) => {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const formData = new FormData()
+    formData.append("name", `${project.name} (cópia)`)
+    formData.append("type", project.type)
 
-    const { data: membership } = await supabase
-      .from("organization_members")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .single()
+    const result = await createProject(formData)
 
-    if (!membership) return
-
-    const slug = Math.random().toString(36).substring(2, 12)
-    const { data } = await supabase
-      .from("projects")
-      .insert({
-        organization_id: membership.organization_id,
-        name: `${project.name} (cópia)`,
-        type: project.type,
-        slug,
-        created_by: user.id,
-      })
-      .select()
-      .single()
-
-    if (data) {
-      setProjects([data, ...projects])
+    if (result.error) {
+      toast({ title: result.error, variant: "destructive" })
+    } else {
       toast({ title: "Projeto duplicado" })
+      loadProjects()
     }
   }
 
@@ -192,10 +154,13 @@ export default function ProjectsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    const supabase = createClient()
-    await supabase.from("projects").delete().eq("id", id)
-    setProjects(projects.filter((p) => p.id !== id))
-    toast({ title: "Projeto removido" })
+    const result = await deleteProject(id)
+    if (result.error) {
+      toast({ title: result.error, variant: "destructive" })
+    } else {
+      toast({ title: "Projeto removido" })
+      loadProjects()
+    }
   }
 
   const statusColors: Record<string, "success" | "secondary" | "warning"> = {

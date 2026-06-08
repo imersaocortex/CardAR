@@ -1,15 +1,42 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Check, ArrowRight, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { mockPlans } from "@/lib/mock-data"
 import { cn } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 
+interface Plan {
+  id: string
+  name: string
+  slug: string
+  price: number
+  projects_limit: number
+  assets_limit_label: string
+  features: string[]
+}
+
 export function PlansSection() {
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [loading, setLoading] = useState(true)
   const [isAnnual, setIsAnnual] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from("plans")
+      .select("*")
+      .eq("active", true)
+      .order("price")
+      .then(({ data }) => {
+        if (data) setPlans(data)
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) return null
 
   return (
     <section id="planos" className="relative py-24 px-4 bg-muted/30">
@@ -53,8 +80,8 @@ export function PlansSection() {
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {mockPlans.map((plan, i) => {
-            const isPro = plan.id === "pro"
+          {plans.map((plan, i) => {
+            const isPro = plan.slug === "pro"
             return (
               <motion.div
                 key={plan.id}
@@ -81,10 +108,13 @@ export function PlansSection() {
                 <div className="mb-6">
                   <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
                   <p className="text-3xl font-bold">
-                    {isAnnual
-                      ? `R$ ${Math.round(Number(plan.price.replace("R$ ", "")) * 0.8)}`
-                      : plan.price}
-                    <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                    {plan.price === 0
+                      ? "Grátis"
+                      : `R$ ${isAnnual ? Math.round(plan.price * 0.8) : plan.price}`
+                    }
+                    {plan.price > 0 && (
+                      <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                    )}
                   </p>
                 </div>
 
@@ -103,7 +133,7 @@ export function PlansSection() {
                   asChild
                 >
                   <Link href="/login">
-                    {plan.id === "starter" ? "Começar Grátis" : "Assinar Agora"}
+                    {plan.slug === "starter" ? "Começar Grátis" : "Assinar Agora"}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>

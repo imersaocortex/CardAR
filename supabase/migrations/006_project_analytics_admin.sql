@@ -28,6 +28,7 @@ create index if not exists idx_project_analytics_event_type on public.project_an
 alter table public.project_analytics enable row level security;
 
 -- RLS: org members can read their own analytics
+drop policy if exists "Org members can read project analytics" on public.project_analytics;
 create policy "Org members can read project analytics"
   on public.project_analytics for select
   using (
@@ -39,6 +40,7 @@ create policy "Org members can read project analytics"
   );
 
 -- RLS: anyone can insert (from public experience)
+drop policy if exists "Anyone can insert analytics" on public.project_analytics;
 create policy "Anyone can insert analytics"
   on public.project_analytics for insert
   with check (true);
@@ -57,9 +59,11 @@ create table if not exists public.subscription_status_history (
 
 create index if not exists idx_sub_status_hist_sub on public.subscription_status_history(subscription_id);
 alter table public.subscription_status_history enable row level security;
+drop policy if exists "Admin can read subscription history" on public.subscription_status_history;
 create policy "Admin can read subscription history"
   on public.subscription_status_history for select
   using (true);
+drop policy if exists "Admin can insert subscription history" on public.subscription_status_history;
 create policy "Admin can insert subscription history"
   on public.subscription_status_history for insert
   with check (true);

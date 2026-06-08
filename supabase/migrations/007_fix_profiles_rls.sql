@@ -3,10 +3,13 @@
 -- Drop all existing policies and recreate cleanly
 -- ============================================================
 
--- Drop all existing policies on profiles (to eliminate any dashboard-created recursive policies)
+-- Drop ALL possible policy names (old + new) to ensure clean slate
 drop policy if exists "Users can read own profile" on public.profiles;
 drop policy if exists "Users can update own profile" on public.profiles;
 drop policy if exists "anyone can view profiles" on public.profiles;
+drop policy if exists "profiles_read_own" on public.profiles;
+drop policy if exists "profiles_read_admin" on public.profiles;
+drop policy if exists "profiles_update_own" on public.profiles;
 
 -- Ensure RLS is enabled
 alter table public.profiles enable row level security;

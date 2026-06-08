@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import {
   Search, Users, FolderKanban, CreditCard, ChevronDown, ChevronUp,
-  Globe, Eye, MousePointerClick, FileText, Loader2,
+  Globe, Eye, MousePointerClick, FileText, Loader2, AlertTriangle, Trash2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -90,6 +90,8 @@ export function CustomersTab() {
   const [orgDetail, setOrgDetail] = useState<OrgDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [changingStatus, setChangingStatus] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
 
   const loadCustomers = async (q: string) => {
@@ -161,6 +163,26 @@ export function CustomersTab() {
       console.error(err)
     }
     setChangingStatus(null)
+  }
+
+  const handleDelete = async () => {
+    if (!selectedCustomer) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/customers/${selectedCustomer.id}`, { method: "DELETE" })
+      if (res.ok) {
+        setConfirmDelete(false)
+        setSelectedCustomer(null)
+        setOrgDetail(null)
+        await loadCustomers(search)
+      } else {
+        const data = await res.json()
+        alert(`Erro ao excluir: ${data.error || "Erro desconhecido"}`)
+      }
+    } catch (err: any) {
+      alert(`Erro ao excluir: ${err.message}`)
+    }
+    setDeleting(false)
   }
 
   return (
@@ -332,9 +354,28 @@ export function CustomersTab() {
                   <Users className="h-5 w-5 text-primary" />
                   {selectedCustomer.name}
                 </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setOrgDetail(null) }}>
-                  Fechar
-                </Button>
+                <div className="flex gap-2">
+                  {!confirmDelete ? (
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
+                      <Trash2 className="h-4 w-4 mr-1" /> Excluir
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-destructive font-medium flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> Confirmar?
+                      </span>
+                      <Button variant="destructive" size="sm" disabled={deleting} onClick={handleDelete}>
+                        {deleting ? "Excluindo..." : "Sim, excluir"}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(null); setOrgDetail(null) }}>
+                    Fechar
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

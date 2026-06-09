@@ -1,8 +1,8 @@
 "use client"
 
-import { Suspense, useMemo, useState, useCallback } from "react"
+import { Suspense, useMemo, useState, useCallback, useEffect } from "react"
 import { Canvas } from "@react-three/fiber"
-import { OrbitControls, Grid, Environment, ContactShadows, Text, Edges, useVideoTexture, useTexture } from "@react-three/drei"
+import { OrbitControls, Grid, Environment, ContactShadows, Text, Edges, useVideoTexture, useTexture, useGLTF, useAnimations } from "@react-three/drei"
 import { useStudioStore, projectTypeDimensions } from "@/store"
 import { StudioElement } from "@/types"
 import * as THREE from "three"
@@ -162,34 +162,46 @@ function SizeReference() {
   )
 }
 
-function MeshBox({ element }: { element: StudioElement }) {
-  return (
-    <mesh>
-      <boxGeometry args={[0.8, 0.8, 0.8]} />
-      <meshStandardMaterial
-        color="#7c3aed"
-        roughness={0.3}
-        metalness={0.2}
-        opacity={element.opacity}
-        transparent={element.opacity < 1}
-      />
-    </mesh>
-  )
-}
+function Model3D({ element }: { element: StudioElement }) {
+  const isAnimado = element.type === "modelo-3d-animado"
 
-function SphereMesh({ element }: { element: StudioElement }) {
-  return (
-    <mesh>
-      <sphereGeometry args={[0.5, 32, 32]} />
-      <meshStandardMaterial
-        color="#06b6d4"
-        roughness={0.2}
-        metalness={0.3}
-        opacity={element.opacity}
-        transparent={element.opacity < 1}
-      />
-    </mesh>
-  )
+  if (!element.assetUrl) {
+    return isAnimado ? (
+      <mesh>
+        <sphereGeometry args={[0.5, 32, 32]} />
+        <meshStandardMaterial
+          color="#06b6d4"
+          roughness={0.2}
+          metalness={0.3}
+          opacity={element.opacity}
+          transparent={element.opacity < 1}
+        />
+      </mesh>
+    ) : (
+      <mesh>
+        <boxGeometry args={[0.8, 0.8, 0.8]} />
+        <meshStandardMaterial
+          color="#7c3aed"
+          roughness={0.3}
+          metalness={0.2}
+          opacity={element.opacity}
+          transparent={element.opacity < 1}
+        />
+      </mesh>
+    )
+  }
+
+  const { scene, animations } = useGLTF(element.assetUrl)
+  const { actions } = useAnimations(animations, scene)
+
+  useEffect(() => {
+    if (isAnimado && actions && Object.keys(actions).length > 0) {
+      const action = actions[Object.keys(actions)[0]]
+      if (action) { action.reset(); action.play() }
+    }
+  }, [actions, isAnimado])
+
+  return <primitive object={scene} />
 }
 
 function VideoPlane({ element }: { element: StudioElement }) {
@@ -311,9 +323,8 @@ function SocialButton({ element }: { element: StudioElement }) {
 function ElementRenderer({ element }: { element: StudioElement }) {
   switch (element.type) {
     case "modelo-3d":
-      return <MeshBox element={element} />
     case "modelo-3d-animado":
-      return <SphereMesh element={element} />
+      return <Model3D element={element} />
     case "video-mp4":
       return <VideoPlane element={element} />
     case "video-chromakey":

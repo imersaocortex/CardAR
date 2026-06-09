@@ -29,11 +29,11 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
       const vw = video.videoWidth
       const vh = video.videoHeight
       const scale = Math.max(w / vw, h / vh)
-      const sw = vw * scale
-      const sh = vh * scale
-      const sx = (sw - w) / 2
-      const sy = (sh - h) / 2
-      ctx.drawImage(video, sx, sy, w, h, 0, 0, w, h)
+      const cropW = w / scale
+      const cropH = h / scale
+      const cropX = (vw - cropW) / 2
+      const cropY = (vh - cropH) / 2
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, w, h)
     }
 
     // Draw Three.js overlay at screen size

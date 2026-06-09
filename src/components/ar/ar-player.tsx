@@ -88,19 +88,24 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
     onInteraction?.("button_click", { action_type: actionType, action_value: actionValue })
 
+    const openUrl = (url: string) => {
+      const win = window.open(url, "_blank", "noopener,noreferrer")
+      if (!win) window.location.href = url
+    }
+
     switch (actionType) {
       case "url":
       case "link":
-        window.open(actionValue, "_blank", "noopener,noreferrer")
+        openUrl(actionValue)
         break
       case "whatsapp": {
         const phone = actionValue.replace(/\D/g, "")
-        window.open(`https://wa.me/${phone}`, "_blank", "noopener,noreferrer")
+        openUrl(`https://wa.me/${phone}`)
         break
       }
       case "instagram": {
         const insta = actionValue.replace("@", "")
-        window.open(`https://instagram.com/${insta}`, "_blank", "noopener,noreferrer")
+        openUrl(`https://instagram.com/${insta}`)
         break
       }
       case "phone":
@@ -110,7 +115,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         window.location.href = `mailto:${actionValue}`
         break
       default:
-        window.open(actionValue, "_blank", "noopener,noreferrer")
+        openUrl(actionValue)
     }
   }, [onInteraction])
 
@@ -719,10 +724,10 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())
 
-      const handlePointerUp = (event: PointerEvent) => {
+      const processHit = (clientX: number, clientY: number) => {
         const rect = renderer.domElement.getBoundingClientRect()
-        pointerRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-        pointerRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+        pointerRef.current.x = ((clientX - rect.left) / rect.width) * 2 - 1
+        pointerRef.current.y = -((clientY - rect.top) / rect.height) * 2 + 1
         raycasterRef.current.setFromCamera(pointerRef.current, cam)
 
         const clickables: THREE.Object3D[] = []
@@ -737,9 +742,24 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
           if (action) handleAction(action)
         }
       }
-      renderer.domElement.style.touchAction = "manipulation"
+
+      const handlePointerUp = (event: PointerEvent) => {
+        processHit(event.clientX, event.clientY)
+      }
+
+      const handleTouchEnd = (event: TouchEvent) => {
+        if (event.changedTouches.length > 0) {
+          processHit(event.changedTouches[0].clientX, event.changedTouches[0].clientY)
+        }
+      }
+
+      renderer.domElement.style.touchAction = "none"
       renderer.domElement.addEventListener("pointerup", handlePointerUp)
-      cleanups.push(() => renderer.domElement.removeEventListener("pointerup", handlePointerUp))
+      renderer.domElement.addEventListener("touchend", handleTouchEnd)
+      cleanups.push(() => {
+        renderer.domElement.removeEventListener("pointerup", handlePointerUp)
+        renderer.domElement.removeEventListener("touchend", handleTouchEnd)
+      })
 
       const animate = () => {
         animFrameRef.current = requestAnimationFrame(animate)

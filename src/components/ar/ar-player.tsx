@@ -734,27 +734,28 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       }
 
       const processHit = (clientX: number, clientY: number) => {
-        const rect = renderer.domElement.getBoundingClientRect()
-        pointerRef.current.x = ((clientX - rect.left) / rect.width) * 2 - 1
-        pointerRef.current.y = -((clientY - rect.top) / rect.height) * 2 + 1
-        raycasterRef.current.setFromCamera(pointerRef.current, cam)
+        const vpW = renderer.domElement.clientWidth
+        const vpH = renderer.domElement.clientHeight
 
-        const clickables: THREE.Object3D[] = []
         anchorGroup.traverse((child: any) => {
-          if (child.isMesh && child.userData.clickable) clickables.push(child)
-        })
+          if (!child.isMesh || !child.userData.clickable) return
+          child.updateWorldMatrix(true, false)
+          const worldPos = new THREE.Vector3()
+          child.getWorldPosition(worldPos)
+          worldPos.project(cam)
 
-        log("clickables: " + clickables.length)
-        const intersects = raycasterRef.current.intersectObjects(clickables)
-        log("intersects: " + intersects.length)
-        if (intersects.length > 0) {
-          const hit = intersects[0].object
-          const action = hit.userData.action as string
-          log("action: " + (action || "(empty)"))
-          if (action) {
-            handleAction(action)
+          const sx = (worldPos.x * 0.5 + 0.5) * vpW
+          const sy = (-worldPos.y * 0.5 + 0.5) * vpH
+          const dx = clientX - sx
+          const dy = clientY - sy
+          const dist = Math.sqrt(dx * dx + dy * dy)
+
+          if (dist < 50) {
+            const action = child.userData.action as string
+            log("hit! action: " + (action || "(empty)").slice(0, 60))
+            if (action) handleAction(action)
           }
-        }
+        })
       }
 
       let lastClickTime = 0

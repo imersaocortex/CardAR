@@ -92,19 +92,22 @@ export default function AssetsPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setUploading(false); return }
 
-    const allowedTypes = ["image/png", "image/jpeg", "model/gltf-binary", "model/gltf+json", "video/mp4"]
-    if (!allowedTypes.includes(file.type)) {
-      toast({ title: "Tipo de arquivo não permitido", variant: "destructive" })
+    const rawExt = file.name.split(".").pop() || ""
+    const ext = rawExt.toLowerCase()
+    const isGLB = ext === "glb" || file.type === "model/gltf-binary"
+    const isGLTF = ext === "gltf" || file.type === "model/gltf+json"
+    const is3D = isGLB || isGLTF || file.type.startsWith("model/")
+    const isVideo = file.type.startsWith("video/") || ["mp4", "webm", "mov"].includes(ext)
+    const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+
+    if (!is3D && !isVideo && !isImage) {
+      toast({ title: "Tipo de arquivo não suportado. Use .glb, .gltf, .mp4, .png, .jpg, .webp, .gif, .webm", variant: "destructive" })
       setUploading(false)
       return
     }
 
-    const is3D = file.type.startsWith("model/")
-    const isVideo = file.type.startsWith("video/")
     const category = is3D ? "3d" : isVideo ? "video" : "image"
     const bucket = is3D ? "models-3d" : isVideo ? "videos" : "markers"
-
-    const ext = file.name.split(".").pop()
     const storagePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
     const { error: uploadError } = await supabase.storage
@@ -197,7 +200,7 @@ export default function AssetsPage() {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept="image/png,image/jpeg,model/gltf-binary,model/gltf+json,video/mp4"
+              accept="image/png,image/jpeg,image/webp,image/gif,model/gltf-binary,model/gltf+json,.glb,.gltf,video/mp4,video/webm,video/quicktime,.mov"
               onChange={handleFileSelected}
             />
             <Button variant="gradient" onClick={handleUploadClick} disabled={uploading}>

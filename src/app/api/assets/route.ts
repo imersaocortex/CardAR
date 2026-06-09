@@ -81,14 +81,14 @@ export async function POST(request: Request) {
     }
   }
 
-  // Check against allowed types (also accept application/octet-stream for .glb)
-  const typeOk = allowedTypes.includes(mimeType) || (isGLB && allowedTypes.some(t => t.includes("glb")))
+  // Check against allowed types (also accept application/octet-stream for .glb/.gltf)
+  const typeOk = allowedTypes.includes(mimeType) || (is3D && allowedTypes.some(t => t.startsWith("model/")))
   if (!typeOk) {
     return NextResponse.json({ error: "Seu plano não permite este tipo de arquivo" }, { status: 403 })
   }
 
   const category = is3D ? "3d" : isVideo ? "video" : "image"
-  const bucket = is3D ? "models-3d" : isVideo ? "videos" : "images"
+  const bucket = is3D ? "models-3d" : isVideo ? "videos" : "markers"
 
   const storagePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 

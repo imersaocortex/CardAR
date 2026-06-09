@@ -36,20 +36,21 @@ export async function uploadAsset(formData: FormData) {
 
   if (!file) return { error: "Arquivo não enviado" }
 
-  const allowedTypes = ["image/png", "image/jpeg", "model/gltf-binary", "model/gltf+json", "video/mp4"]
-  if (!allowedTypes.includes(file.type)) {
-    return { error: "Tipo de arquivo não permitido" }
+  const ext = file.name.split(".").pop()?.toLowerCase() || ""
+  const isGLB = ext === "glb" || file.type === "model/gltf-binary"
+  const isGLTF = ext === "gltf" || file.type === "model/gltf+json"
+  const is3D = isGLB || isGLTF || file.type.startsWith("model/")
+  const isVideo = file.type.startsWith("video/") || ["mp4", "webm", "mov"].includes(ext)
+  const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+
+  if (!is3D && !isVideo && !isImage) {
+    return { error: "Tipo de arquivo não suportado. Use .glb, .gltf, .mp4, .png, .jpg, .webp, .gif, .webm" }
   }
 
-  // Determine category
-  const is3D = file.type.startsWith("model/")
-  const isVideo = file.type.startsWith("video/")
   const category = is3D ? "3d" : isVideo ? "video" : "image"
 
-  // Determine bucket
   const bucket = is3D ? "models-3d" : isVideo ? "videos" : "markers"
 
-  const ext = file.name.split(".").pop()
   const storagePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
   // Upload to storage

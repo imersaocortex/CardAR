@@ -25,7 +25,7 @@ export type ElementType =
   | "botao-ligar"
   | "botao-email"
 
-export type AnimationType = "none" | "float" | "rotate" | "pulse"
+export type AnimationType = "none" | "float" | "rotate" | "pulse" | "embedded"
 
 export interface StudioElement {
   id: string
@@ -42,6 +42,7 @@ export interface StudioElement {
   assetThumbnail?: string
   showCaption?: boolean
   animationType?: AnimationType
+  hasEmbeddedAnimations?: boolean
   chromaKeyColor?: string
   chromaKeyTolerance?: number
   chromaKeySmoothness?: number

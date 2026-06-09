@@ -1,19 +1,62 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { useStudioStore } from "@/store"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
-import { Trash2, Upload, FileUp } from "lucide-react"
+import { Trash2, Upload, Box, Video, Image, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { AnimationType } from "@/types"
 import { toast } from "@/hooks/use-toast"
+
+interface AssetItem {
+  id: string
+  name: string
+  category: "3d" | "video" | "image"
+  public_url: string
+  mime_type: string
+}
+
+const assetTypeIcon: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  "3d": Box,
+  video: Video,
+  image: Image,
+}
+
+const assetTypeColor: Record<string, string> = {
+  "3d": "#7c3aed",
+  video: "#3b82f6",
+  image: "#f59e0b",
+}
+
+const elementToAssetCategory: Record<string, string> = {
+  "modelo-3d": "3d",
+  "modelo-3d-animado": "3d",
+  "video-mp4": "video",
+  "video-chromakey": "video",
+  "imagem": "image",
+}
 
 export function StudioProperties() {
   const { selectedElementId, elements, updateElement, removeElement, selectElement } = useStudioStore()
   const selectedElement = elements.find((el) => el.id === selectedElementId)
+  const [showAssetDialog, setShowAssetDialog] = useState(false)
+  const [assetSearch, setAssetSearch] = useState("")
+  const [assets, setAssets] = useState<AssetItem[]>([])
+
+  useEffect(() => {
+    if (showAssetDialog && assets.length === 0) {
+      fetch("/api/assets")
+        .then((r) => r.json())
+        .then((data) => { if (Array.isArray(data)) setAssets(data) })
+        .catch(() => {})
+    }
+  }, [showAssetDialog, assets.length])
 
   if (!selectedElement) {
     return (
@@ -69,27 +112,12 @@ export function StudioProperties() {
   const isChromaKey = selectedElement.type === "video-chromakey"
   const isMedia = is3D || selectedElement.type === "video-mp4" || isChromaKey || selectedElement.type === "imagem" || selectedElement.type === "audio"
 
-  const handleFakeUpload = () => {
-    const fileInput = document.createElement("input")
-    fileInput.type = "file"
-    const extMap: Record<string, string> = {
-      "modelo-3d": ".glb,.gltf",
-      "modelo-3d-animado": ".glb,.gltf",
-      "video-mp4": ".mp4,.mov,.webm",
-      "video-chromakey": ".mp4,.mov,.webm",
-      "imagem": ".png,.jpg,.jpeg,.webp",
-      "audio": ".mp3,.wav,.ogg,.m4a",
-    }
-    fileInput.accept = extMap[selectedElement.type] || "*"
-    fileInput.onchange = (e: any) => {
-      const file = e.target?.files?.[0]
-      if (!file) return
-      const url = URL.createObjectURL(file)
-      updateElement(selectedElement.id, { assetUrl: url, name: file.name.replace(/\.[^/.]+$/, "") })
-      toast({ title: "Asset atualizado", description: `"${file.name}" foi vinculado ao elemento.`, variant: "success" })
-    }
-    fileInput.click()
-  }
+  const assetCategory = elementToAssetCategory[selectedElement.type]
+  const filteredAssets = assets.filter((a) => {
+    if (assetCategory && a.category !== assetCategory) return false
+    if (assetSearch && !a.name.toLowerCase().includes(assetSearch.toLowerCase())) return false
+    return true
+  })
 
   return (
     <div className="p-4 border-b border-border">
@@ -120,12 +148,67 @@ export function StudioProperties() {
 
         {isMedia && (
           <div>
-            <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={handleFakeUpload}>
+            <Button variant="outline" size="sm" className="w-full h-8 text-xs" onClick={() => setShowAssetDialog(true)}>
               <Upload className="h-3.5 w-3.5 mr-1" />
-              {selectedElement.assetUrl ? "Substituir Asset" : "Upload Asset"}
+              {selectedElement.assetUrl ? "Substituir Objeto" : "Selecionar Objeto"}
             </Button>
           </div>
         )}
+
+        <Dialog open={showAssetDialog} onOpenChange={setShowAssetDialog}>
+          <DialogContent className="max-w-lg max-h-[70vh]">
+            <DialogHeader>
+              <DialogTitle>Substituir Objeto</DialogTitle>
+              <DialogDescription>
+                Selecione um {assetCategory === "3d" ? "modelo 3D" : assetCategory === "video" ? "vídeo" : assetCategory === "image" ? "imagem" : "asset"} da biblioteca.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar..."
+                className="pl-10 h-8 text-xs bg-muted/50 border-0"
+                value={assetSearch}
+                onChange={(e) => setAssetSearch(e.target.value)}
+              />
+            </div>
+            <ScrollArea className="flex-1 max-h-80">
+              {filteredAssets.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground">Nenhum asset encontrado</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Faça upload na página de Assets</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {filteredAssets.map((asset) => {
+                    const Icon = assetTypeIcon[asset.category] || Box
+                    const color = assetTypeColor[asset.category] || "#666"
+                    return (
+                      <button
+                        key={asset.id}
+                        onClick={() => {
+                          updateElement(selectedElement.id, { assetUrl: asset.public_url, name: asset.name })
+                          setShowAssetDialog(false)
+                          setAssetSearch("")
+                          toast({ title: "Objeto substituído", description: `"${asset.name}" foi vinculado.`, variant: "success" })
+                        }}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors text-left group border border-border/50 hover:border-primary/20"
+                      >
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}20` }}>
+                          <Icon className="h-4 w-4" style={{ color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{asset.name}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{asset.category}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
 
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-2">Posição</p>
@@ -269,11 +352,17 @@ export function StudioProperties() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Nenhuma</SelectItem>
+                {selectedElement.hasEmbeddedAnimations && (
+                  <SelectItem value="embedded">Animação Incorporada</SelectItem>
+                )}
                 <SelectItem value="float">Flutuar</SelectItem>
                 <SelectItem value="rotate">Rotacionar</SelectItem>
                 <SelectItem value="pulse">Pulsar</SelectItem>
               </SelectContent>
             </Select>
+            {selectedElement.hasEmbeddedAnimations && selectedElement.animationType !== "embedded" && (
+              <p className="text-[10px] text-cyan-400 mt-1">Este modelo possui animações incorporadas. Selecione "Animação Incorporada" para reproduzi-las.</p>
+            )}
           </div>
         )}
 

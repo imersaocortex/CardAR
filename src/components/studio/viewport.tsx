@@ -220,6 +220,15 @@ function LoadedModel3D({ element }: { element: StudioElement }) {
   const isAnimado = element.type === "modelo-3d-animado"
   const { scene, animations } = useGLTF(element.assetUrl!)
   const { actions } = useAnimations(animations, scene)
+  const { updateElement } = useStudioStore()
+
+  const hasAnimations = animations.length > 0
+
+  useEffect(() => {
+    if (hasAnimations && !element.hasEmbeddedAnimations) {
+      updateElement(element.id, { hasEmbeddedAnimations: true })
+    }
+  }, [hasAnimations, element.id, element.hasEmbeddedAnimations, updateElement])
 
   useEffect(() => {
     if (isAnimado && actions && Object.keys(actions).length > 0) {

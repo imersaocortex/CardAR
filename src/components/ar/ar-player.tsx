@@ -727,10 +727,9 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
       const flash = (color: string) => {
         const div = document.createElement("div")
-        div.style.cssText = `position:fixed;inset:0;z-index:99999;pointer-events:none;background:${color};opacity:0.4;transition:opacity 0.3s`
+        div.style.cssText = `position:fixed;inset:0;z-index:99999;pointer-events:none;background:${color};opacity:0.6`
         document.body.appendChild(div)
-        requestAnimationFrame(() => requestAnimationFrame(() => { div.style.opacity = "0" }))
-        setTimeout(() => div.remove(), 600)
+        setTimeout(() => { div.style.opacity = "0"; setTimeout(() => div.remove(), 300) }, 500)
       }
 
       const processHit = (clientX: number, clientY: number) => {
@@ -746,15 +745,15 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
         const intersects = raycasterRef.current.intersectObjects(clickables)
         if (intersects.length > 0) {
-          flash("#0088ff")
+          flash("#00ffff")
           const hit = intersects[0].object
           const action = hit.userData.action as string
           if (action) {
-            flash("#ff8800")
+            flash("#ff00ff")
             handleAction(action)
           }
         } else {
-          flash("#ff0000")
+          flash("#ffff00")
         }
       }
 
@@ -764,7 +763,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         const now = Date.now()
         if (now - lastClickTime < 200) return
         lastClickTime = now
-        flash("#00ff88")
+        flash("#00ff00")
         try {
           processHit(event.clientX, event.clientY)
         } catch (e) {

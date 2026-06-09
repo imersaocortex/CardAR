@@ -195,16 +195,31 @@ export function StudioSidebar() {
     toast({ title: `${asset.name} adicionado`, description: "Pronto para usar na cena." })
   }
 
-  const handleFakeUpload = () => {
+  const handleUpload = async () => {
     const fileInput = document.createElement("input")
     fileInput.type = "file"
-    const extMap: Record<string, string> = { "3d": ".glb,.gltf", video: ".mp4,.mov,.webm", image: ".png,.jpg,.jpeg" }
+    const extMap: Record<string, string> = { "3d": ".glb,.gltf", video: ".mp4,.mov,.webm", image: ".png,.jpg,.jpeg,.webp,.gif" }
     fileInput.accept = extMap[uploadCategory] || "*"
-    fileInput.onchange = (e: any) => {
+    fileInput.onchange = async (e: any) => {
       const file = e.target?.files?.[0]
       if (!file) return
       const name = file.name.replace(/\.[^/.]+$/, "")
       setUploadedFileName(file.name)
+
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("name", name)
+
+      const res = await fetch("/api/assets", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Erro ao fazer upload" }))
+        toast({ title: "Upload falhou", description: err.error || "Erro desconhecido", variant: "destructive" })
+        setShowUploadModal(false)
+        setUploadedFileName("")
+        return
+      }
+
+      const asset = await res.json()
 
       const typeMap: Record<string, ElementType> = {
         "3d": "modelo-3d",
@@ -222,9 +237,10 @@ export function StudioSidebar() {
         opacity: 1,
         duration: uploadCategory === "video" ? 5 : 0,
         visible: true,
-        assetUrl: URL.createObjectURL(file),
+        assetUrl: asset.public_url,
       }
       addElement(newEl)
+      setAssets((prev) => [asset, ...prev])
       toast({ title: `"${name}" adicionado`, description: `Asset ${uploadCategory} importado com sucesso.`, variant: "success" })
       setShowUploadModal(false)
       setUploadedFileName("")
@@ -273,7 +289,7 @@ export function StudioSidebar() {
                 </Select>
               </div>
               <div
-                onClick={handleFakeUpload}
+                onClick={handleUpload}
                 className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/40 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col items-center gap-2">
@@ -293,7 +309,7 @@ export function StudioSidebar() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowUploadModal(false)}>Cancelar</Button>
-              <Button variant="gradient" onClick={handleFakeUpload} disabled={!uploadedFileName}>
+              <Button variant="gradient" onClick={handleUpload} disabled={!uploadedFileName}>
                 Adicionar à Cena
               </Button>
             </DialogFooter>

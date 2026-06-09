@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useMemo, useState, useCallback, useEffect } from "react"
+import { Suspense, useMemo, useState, useCallback, useEffect, Component } from "react"
 import { Canvas } from "@react-three/fiber"
 import { OrbitControls, Grid, Environment, ContactShadows, Text, Edges, useVideoTexture, useTexture, useGLTF, useAnimations } from "@react-three/drei"
 import { useStudioStore, projectTypeDimensions } from "@/store"
@@ -162,36 +162,63 @@ function SizeReference() {
   )
 }
 
-function Model3D({ element }: { element: StudioElement }) {
-  const isAnimado = element.type === "modelo-3d-animado"
+class ModelErrorBoundary extends Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children
+  }
+}
 
-  if (!element.assetUrl) {
-    return isAnimado ? (
-      <mesh>
-        <sphereGeometry args={[0.5, 32, 32]} />
-        <meshStandardMaterial
-          color="#06b6d4"
-          roughness={0.2}
-          metalness={0.3}
-          opacity={element.opacity}
-          transparent={element.opacity < 1}
-        />
-      </mesh>
-    ) : (
-      <mesh>
-        <boxGeometry args={[0.8, 0.8, 0.8]} />
-        <meshStandardMaterial
-          color="#7c3aed"
-          roughness={0.3}
-          metalness={0.2}
-          opacity={element.opacity}
-          transparent={element.opacity < 1}
-        />
-      </mesh>
-    )
+function ModelPlaceholder({ element }: { element: StudioElement }) {
+  const isAnimado = element.type === "modelo-3d-animado"
+  return isAnimado ? (
+    <mesh>
+      <sphereGeometry args={[0.5, 32, 32]} />
+      <meshStandardMaterial
+        color="#06b6d4"
+        roughness={0.2}
+        metalness={0.3}
+        opacity={element.opacity}
+        transparent={element.opacity < 1}
+      />
+    </mesh>
+  ) : (
+    <mesh>
+      <boxGeometry args={[0.8, 0.8, 0.8]} />
+      <meshStandardMaterial
+        color="#7c3aed"
+        roughness={0.3}
+        metalness={0.2}
+        opacity={element.opacity}
+        transparent={element.opacity < 1}
+      />
+    </mesh>
+  )
+}
+
+function Model3D({ element }: { element: StudioElement }) {
+  const url = element.assetUrl
+
+  if (!url || url.startsWith("blob:")) {
+    return <ModelPlaceholder element={element} />
   }
 
-  const { scene, animations } = useGLTF(element.assetUrl)
+  return (
+    <ModelErrorBoundary fallback={<ModelPlaceholder element={element} />}>
+      <Suspense fallback={<ModelPlaceholder element={element} />}>
+        <LoadedModel3D element={element} />
+      </Suspense>
+    </ModelErrorBoundary>
+  )
+}
+
+function LoadedModel3D({ element }: { element: StudioElement }) {
+  const isAnimado = element.type === "modelo-3d-animado"
+  const { scene, animations } = useGLTF(element.assetUrl!)
   const { actions } = useAnimations(animations, scene)
 
   useEffect(() => {

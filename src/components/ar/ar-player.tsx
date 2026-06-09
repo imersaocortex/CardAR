@@ -725,6 +725,14 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())
 
+      const flash = (color: string) => {
+        const div = document.createElement("div")
+        div.style.cssText = `position:fixed;inset:0;z-index:99999;pointer-events:none;background:${color};opacity:0.4;transition:opacity 0.3s`
+        document.body.appendChild(div)
+        requestAnimationFrame(() => requestAnimationFrame(() => { div.style.opacity = "0" }))
+        setTimeout(() => div.remove(), 600)
+      }
+
       const processHit = (clientX: number, clientY: number) => {
         const rect = renderer.domElement.getBoundingClientRect()
         pointerRef.current.x = ((clientX - rect.left) / rect.width) * 2 - 1
@@ -738,9 +746,15 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
         const intersects = raycasterRef.current.intersectObjects(clickables)
         if (intersects.length > 0) {
+          flash("#0088ff")
           const hit = intersects[0].object
           const action = hit.userData.action as string
-          if (action) handleAction(action)
+          if (action) {
+            flash("#ff8800")
+            handleAction(action)
+          }
+        } else {
+          flash("#ff0000")
         }
       }
 
@@ -750,6 +764,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         const now = Date.now()
         if (now - lastClickTime < 200) return
         lastClickTime = now
+        flash("#00ff88")
         try {
           processHit(event.clientX, event.clientY)
         } catch (e) {

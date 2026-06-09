@@ -70,7 +70,7 @@ export function ArVideo({ object }: ArVideoProps) {
     }
   })
 
-  const hasChromaKey = object.type === "video-chromakey" && object.chromaKeyColor
+  const hasChromaKey = object.type === "video-chromakey"
 
   const vertexShader = `
     varying vec2 vUv;
@@ -108,7 +108,7 @@ export function ArVideo({ object }: ArVideoProps) {
 
   const chromaKeyColor = object.chromaKeyColor || "#00ff00"
   const chromaKeyVec = new THREE.Color(chromaKeyColor)
-  const tolerance = object.chromaKeyTolerance ?? 0.1
+  const tolerance = object.chromaKeyTolerance ?? 0.3
   const smoothness = object.chromaKeySmoothness ?? 0.1
 
   if (error || !object.assetUrl) {

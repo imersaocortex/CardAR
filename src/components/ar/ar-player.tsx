@@ -208,15 +208,9 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
             texture.minFilter = THREE.LinearFilter
             texture.magFilter = THREE.LinearFilter
 
-            const d = document.createElement("div")
-            d.style.cssText = "position:fixed;bottom:80px;left:0;right:0;z-index:99999;background:rgba(0,0,0,0.85);color:#fff;padding:8px;font-size:12px;font-family:monospace;text-align:center;pointer-events:none;border:2px solid #ff0"
-            d.textContent = "type=" + obj.type + " ck=" + (obj.chromaKeyColor || "null") + " T=" + (obj.chromaKeyTolerance ?? "?") + " S=" + (obj.chromaKeySmoothness ?? "?")
-            document.body.appendChild(d)
-            setTimeout(() => d.remove(), 6000)
-
-            if (obj.type === "video-chromakey" && obj.chromaKeyColor) {
-              const chromaColor = new THREE.Color(obj.chromaKeyColor)
-              const tolerance = obj.chromaKeyTolerance ?? 0.1
+            if (obj.type === "video-chromakey") {
+              const chromaColor = new THREE.Color(obj.chromaKeyColor || "#00ff00")
+              const tolerance = obj.chromaKeyTolerance ?? 0.3
               const smoothness = obj.chromaKeySmoothness ?? 0.1
 
               meshMat.dispose()

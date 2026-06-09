@@ -108,8 +108,8 @@ export function ArVideo({ object }: ArVideoProps) {
 
   const chromaKeyColor = object.chromaKeyColor || "#00ff00"
   const chromaKeyVec = new THREE.Color(chromaKeyColor)
-  const tolerance = (object.chromaKeyTolerance ?? 0.4) / 100
-  const smoothness = (object.chromaKeySmoothness ?? 0.1) / 100
+  const tolerance = object.chromaKeyTolerance ?? 0.1
+  const smoothness = object.chromaKeySmoothness ?? 0.1
 
   if (error || !object.assetUrl) {
     return (

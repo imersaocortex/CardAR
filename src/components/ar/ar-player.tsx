@@ -210,8 +210,8 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
             if (obj.type === "video-chromakey" && obj.chromaKeyColor) {
               const chromaColor = new THREE.Color(obj.chromaKeyColor)
-              const tolerance = (obj.chromaKeyTolerance ?? 0.4) / 100
-              const smoothness = (obj.chromaKeySmoothness ?? 0.1) / 100
+              const tolerance = obj.chromaKeyTolerance ?? 0.1
+              const smoothness = obj.chromaKeySmoothness ?? 0.1
 
               meshMat.dispose()
               ;(mesh as any).material = new THREE.ShaderMaterial({

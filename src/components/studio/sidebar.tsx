@@ -157,9 +157,9 @@ export function StudioSidebar() {
     toast({ title: `${item.name} adicionado`, description: "Use o painel de propriedades para ajustar." })
   }
 
-  const handleAddAsset = (asset: AssetItem) => {
+  const handleAddAsset = (asset: AssetItem, animated?: boolean) => {
     const typeMap: Record<string, ElementType> = {
-      "3d": "modelo-3d",
+      "3d": animated ? "modelo-3d-animado" : "modelo-3d",
       video: "video-mp4",
       image: "imagem",
     }
@@ -377,23 +377,33 @@ export function StudioSidebar() {
                   const info = catLabel[asset.category] || { color: "#666", icon: Box }
                   const Icon = info.icon
                   return (
-                    <button
-                      key={asset.id}
-                      onClick={() => handleAddAsset(asset)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-accent/50 transition-colors text-left group"
-                    >
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${info.color}20` }}
+                    <div key={asset.id} className="space-y-0.5">
+                      <button
+                        onClick={() => handleAddAsset(asset)}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-accent/50 transition-colors text-left group"
                       >
-                        <Icon className="h-4 w-4" style={{ color: info.color }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{asset.name}</p>
-                        <p className="text-[10px] text-muted-foreground capitalize">{asset.category}</p>
-                      </div>
-                      <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: `${info.color}20` }}
+                        >
+                          <Icon className="h-4 w-4" style={{ color: info.color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{asset.name}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{asset.category}</p>
+                        </div>
+                        <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                      {asset.category === "3d" && (
+                        <button
+                          onClick={() => handleAddAsset(asset, true)}
+                          className="w-full flex items-center gap-3 pl-11 pr-3 py-1.5 rounded-lg text-xs hover:bg-accent/50 transition-colors text-left group"
+                        >
+                          <Cuboid className="h-3 w-3 text-cyan-400" />
+                          <span className="text-muted-foreground group-hover:text-foreground">Adicionar como Animado</span>
+                        </button>
+                      )}
+                    </div>
                   )
                 })}
               </div>

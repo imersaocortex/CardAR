@@ -55,7 +55,21 @@ export async function POST(request: Request) {
     .eq("organization_id", orgId)
     .single()
 
-  let allowedTypes = ["image/png", "image/jpeg", "model/gltf-binary", "model/gltf+json", "video/mp4"]
+  const ext = file.name.split(".").pop()?.toLowerCase() || ""
+
+  // Detect type by MIME or file extension (browsers often send application/octet-stream for .glb)
+  const mimeType = file.type
+  const isGLB = ext === "glb" || mimeType === "model/gltf-binary"
+  const isGLTF = ext === "gltf" || mimeType === "model/gltf+json"
+  const is3D = isGLB || isGLTF || mimeType.startsWith("model/")
+  const isVideo = mimeType.startsWith("video/") || ["mp4", "webm", "mov"].includes(ext)
+  const isImage = mimeType.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+
+  if (!is3D && !isVideo && !isImage) {
+    return NextResponse.json({ error: "Tipo de arquivo não suportado. Use .glb, .gltf, .mp4, .png, .jpg" }, { status: 400 })
+  }
+
+  let allowedTypes = ["image/png", "image/jpeg", "image/gif", "image/webp", "model/gltf-binary", "model/gltf+json", "video/mp4", "video/webm", "video/quicktime"]
   if (sub?.plan_id) {
     const { data: plan } = await admin
       .from("plans")
@@ -67,16 +81,15 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!allowedTypes.includes(file.type)) {
+  // Check against allowed types (also accept application/octet-stream for .glb)
+  const typeOk = allowedTypes.includes(mimeType) || (isGLB && allowedTypes.some(t => t.includes("glb")))
+  if (!typeOk) {
     return NextResponse.json({ error: "Seu plano não permite este tipo de arquivo" }, { status: 403 })
   }
 
-  const is3D = file.type.startsWith("model/")
-  const isVideo = file.type.startsWith("video/")
   const category = is3D ? "3d" : isVideo ? "video" : "image"
-  const bucket = is3D ? "models-3d" : isVideo ? "videos" : "markers"
+  const bucket = is3D ? "models-3d" : isVideo ? "videos" : "images"
 
-  const ext = file.name.split(".").pop()
   const storagePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
   const { error: uploadError } = await supabase.storage

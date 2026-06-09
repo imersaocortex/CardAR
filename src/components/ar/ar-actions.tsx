@@ -19,28 +19,42 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
   const recordAnimRef = useRef(0)
   const recordCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
+  function drawCompositedFrame(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    const video = videoRef.current
+    const container = containerRef.current
+    if (!container) return
+
+    // Draw camera video filling the canvas (object-fit: cover)
+    if (video && video.videoWidth > 0) {
+      const vw = video.videoWidth
+      const vh = video.videoHeight
+      const scale = Math.max(w / vw, h / vh)
+      const sw = vw * scale
+      const sh = vh * scale
+      const sx = (sw - w) / 2
+      const sy = (sh - h) / 2
+      ctx.drawImage(video, sx, sy, w, h, 0, 0, w, h)
+    }
+
+    // Draw Three.js overlay at screen size
+    const threeCanvas = container.querySelector("canvas:not(video)") as HTMLCanvasElement | null
+    if (threeCanvas) {
+      ctx.drawImage(threeCanvas, 0, 0, w, h)
+    }
+  }
+
   const capturePhoto = useCallback(() => {
     const container = containerRef.current
     if (!container) return
 
+    const w = container.clientWidth
+    const h = container.clientHeight
     const canvas = document.createElement("canvas")
-    const video = videoRef.current
-    if (video) {
-      canvas.width = video.videoWidth || 1280
-      canvas.height = video.videoHeight || 720
-      const ctx = canvas.getContext("2d")
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        // Draw the Three.js canvas overlay
-        const threeCanvas = container.querySelector("canvas:not(video)") as HTMLCanvasElement | null
-        if (threeCanvas) {
-          ctx.drawImage(threeCanvas, 0, 0, canvas.width, canvas.height)
-        }
-      }
-    } else {
-      // Fallback: capture just the container
-      canvas.width = container.clientWidth
-      canvas.height = container.clientHeight
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      drawCompositedFrame(ctx, w, h)
     }
 
     const dataUrl = canvas.toDataURL("image/png")
@@ -60,9 +74,11 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
     const video = videoRef.current
     if (!container || !video) return
 
+    const w = container.clientWidth
+    const h = container.clientHeight
     const canvas = document.createElement("canvas")
-    canvas.width = video.videoWidth || 1280
-    canvas.height = video.videoHeight || 720
+    canvas.width = w
+    canvas.height = h
     recordCanvasRef.current = canvas
     const ctx = canvas.getContext("2d")!
     const fps = 30
@@ -120,12 +136,8 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
 
     const composite = () => {
       recordAnimRef.current = requestAnimationFrame(composite)
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const threeCanvas = container.querySelector("canvas:not(video)") as HTMLCanvasElement | null
-      if (threeCanvas) {
-        ctx.drawImage(threeCanvas, 0, 0, canvas.width, canvas.height)
-      }
+      ctx.clearRect(0, 0, w, h)
+      drawCompositedFrame(ctx, w, h)
     }
 
     if (stream && (stream as any).getVideoTracks) {

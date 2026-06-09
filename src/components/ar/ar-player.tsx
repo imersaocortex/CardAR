@@ -389,6 +389,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
             map: createBrandTexture(obj.type),
             transparent: true,
             opacity: obj.opacity,
+            side: THREE.DoubleSide,
           }),
         )
         mesh.userData.clickable = true
@@ -743,22 +744,32 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         }
       }
 
-      let processingClick = false
+      let processingTap = false
 
-      const handleClick = (event: MouseEvent) => {
-        if (processingClick) return
-        processingClick = true
-        requestAnimationFrame(() => { processingClick = false })
+      const handleTap = (clientX: number, clientY: number) => {
+        if (processingTap) return
+        processingTap = true
+        requestAnimationFrame(() => { processingTap = false })
         try {
-          processHit(event.clientX, event.clientY)
+          processHit(clientX, clientY)
         } catch (e) {
           console.error("[AR] click error:", e)
         }
       }
 
-      renderer.domElement.style.touchAction = "none"
+      const handleClick = (event: MouseEvent) => handleTap(event.clientX, event.clientY)
+      const handleTouchEnd = (event: TouchEvent) => {
+        if (event.changedTouches.length > 0) {
+          handleTap(event.changedTouches[0].clientX, event.changedTouches[0].clientY)
+        }
+      }
+
       renderer.domElement.addEventListener("click", handleClick)
-      cleanups.push(() => renderer.domElement.removeEventListener("click", handleClick))
+      renderer.domElement.addEventListener("touchend", handleTouchEnd)
+      cleanups.push(() => {
+        renderer.domElement.removeEventListener("click", handleClick)
+        renderer.domElement.removeEventListener("touchend", handleTouchEnd)
+      })
 
       const animate = () => {
         animFrameRef.current = requestAnimationFrame(animate)

@@ -744,31 +744,24 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         }
       }
 
-      let processingTap = false
+      let lastClickTime = 0
 
-      const handleTap = (clientX: number, clientY: number) => {
-        if (processingTap) return
-        processingTap = true
-        requestAnimationFrame(() => { processingTap = false })
+      const handleClickEvent = (event: MouseEvent) => {
+        const now = Date.now()
+        if (now - lastClickTime < 200) return
+        lastClickTime = now
         try {
-          processHit(clientX, clientY)
+          processHit(event.clientX, event.clientY)
         } catch (e) {
           console.error("[AR] click error:", e)
         }
       }
 
-      const handleClick = (event: MouseEvent) => handleTap(event.clientX, event.clientY)
-      const handleTouchEnd = (event: TouchEvent) => {
-        if (event.changedTouches.length > 0) {
-          handleTap(event.changedTouches[0].clientX, event.changedTouches[0].clientY)
-        }
-      }
-
-      renderer.domElement.addEventListener("click", handleClick)
-      renderer.domElement.addEventListener("touchend", handleTouchEnd)
+      renderer.domElement.addEventListener("click", handleClickEvent)
+      window.addEventListener("click", handleClickEvent)
       cleanups.push(() => {
-        renderer.domElement.removeEventListener("click", handleClick)
-        renderer.domElement.removeEventListener("touchend", handleTouchEnd)
+        renderer.domElement.removeEventListener("click", handleClickEvent)
+        window.removeEventListener("click", handleClickEvent)
       })
 
       const animate = () => {

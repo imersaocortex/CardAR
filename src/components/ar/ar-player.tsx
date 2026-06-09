@@ -25,8 +25,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
   const streamRef = useRef<MediaStream | null>(null)
   const startingRef = useRef(false)
   const anchorBuiltRef = useRef(false)
-  const raycasterRef = useRef(new THREE.Raycaster())
-  const pointerRef = useRef(new THREE.Vector2())
   const arStateRef = useRef<ArState>("loading")
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
@@ -725,14 +723,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())
 
-      const log = (msg: string) => {
-        const div = document.createElement("div")
-        div.style.cssText = "position:fixed;bottom:120px;left:50%;transform:translateX(-50%);z-index:99999;pointer-events:none;background:rgba(0,0,0,0.85);color:#fff;padding:8px 16px;border-radius:8px;font-size:14px;font-family:monospace;white-space:nowrap;border:2px solid #ff0"
-        div.textContent = msg
-        document.body.appendChild(div)
-        setTimeout(() => div.remove(), 2000)
-      }
-
       const processHit = (clientX: number, clientY: number) => {
         const vpW = renderer.domElement.clientWidth
         const vpH = renderer.domElement.clientHeight
@@ -752,7 +742,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
           if (dist < 50) {
             const action = child.userData.action as string
-            log("hit! action: " + (action || "(empty)").slice(0, 60))
             if (action) handleAction(action)
           }
         })
@@ -767,7 +756,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         try {
           processHit(event.clientX, event.clientY)
         } catch (e) {
-          log("click error: " + String(e).slice(0, 80))
+          console.error("[AR] click error:", e)
         }
       }
 

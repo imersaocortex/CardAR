@@ -725,11 +725,12 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())
 
-      const flash = (color: string) => {
+      const log = (msg: string) => {
         const div = document.createElement("div")
-        div.style.cssText = `position:fixed;inset:0;z-index:99999;pointer-events:none;background:${color};opacity:0.6`
+        div.style.cssText = "position:fixed;bottom:120px;left:50%;transform:translateX(-50%);z-index:99999;pointer-events:none;background:rgba(0,0,0,0.85);color:#fff;padding:8px 16px;border-radius:8px;font-size:14px;font-family:monospace;white-space:nowrap;border:2px solid #ff0"
+        div.textContent = msg
         document.body.appendChild(div)
-        setTimeout(() => { div.style.opacity = "0"; setTimeout(() => div.remove(), 300) }, 500)
+        setTimeout(() => div.remove(), 2000)
       }
 
       const processHit = (clientX: number, clientY: number) => {
@@ -743,17 +744,16 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
           if (child.isMesh && child.userData.clickable) clickables.push(child)
         })
 
+        log("clickables: " + clickables.length)
         const intersects = raycasterRef.current.intersectObjects(clickables)
+        log("intersects: " + intersects.length)
         if (intersects.length > 0) {
-          flash("#00ffff")
           const hit = intersects[0].object
           const action = hit.userData.action as string
+          log("action: " + (action || "(empty)"))
           if (action) {
-            flash("#ff00ff")
             handleAction(action)
           }
-        } else {
-          flash("#ffff00")
         }
       }
 
@@ -763,11 +763,10 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         const now = Date.now()
         if (now - lastClickTime < 200) return
         lastClickTime = now
-        flash("#00ff00")
         try {
           processHit(event.clientX, event.clientY)
         } catch (e) {
-          console.error("[AR] click error:", e)
+          log("click error: " + String(e).slice(0, 80))
         }
       }
 

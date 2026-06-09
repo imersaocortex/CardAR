@@ -16,6 +16,8 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
   const [isRecording, setIsRecording] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const recordAnimRef = useRef(0)
+  const recordCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const capturePhoto = useCallback(() => {
     const container = containerRef.current
@@ -55,51 +57,92 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
 
   const startRecording = useCallback(async () => {
     const container = containerRef.current
-    if (!container) return
+    const video = videoRef.current
+    if (!container || !video) return
 
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth || 1280
+    canvas.height = video.videoHeight || 720
+    recordCanvasRef.current = canvas
+    const ctx = canvas.getContext("2d")!
+    const fps = 30
+
+    const mimeTypes = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+    const selectedMime = mimeTypes.find((t) => MediaRecorder.isTypeSupported(t)) || ""
+
+    let stream: MediaStream | null = null
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: "browser" },
-        audio: false,
-      })
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "video/webm;codecs=vp9",
-      })
-
-      mediaRecorderRef.current = mediaRecorder
-      chunksRef.current = []
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data)
-        }
-      }
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "video/webm" })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement("a")
-        link.download = `ar-recording-${Date.now()}.webm`
-        link.href = url
-        link.click()
-        URL.revokeObjectURL(url)
-        stream.getTracks().forEach((t) => t.stop())
-      }
-
-      mediaRecorder.start()
-      setIsRecording(true)
+      stream = canvas.captureStream(fps)
     } catch {
-      // User cancelled screen share or error
-      setIsRecording(false)
+      // Fallback: try getDisplayMedia (desktop only)
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "browser" },
+          audio: false,
+        })
+      } catch {
+        setIsRecording(false)
+        return
+      }
     }
-  }, [containerRef])
+
+    if (!stream) {
+      setIsRecording(false)
+      return
+    }
+
+    const mediaRecorder = new MediaRecorder(stream, selectedMime ? { mimeType: selectedMime } : undefined)
+    mediaRecorderRef.current = mediaRecorder
+    chunksRef.current = []
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data)
+      }
+    }
+
+    const stopStream = () => {
+      stream!.getTracks().forEach((t) => t.stop())
+    }
+
+    mediaRecorder.onstop = () => {
+      cancelAnimationFrame(recordAnimRef.current)
+      const blob = new Blob(chunksRef.current, { type: "video/webm" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.download = `ar-recording-${Date.now()}.webm`
+      link.href = url
+      link.click()
+      URL.revokeObjectURL(url)
+      stopStream()
+      recordCanvasRef.current = null
+    }
+
+    const composite = () => {
+      recordAnimRef.current = requestAnimationFrame(composite)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const threeCanvas = container.querySelector("canvas:not(video)") as HTMLCanvasElement | null
+      if (threeCanvas) {
+        ctx.drawImage(threeCanvas, 0, 0, canvas.width, canvas.height)
+      }
+    }
+
+    if (stream && (stream as any).getVideoTracks) {
+      // canvas.captureStream path - composite needed
+      composite()
+    }
+
+    mediaRecorder.start()
+    setIsRecording(true)
+  }, [containerRef, videoRef])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop()
       setIsRecording(false)
     }
+    cancelAnimationFrame(recordAnimRef.current)
   }, [])
 
   const share = useCallback(async () => {

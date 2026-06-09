@@ -31,8 +31,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const frameCountRef = useRef(0)
-  const [renderFrame, setRenderFrame] = useState(0)
-  const [worldPos, setWorldPos] = useState("")
+  const facingModeRef = useRef<"environment" | "user">("environment")
 
   const [arState, setArState] = useState<ArState>("loading")
   const [fallback, setFallback] = useState<"camera-permission" | "no-camera" | "webgl" | null>(null)
@@ -41,8 +40,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
   const [noDetectionWarning, setNoDetectionWarning] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [initStep, setInitStep] = useState("")
-  const [objectCount, setObjectCount] = useState(0)
-  const [threeReady, setThreeReady] = useState(false)
 
   const step = useCallback((msg: string) => {
     console.log("[AR]", msg)
@@ -71,13 +68,13 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
     let actionType = ""
     let actionValue = ""
 
-    if (action.includes(":")) {
+    if (action.startsWith("http")) {
+      actionType = "url"
+      actionValue = action
+    } else if (action.includes(":")) {
       const colonIndex = action.indexOf(":")
       actionType = action.substring(0, colonIndex)
       actionValue = action.substring(colonIndex + 1)
-    } else if (action.startsWith("http")) {
-      actionType = "url"
-      actionValue = action
     } else if (action.startsWith("tel:")) {
       actionType = "phone"
       actionValue = action.replace("tel:", "")
@@ -120,8 +117,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
   const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group, imageWidth: number, imageHeight: number) => {
     if (!experience.scene?.objects || anchorBuiltRef.current) return
     anchorBuiltRef.current = true
-
-    setObjectCount(experience.scene.objects.length)
 
     const ref = getMarkerDimensions(experience.type || "square_1x1")
     const fx = imageWidth / (1000 * ref.width)
@@ -544,7 +539,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
 
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
-      setThreeReady(true)
 
       const anchorGroup = new THREE.Group()
       anchorGroup.visible = false
@@ -666,7 +660,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
             mr.decompose(mp, mq, new THREE.Vector3())
             anchorGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
             anchorGroup.quaternion.copy(mq)
-            setWorldPos(`${(mp.x/1000).toFixed(3)},${(mp.y/1000).toFixed(3)},${(mp.z/1000).toFixed(3)}`)
           } else {
             if (isShowing) {
               isShowing = false
@@ -726,7 +719,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())
 
-      const handleClick = (event: MouseEvent) => {
+      const handlePointerUp = (event: PointerEvent) => {
         const rect = renderer.domElement.getBoundingClientRect()
         pointerRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
         pointerRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -744,13 +737,13 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
           if (action) handleAction(action)
         }
       }
-      renderer.domElement.addEventListener("click", handleClick)
-      cleanups.push(() => renderer.domElement.removeEventListener("click", handleClick))
+      renderer.domElement.style.touchAction = "manipulation"
+      renderer.domElement.addEventListener("pointerup", handlePointerUp)
+      cleanups.push(() => renderer.domElement.removeEventListener("pointerup", handlePointerUp))
 
       const animate = () => {
         animFrameRef.current = requestAnimationFrame(animate)
         frameCountRef.current++
-        if (frameCountRef.current % 30 === 0) setRenderFrame(frameCountRef.current)
 
         if (anchorGroup.visible) {
           anchorGroup.traverse((child: any) => {
@@ -849,7 +842,35 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
     }
   }, [experience.marker?.targetUrl, startAR, updateState, initKey])
 
-  const handleSwitchCamera = useCallback(() => {}, [])
+  const handleSwitchCamera = useCallback(async () => {
+    const newFacing = facingModeRef.current === "environment" ? "user" : "environment"
+
+    const oldStream = streamRef.current
+    if (oldStream) {
+      oldStream.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newFacing, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+      facingModeRef.current = newFacing
+    } catch {
+      // Restore old stream on failure
+      if (oldStream) {
+        streamRef.current = oldStream
+        if (videoRef.current) {
+          videoRef.current.srcObject = oldStream
+        }
+      }
+    }
+  }, [])
 
   const handleRetry = useCallback(() => {
     setFallback(null)
@@ -975,23 +996,6 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
         </div>
       </div>
 
-      <div className="absolute bottom-2 left-2 z-30 flex flex-wrap gap-1 max-w-[90vw]">
-        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
-          F:{renderFrame}
-        </span>
-        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
-          3D:{objectCount}
-        </span>
-        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
-          {threeReady ? "✓THREE" : "✗THREE"}
-        </span>
-        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
-          {anchorGroupRef.current?.visible ? "✓VIS" : "✗VIS"}
-        </span>
-        <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-black/60 text-white/80">
-          {worldPos || "no mv"}
-        </span>
-      </div>
     </div>
   )
 }

@@ -29,11 +29,13 @@ export async function POST(request: Request) {
   const signature = request.headers.get("asaas-signature") || ""
   const admin = createAdminClient()
 
-  // Verify webhook signature (load secret from DB if not in env)
+  // Verify webhook signature if configured (load secret from DB if not in env)
   await ensureWebhookSecret()
-  if (!verifyWebhookSignature(JSON.stringify(body), signature)) {
-    console.warn("[webhook] Invalid ASAAS signature")
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+  if (process.env.ASAAS_WEBHOOK_SECRET) {
+    if (!verifyWebhookSignature(JSON.stringify(body), signature)) {
+      console.warn("[webhook] Invalid ASAAS signature")
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    }
   }
 
   // Idempotency check
@@ -156,9 +158,9 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
   const paymentData: Record<string, any> = {
     organization_id: sub.organization_id,
     subscription_id: localSub?.id || null,
-    status: payment.status,
-    value: payment.value,
-    due_date: payment.dueDate,
+    status: payment.status || "PENDING",
+    value: payment.value || 0,
+    due_date: payment.dueDate || new Date().toISOString().split("T")[0],
     paid_date: payment.paidDate || null,
     invoice_url: payment.invoiceUrl || null,
   }

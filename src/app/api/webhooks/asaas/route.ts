@@ -5,41 +5,16 @@ import {
   sendPaymentSuccessNotification,
   sendOverdueNotification,
 } from "@/lib/evolution"
-import { verifyWebhookSignature } from "@/lib/asaas"
-
-async function ensureWebhookSecret() {
-  if (process.env.ASAAS_WEBHOOK_SECRET) return
-  const admin = createAdminClient()
-  const { data: settings } = await admin
-    .from("system_settings")
-    .select("asaas")
-    .eq("id", 1)
-    .maybeSingle()
-  const config = settings?.asaas as Record<string, any> | undefined
-  if (!config) return
-  const env = config.environment || "debug"
-  const secret = config[`${env}_webhook_secret`] as string | undefined
-  if (secret) {
-    process.env.ASAAS_WEBHOOK_SECRET = secret
-  }
-}
 
 export async function POST(request: Request) {
   const body = await request.json()
-  const signature = request.headers.get("asaas-signature") || ""
   const admin = createAdminClient()
+  const eventType: string = body.event || ""
 
-  // Verify webhook signature if configured (load secret from DB if not in env)
-  await ensureWebhookSecret()
-  if (process.env.ASAAS_WEBHOOK_SECRET) {
-    if (!verifyWebhookSignature(JSON.stringify(body), signature)) {
-      console.warn("[webhook] Invalid ASAAS signature")
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
-    }
-  }
+  console.log("[webhook] Received event:", eventType, "has payment:", !!body.payment, "has subscription:", !!body.subscription, "has checkout:", !!body.checkout)
 
   // Idempotency check
-  const eventId = body.event?.split("_")?.slice(1)?.join("_") || body.payment?.id || body.subscription?.id || "unknown"
+  const eventId = body.event?.split("_")?.slice(1)?.join("_") || body.payment?.id || body.subscription?.id || body.checkout?.id || "unknown"
 
   const { data: existing } = await admin
     .from("webhook_events")
@@ -56,19 +31,21 @@ export async function POST(request: Request) {
   await admin.from("webhook_events").insert({
     source: "asaas",
     event_id: eventId,
-    event_type: body.event || "unknown",
+    event_type: eventType,
     raw_body: body,
   })
 
-  const eventType: string = body.event || ""
-
   try {
-    if (eventType.includes("PAYMENT") && body.payment) {
+    if (body.payment) {
       await handlePaymentEvent(admin, body.payment)
     }
 
-    if (eventType.includes("SUBSCRIPTION") && body.subscription) {
+    if (body.subscription) {
       await handleSubscriptionEvent(admin, body.subscription)
+    }
+
+    if (!body.payment && !body.subscription && body.checkout) {
+      console.log("[webhook] Checkout event only (no payment/sub data):", body.checkout.id)
     }
 
     // Mark as processed
@@ -78,6 +55,7 @@ export async function POST(request: Request) {
       .eq("source", "asaas")
       .eq("event_id", eventId)
   } catch (err) {
+    console.error("[webhook] Processing error:", err)
     await admin
       .from("webhook_events")
       .update({
@@ -126,20 +104,34 @@ async function resolveSubscription(
   if (!orgSub) return null
 
   // Save ASAAS sub ID for future webhook lookups
-  await admin
+  const { error: updateErr } = await admin
     .from("subscriptions")
     .update({ asaas_subscription_id: asaasSubscriptionId })
     .eq("id", orgSub.id)
+
+  if (updateErr) {
+    console.error("[webhook] Failed to save asaas_subscription_id:", updateErr)
+    return null
+  }
+
+  console.log("[webhook] Saved asaas_subscription_id:", asaasSubscriptionId, "for org:", customer.organization_id)
 
   return { organization_id: orgSub.organization_id, plan_id: orgSub.plan_id }
 }
 
 async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, payment: any) {
-  if (!payment.subscription) return
+  if (!payment.subscription) {
+    console.log("[webhook] Payment has no subscription, skipping:", payment.id)
+    return
+  }
 
-  // Resolve org first (needed for payment insert FK)
+  console.log("[webhook] Processing payment:", payment.id, "sub:", payment.subscription, "status:", payment.status)
+
   const sub = await resolveSubscription(admin, payment.subscription, payment.customer)
-  if (!sub) return
+  if (!sub) {
+    console.error("[webhook] Could not resolve subscription for payment:", payment.id)
+    return
+  }
 
   // Get local subscription UUID for FK reference
   const { data: localSub } = await admin
@@ -148,7 +140,7 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
     .eq("organization_id", sub.organization_id)
     .single()
 
-  // Upsert payment record (org_id and local sub_id required)
+  // Upsert payment record
   const { data: existingPayment } = await admin
     .from("asaas_payments")
     .select("id")
@@ -166,18 +158,26 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
   }
 
   if (existingPayment) {
-    await admin
+    const { error } = await admin
       .from("asaas_payments")
       .update(paymentData)
       .eq("asaas_payment_id", payment.id)
+    if (error) console.error("[webhook] Failed to update payment:", error)
   } else {
     paymentData.asaas_payment_id = payment.id
-    await admin
+    const { error } = await admin
       .from("asaas_payments")
       .insert(paymentData)
+    if (error) {
+      console.error("[webhook] Failed to insert payment:", error)
+      return
+    }
+    console.log("[webhook] Payment record created:", payment.id)
   }
 
   if (payment.status === "RECEIVED" || payment.status === "CONFIRMED") {
+    console.log("[webhook] Payment received/confirmed for org:", sub.organization_id)
+
     const { data: currentSub } = await admin
       .from("subscriptions")
       .select("current_period_end, status, plan_id")
@@ -187,7 +187,6 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
     if (currentSub) {
       const updates: Record<string, any> = { status: "active" }
 
-      // Extend current period by 1 month
       const newEnd = new Date(currentSub.current_period_end)
       newEnd.setMonth(newEnd.getMonth() + 1)
       updates.current_period_end = newEnd.toISOString()
@@ -197,7 +196,6 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
         .update(updates)
         .eq("organization_id", sub.organization_id)
 
-      // If this was a pending subscription (first payment), update usage limits
       if (currentSub.status === "pending") {
         const { data: plan } = await admin
           .from("plans")
@@ -216,7 +214,6 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
         }
       }
 
-      // Unsuspend projects if they were suspended
       await admin.rpc("unsuspend_org_projects", {
         p_organization_id: sub.organization_id,
       })
@@ -230,11 +227,16 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       .single()
 
     if (plan) {
-      sendPaymentSuccessNotification(
-        sub.organization_id,
-        plan.name,
-        payment.value || 0,
-      )
+      try {
+        await sendPaymentSuccessNotification(
+          sub.organization_id,
+          plan.name,
+          payment.value || 0,
+        )
+        console.log("[webhook] Payment notification sent for org:", sub.organization_id)
+      } catch (e) {
+        console.error("[webhook] Failed to send payment notification:", e)
+      }
     }
   }
 
@@ -244,12 +246,10 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       .update({ status: "past_due" })
       .eq("organization_id", sub.organization_id)
 
-    // Suspend all active projects
     await admin.rpc("suspend_org_projects", {
       p_organization_id: sub.organization_id,
     })
 
-    // Send overdue notification via WhatsApp
     const { data: plan } = await admin
       .from("plans")
       .select("name")
@@ -257,16 +257,22 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       .single()
 
     if (plan) {
-      sendOverdueNotification(
-        sub.organization_id,
-        plan.name,
-        payment.dueDate || new Date().toISOString(),
-      )
+      try {
+        await sendOverdueNotification(
+          sub.organization_id,
+          plan.name,
+          payment.dueDate || new Date().toISOString(),
+        )
+      } catch (e) {
+        console.error("[webhook] Failed to send overdue notification:", e)
+      }
     }
   }
 }
 
 async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClient>, subscription: any) {
+  console.log("[webhook] Processing subscription event:", subscription.id, "status:", subscription.status)
+
   const statusMap: Record<string, string> = {
     ACTIVE: "active",
     OVERDUE: "past_due",
@@ -276,15 +282,17 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
 
   const newStatus = statusMap[subscription.status] || subscription.status.toLowerCase()
 
-  // Resolve org (with customer fallback for checkout-created subscriptions)
   const sub = await resolveSubscription(admin, subscription.id, subscription.customer)
 
-  await admin
+  const { error: updateErr } = await admin
     .from("subscriptions")
     .update({ status: newStatus })
     .eq("asaas_subscription_id", subscription.id)
 
-  // Suspend or unsuspend projects based on new status
+  if (updateErr) {
+    console.error("[webhook] Failed to update subscription status:", updateErr)
+  }
+
   if (sub) {
     if (newStatus === "past_due" || newStatus === "canceled") {
       await admin.rpc("suspend_org_projects", {

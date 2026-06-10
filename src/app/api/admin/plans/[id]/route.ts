@@ -39,9 +39,17 @@ export async function PUT(
     return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 })
   }
 
+  // Remove highlight if column doesn't exist yet
+  const updateData: Record<string, any> = { ...parsed.data }
+  try {
+    await admin.from("plans").select("highlight").limit(1)
+  } catch {
+    delete updateData.highlight
+  }
+
   const { data, error } = await admin
     .from("plans")
-    .update(parsed.data)
+    .update(updateData)
     .eq("id", id)
     .select()
     .single()

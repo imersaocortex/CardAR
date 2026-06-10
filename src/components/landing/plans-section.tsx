@@ -37,6 +37,7 @@ export function PlansSection() {
           const normalized = data.map((p: any) => ({
             ...p,
             billing_cycle: p.billing_cycle || "monthly",
+            highlight: p.highlight === true,
           }))
           setPlans(normalized)
           setHasYearlyPlans(normalized.some((p: Plan) => p.billing_cycle === "yearly"))

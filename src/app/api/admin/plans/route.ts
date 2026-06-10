@@ -63,23 +63,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Já existe um plano com este slug" }, { status: 409 })
   }
 
+  const insertData: Record<string, any> = {
+    name: parsed.data.name,
+    slug: parsed.data.slug,
+    price: parsed.data.price,
+    projects_limit: parsed.data.projects_limit,
+    assets_limit_bytes: parsed.data.assets_limit_bytes,
+    assets_limit_label: parsed.data.assets_limit_label,
+    features: parsed.data.features,
+    active: parsed.data.active,
+    billing_cycle: parsed.data.billing_cycle,
+    trial_days: parsed.data.trial_days,
+    has_watermark: parsed.data.has_watermark,
+    allowed_media_types: parsed.data.allowed_media_types,
+  }
+
+  // highlight column may not exist yet if migration hasn't been run
+  try {
+    await admin.from("plans").select("highlight").limit(1)
+    insertData.highlight = parsed.data.highlight ?? false
+  } catch {}
+
   const { data, error } = await admin
     .from("plans")
-    .insert({
-      name: parsed.data.name,
-      slug: parsed.data.slug,
-      price: parsed.data.price,
-      projects_limit: parsed.data.projects_limit,
-      assets_limit_bytes: parsed.data.assets_limit_bytes,
-      assets_limit_label: parsed.data.assets_limit_label,
-      features: parsed.data.features,
-      active: parsed.data.active,
-      billing_cycle: parsed.data.billing_cycle,
-      trial_days: parsed.data.trial_days,
-      has_watermark: parsed.data.has_watermark,
-      allowed_media_types: parsed.data.allowed_media_types,
-      highlight: parsed.data.highlight ?? false,
-    })
+    .insert(insertData)
     .select()
     .single()
 

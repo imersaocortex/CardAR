@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { User, Save, Upload, Loader2, Phone, FileText, MapPin, Home } from "lucide-react"
+import { User, Save, Upload, Loader2, Smartphone, FileText, MapPin, Home } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -173,7 +173,7 @@ export default function ProfilePage() {
                   <User className="h-4 w-4 text-primary" />
                   Informações Pessoais
                 </CardTitle>
-                <CardDescription>Nome, telefone e documentos</CardDescription>
+                <CardDescription>Nome, WhatsApp e documentos</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -182,11 +182,12 @@ export default function ProfilePage() {
                     <Input id="name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone</Label>
+                    <Label htmlFor="phone">WhatsApp</Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input id="phone" className="pl-10" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="(11) 99999-9999" />
                     </div>
+                    <p className="text-xs text-muted-foreground">Número usado para notificações via WhatsApp</p>
                   </div>
                 </div>
                 <div className="space-y-2">

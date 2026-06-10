@@ -110,119 +110,125 @@ export async function POST(request: Request) {
 
     // Check if ASAAS is configured
     if (process.env.ASAAS_API_KEY) {
-      // Get or create ASAAS customer with profile data
-      let asaasCustomerId: string
-      const { data: existingCustomer } = await admin
-        .from("asaas_customers")
-        .select("asaas_customer_id")
-        .eq("organization_id", orgId)
-        .single()
+      try {
+        // Get or create ASAAS customer with profile data
+        let asaasCustomerId: string
+        const { data: existingCustomer } = await admin
+          .from("asaas_customers")
+          .select("asaas_customer_id")
+          .eq("organization_id", orgId)
+          .single()
 
-      if (existingCustomer) {
-        asaasCustomerId = existingCustomer.asaas_customer_id
-        // Update customer data if profile has changed
-        if (profile?.cpf_cnpj || profile?.phone) {
-          try {
-            await updateCustomer(asaasCustomerId, {
-              name: profile?.name || user.email || orgId,
-              email: user.email!,
-              cpfCnpj: profile?.cpf_cnpj || undefined,
-              phone: profile?.phone || undefined,
-              address: profile?.address || undefined,
-              addressNumber: profile?.address_number || undefined,
-              complement: profile?.address_complement || undefined,
-              province: profile?.address_neighborhood || undefined,
-              city: profile?.address_city || undefined,
-              state: profile?.address_state || undefined,
-              postalCode: profile?.address_zipcode || undefined,
-            })
-          } catch {}
+        if (existingCustomer) {
+          asaasCustomerId = existingCustomer.asaas_customer_id
+          // Update customer data if profile has changed
+          if (profile?.cpf_cnpj || profile?.phone) {
+            try {
+              await updateCustomer(asaasCustomerId, {
+                name: profile?.name || user.email || orgId,
+                email: user.email!,
+                cpfCnpj: profile?.cpf_cnpj || undefined,
+                phone: profile?.phone || undefined,
+                address: profile?.address || undefined,
+                addressNumber: profile?.address_number || undefined,
+                complement: profile?.address_complement || undefined,
+                province: profile?.address_neighborhood || undefined,
+                city: profile?.address_city || undefined,
+                state: profile?.address_state || undefined,
+                postalCode: profile?.address_zipcode || undefined,
+              })
+            } catch {}
+          }
+        } else {
+          asaasCustomerId = await createCustomer(
+            orgId,
+            profile?.name || user.email || orgId,
+            user.email!,
+            profile?.cpf_cnpj || undefined,
+            profile?.phone || undefined,
+            profile?.address || undefined,
+            profile?.address_number || undefined,
+            profile?.address_complement || undefined,
+            profile?.address_neighborhood || undefined,
+            profile?.address_city || undefined,
+            profile?.address_state || undefined,
+            profile?.address_zipcode || undefined,
+          )
+          await admin.from("asaas_customers").insert({
+            organization_id: orgId,
+            asaas_customer_id: asaasCustomerId,
+          })
         }
-      } else {
-        asaasCustomerId = await createCustomer(
-          orgId,
-          profile?.name || user.email || orgId,
-          user.email!,
-          profile?.cpf_cnpj || undefined,
-          profile?.phone || undefined,
-          profile?.address || undefined,
-          profile?.address_number || undefined,
-          profile?.address_complement || undefined,
-          profile?.address_neighborhood || undefined,
-          profile?.address_city || undefined,
-          profile?.address_state || undefined,
-          profile?.address_zipcode || undefined,
+
+        // Cancel old subscription if exists
+        const { data: currentSub } = await admin
+          .from("subscriptions")
+          .select("asaas_subscription_id")
+          .eq("organization_id", orgId)
+          .single()
+
+        if (currentSub?.asaas_subscription_id) {
+          try { await cancelSubscription(currentSub.asaas_subscription_id) } catch {}
+        }
+
+        // Determine cycle for ASAAS
+        const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
+        const billingType = body.billingType || "PIX"
+
+        // Create subscription at ASAAS
+        const asaasSub = await createSubscription(
+          asaasCustomerId,
+          plan.price,
+          billingType,
+          `AR Business Studio - ${plan.name}`,
+          asaasCycle,
         )
-        await admin.from("asaas_customers").insert({
+
+        // Create ASAAS checkout for payment
+        const checkout = await createCheckout(
+          asaasSub.id,
+          asaasCustomerId,
+          billingType,
+          plan.price,
+          asaasSub.nextDueDate,
+          asaasCycle,
+        )
+
+        // Update local subscription
+        await admin
+          .from("subscriptions")
+          .update({
+            plan_id: plan.id,
+            asaas_subscription_id: asaasSub.id,
+            status: "active",
+            trial_ends_at: null,
+          })
+          .eq("organization_id", orgId)
+
+        // Save checkout info
+        await admin.from("asaas_checkouts").insert({
           organization_id: orgId,
-          asaas_customer_id: asaasCustomerId,
-        })
-      }
-
-      // Cancel old subscription if exists
-      const { data: currentSub } = await admin
-        .from("subscriptions")
-        .select("asaas_subscription_id")
-        .eq("organization_id", orgId)
-        .single()
-
-      if (currentSub?.asaas_subscription_id) {
-        try { await cancelSubscription(currentSub.asaas_subscription_id) } catch {}
-      }
-
-      // Determine cycle for ASAAS
-      const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
-      const billingType = body.billingType || "PIX"
-
-      // Create subscription at ASAAS
-      const asaasSub = await createSubscription(
-        asaasCustomerId,
-        plan.price,
-        billingType,
-        `AR Business Studio - ${plan.name}`,
-        asaasCycle,
-      )
-
-      // Create ASAAS checkout for payment
-      const checkout = await createCheckout(
-        asaasSub.id,
-        asaasCustomerId,
-        billingType,
-        plan.price,
-        asaasSub.nextDueDate,
-        asaasCycle,
-      )
-
-      // Update local subscription
-      await admin
-        .from("subscriptions")
-        .update({
           plan_id: plan.id,
-          asaas_subscription_id: asaasSub.id,
-          status: "active",
-          trial_ends_at: null,
+          asaas_checkout_id: checkout.id,
+          checkout_url: checkout.url,
+          status: "pending",
         })
-        .eq("organization_id", orgId)
 
-      // Save checkout info
-      await admin.from("asaas_checkouts").insert({
-        organization_id: orgId,
-        plan_id: plan.id,
-        asaas_checkout_id: checkout.id,
-        checkout_url: checkout.url,
-        status: "pending",
-      })
+        // Update usage limits
+        await admin
+          .from("usage_limits")
+          .update({
+            projects_limit: plan.projects_limit,
+            assets_limit_bytes: plan.assets_limit_bytes,
+          })
+          .eq("organization_id", orgId)
 
-      // Update usage limits
-      await admin
-        .from("usage_limits")
-        .update({
-          projects_limit: plan.projects_limit,
-          assets_limit_bytes: plan.assets_limit_bytes,
-        })
-        .eq("organization_id", orgId)
+        return NextResponse.json({ success: true, checkout_url: checkout.url })
 
-      return NextResponse.json({ success: true, checkout_url: checkout.url })
+      } catch (err: any) {
+        console.error("[billing] ASAAS error:", err?.message || err)
+        return NextResponse.json({ error: `Erro ao processar pagamento no ASAAS: ${err?.message || "Falha na comunicação"}` }, { status: 502 })
+      }
     } else {
       // No ASAAS — just update locally (sandbox mode)
       await admin
@@ -297,91 +303,97 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
     }
 
-    // Get or create ASAAS customer
-    let asaasCustomerId: string
-    const { data: existingCustomer } = await admin
-      .from("asaas_customers")
-      .select("asaas_customer_id")
-      .eq("organization_id", orgId)
-      .single()
+    try {
+      // Get or create ASAAS customer
+      let asaasCustomerId: string
+      const { data: existingCustomer } = await admin
+        .from("asaas_customers")
+        .select("asaas_customer_id")
+        .eq("organization_id", orgId)
+        .single()
 
-    if (existingCustomer) {
-      asaasCustomerId = existingCustomer.asaas_customer_id
-      if (profile?.cpf_cnpj || profile?.phone) {
-        try {
-          await updateCustomer(asaasCustomerId, {
-            name: profile?.name || user.email || orgId,
-            email: user.email!,
-            cpfCnpj: profile?.cpf_cnpj || undefined,
-            phone: profile?.phone || undefined,
-            address: profile?.address || undefined,
-            addressNumber: profile?.address_number || undefined,
-            complement: profile?.address_complement || undefined,
-            province: profile?.address_neighborhood || undefined,
-            city: profile?.address_city || undefined,
-            state: profile?.address_state || undefined,
-            postalCode: profile?.address_zipcode || undefined,
-          })
-        } catch {}
+      if (existingCustomer) {
+        asaasCustomerId = existingCustomer.asaas_customer_id
+        if (profile?.cpf_cnpj || profile?.phone) {
+          try {
+            await updateCustomer(asaasCustomerId, {
+              name: profile?.name || user.email || orgId,
+              email: user.email!,
+              cpfCnpj: profile?.cpf_cnpj || undefined,
+              phone: profile?.phone || undefined,
+              address: profile?.address || undefined,
+              addressNumber: profile?.address_number || undefined,
+              complement: profile?.address_complement || undefined,
+              province: profile?.address_neighborhood || undefined,
+              city: profile?.address_city || undefined,
+              state: profile?.address_state || undefined,
+              postalCode: profile?.address_zipcode || undefined,
+            })
+          } catch {}
+        }
+      } else {
+        asaasCustomerId = await createCustomer(
+          orgId,
+          profile?.name || user.email || orgId,
+          user.email!,
+          profile?.cpf_cnpj || undefined,
+          profile?.phone || undefined,
+          profile?.address || undefined,
+          profile?.address_number || undefined,
+          profile?.address_complement || undefined,
+          profile?.address_neighborhood || undefined,
+          profile?.address_city || undefined,
+          profile?.address_state || undefined,
+          profile?.address_zipcode || undefined,
+        )
+        await admin.from("asaas_customers").insert({
+          organization_id: orgId,
+          asaas_customer_id: asaasCustomerId,
+        })
       }
-    } else {
-      asaasCustomerId = await createCustomer(
-        orgId,
-        profile?.name || user.email || orgId,
-        user.email!,
-        profile?.cpf_cnpj || undefined,
-        profile?.phone || undefined,
-        profile?.address || undefined,
-        profile?.address_number || undefined,
-        profile?.address_complement || undefined,
-        profile?.address_neighborhood || undefined,
-        profile?.address_city || undefined,
-        profile?.address_state || undefined,
-        profile?.address_zipcode || undefined,
+
+      // Create ASAAS subscription and checkout
+      const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
+      const billingType = body.billingType || "PIX"
+
+      const asaasSub = await createSubscription(
+        asaasCustomerId,
+        plan.price,
+        billingType,
+        `AR Business Studio - ${plan.name}`,
+        asaasCycle,
       )
-      await admin.from("asaas_customers").insert({
+
+      const checkout = await createCheckout(
+        asaasSub.id,
+        asaasCustomerId,
+        billingType,
+        plan.price,
+        asaasSub.nextDueDate,
+        asaasCycle,
+      )
+
+      // Save ASAAS subscription ID (don't change status — webhook will activate on payment)
+      await admin
+        .from("subscriptions")
+        .update({ asaas_subscription_id: asaasSub.id })
+        .eq("organization_id", orgId)
+
+      // Save checkout info
+      await admin.from("asaas_checkouts").insert({
         organization_id: orgId,
-        asaas_customer_id: asaasCustomerId,
+        plan_id: plan.id,
+        asaas_checkout_id: checkout.id,
+        checkout_url: checkout.url,
+        status: "pending",
       })
+
+      return NextResponse.json({ success: true, checkout_url: checkout.url })
+
+    } catch (err: any) {
+      console.error("[billing] ASAAS error:", err?.message || err)
+      return NextResponse.json({ error: `Erro ao processar pagamento no ASAAS: ${err?.message || "Falha na comunicação"}` }, { status: 502 })
     }
-
-    // Create ASAAS subscription and checkout
-    const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
-    const billingType = body.billingType || "PIX"
-
-    const asaasSub = await createSubscription(
-      asaasCustomerId,
-      plan.price,
-      billingType,
-      `AR Business Studio - ${plan.name}`,
-      asaasCycle,
-    )
-
-    const checkout = await createCheckout(
-      asaasSub.id,
-      asaasCustomerId,
-      billingType,
-      plan.price,
-      asaasSub.nextDueDate,
-      asaasCycle,
-    )
-
-    // Save ASAAS subscription ID (don't change status — webhook will activate on payment)
-    await admin
-      .from("subscriptions")
-      .update({ asaas_subscription_id: asaasSub.id })
-      .eq("organization_id", orgId)
-
-    // Save checkout info
-    await admin.from("asaas_checkouts").insert({
-      organization_id: orgId,
-      plan_id: plan.id,
-      asaas_checkout_id: checkout.id,
-      checkout_url: checkout.url,
-      status: "pending",
-    })
-
-    return NextResponse.json({ success: true, checkout_url: checkout.url })
   }
 
   if (action === "cancel") {

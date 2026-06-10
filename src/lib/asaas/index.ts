@@ -152,6 +152,7 @@ export async function createCheckout(
       items: [{
         name: planName || "AR Business Studio",
         value,
+        quantity: 1,
       }],
       callback: {
         successUrl: (callbackUrl || process.env.NEXT_PUBLIC_APP_URL || "https://app.arbusiness.studio") + "/billing?checkout_success=true",

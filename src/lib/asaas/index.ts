@@ -155,6 +155,8 @@ export async function createCheckout(
       }],
       callback: {
         successUrl: `${callbackUrl}/billing?checkout_success=true`,
+        cancelUrl: `${callbackUrl}/billing`,
+        expiredUrl: `${callbackUrl}/billing`,
         autoRedirect: true,
       },
       subscription: {

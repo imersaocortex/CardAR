@@ -162,6 +162,7 @@ export async function createCheckout(
       subscription: {
         cycle,
         nextDueDate: dueDate,
+        description: planName,
       },
       customer: customerId,
     }),

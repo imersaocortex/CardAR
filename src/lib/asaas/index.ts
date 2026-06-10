@@ -145,7 +145,7 @@ export async function createCheckout(
     body: JSON.stringify({
       subscription: subscriptionId,
       customer: customerId,
-      billingType,
+      billingTypes: [billingType],
       value,
       dueDateLimitDays: 5,
       maxInstallmentCount: 1,

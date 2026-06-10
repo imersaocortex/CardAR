@@ -64,7 +64,51 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true })
 }
 
+type OrgSubscription = { organization_id: string; plan_id: string }
+
+async function resolveSubscription(
+  admin: ReturnType<typeof createAdminClient>,
+  asaasSubscriptionId: string,
+  asaasCustomerId?: string,
+): Promise<OrgSubscription | null> {
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("organization_id, plan_id")
+    .eq("asaas_subscription_id", asaasSubscriptionId)
+    .single()
+
+  if (sub) return sub
+
+  // Fallback: checkout-created subscription, find org by customer
+  if (!asaasCustomerId) return null
+
+  const { data: customer } = await admin
+    .from("asaas_customers")
+    .select("organization_id")
+    .eq("asaas_customer_id", asaasCustomerId)
+    .single()
+
+  if (!customer) return null
+
+  const { data: orgSub } = await admin
+    .from("subscriptions")
+    .select("id, organization_id, plan_id")
+    .eq("organization_id", customer.organization_id)
+    .single()
+
+  if (!orgSub) return null
+
+  // Save ASAAS sub ID for future webhook lookups
+  await admin
+    .from("subscriptions")
+    .update({ asaas_subscription_id: asaasSubscriptionId })
+    .eq("id", orgSub.id)
+
+  return { organization_id: orgSub.organization_id, plan_id: orgSub.plan_id }
+}
+
 async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, payment: any) {
+  // Upsert payment record
   const { data: existingPayment } = await admin
     .from("asaas_payments")
     .select("id")
@@ -80,104 +124,117 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
         invoice_url: payment.invoiceUrl || null,
       })
       .eq("asaas_payment_id", payment.id)
+  } else {
+    await admin
+      .from("asaas_payments")
+      .insert({
+        asaas_payment_id: payment.id,
+        status: payment.status,
+        value: payment.value,
+        due_date: payment.dueDate,
+        paid_date: payment.paidDate || null,
+        invoice_url: payment.invoiceUrl || null,
+        subscription_id: payment.subscription || null,
+      })
   }
 
-  // Find org by customer
-  if (payment.subscription) {
-    const { data: sub } = await admin
+  if (!payment.subscription) return
+
+  // Find org (with customer fallback for checkout-created subscriptions)
+  const sub = await resolveSubscription(admin, payment.subscription, payment.customer)
+  if (!sub) return
+
+  // Link payment to org
+  await admin
+    .from("asaas_payments")
+    .update({ organization_id: sub.organization_id })
+    .eq("asaas_payment_id", payment.id)
+
+  if (payment.status === "RECEIVED" || payment.status === "CONFIRMED") {
+    const { data: currentSub } = await admin
       .from("subscriptions")
-      .select("organization_id, plan_id")
-      .eq("asaas_subscription_id", payment.subscription)
+      .select("current_period_end, status, plan_id")
+      .eq("organization_id", sub.organization_id)
       .single()
 
-    if (sub) {
-      if (payment.status === "RECEIVED" || payment.status === "CONFIRMED") {
-        const { data: currentSub } = await admin
-          .from("subscriptions")
-          .select("current_period_end, status, plan_id")
-          .eq("organization_id", sub.organization_id)
+    if (currentSub) {
+      const updates: Record<string, any> = { status: "active" }
+
+      // Extend current period by 1 month
+      const newEnd = new Date(currentSub.current_period_end)
+      newEnd.setMonth(newEnd.getMonth() + 1)
+      updates.current_period_end = newEnd.toISOString()
+
+      await admin
+        .from("subscriptions")
+        .update(updates)
+        .eq("organization_id", sub.organization_id)
+
+      // If this was a pending subscription (first payment), update usage limits
+      if (currentSub.status === "pending") {
+        const { data: plan } = await admin
+          .from("plans")
+          .select("projects_limit, assets_limit_bytes")
+          .eq("id", currentSub.plan_id)
           .single()
 
-        if (currentSub) {
-          const updates: Record<string, any> = { status: "active" }
-
-          // Extend current period by 1 month
-          const newEnd = new Date(currentSub.current_period_end)
-          newEnd.setMonth(newEnd.getMonth() + 1)
-          updates.current_period_end = newEnd.toISOString()
-
+        if (plan) {
           await admin
-            .from("subscriptions")
-            .update(updates)
+            .from("usage_limits")
+            .update({
+              projects_limit: plan.projects_limit,
+              assets_limit_bytes: plan.assets_limit_bytes,
+            })
             .eq("organization_id", sub.organization_id)
-
-          // If this was a pending subscription (first payment), update usage limits
-          if (currentSub.status === "pending") {
-            const { data: plan } = await admin
-              .from("plans")
-              .select("projects_limit, assets_limit_bytes")
-              .eq("id", currentSub.plan_id)
-              .single()
-
-            if (plan) {
-              await admin
-                .from("usage_limits")
-                .update({
-                  projects_limit: plan.projects_limit,
-                  assets_limit_bytes: plan.assets_limit_bytes,
-                })
-                .eq("organization_id", sub.organization_id)
-            }
-          }
-
-          // Unsuspend projects if they were suspended
-          await admin.rpc("unsuspend_org_projects", {
-            p_organization_id: sub.organization_id,
-          })
-        }
-
-        // Send payment success notification via WhatsApp
-        const { data: plan } = await admin
-          .from("plans")
-          .select("name")
-          .eq("id", sub.plan_id)
-          .single()
-
-        if (plan) {
-          sendPaymentSuccessNotification(
-            sub.organization_id,
-            plan.name,
-            payment.value || 0,
-          )
         }
       }
 
-      if (payment.status === "OVERDUE") {
-        await admin
-          .from("subscriptions")
-          .update({ status: "past_due" })
-          .eq("organization_id", sub.organization_id)
+      // Unsuspend projects if they were suspended
+      await admin.rpc("unsuspend_org_projects", {
+        p_organization_id: sub.organization_id,
+      })
+    }
 
-        // Suspend all active projects
-        await admin.rpc("suspend_org_projects", {
-          p_organization_id: sub.organization_id,
-        })
+    // Send payment success notification via WhatsApp
+    const { data: plan } = await admin
+      .from("plans")
+      .select("name")
+      .eq("id", sub.plan_id)
+      .single()
 
-        // Send overdue notification via WhatsApp
-        const { data: plan } = await admin
-          .from("plans")
-          .select("name")
-          .eq("id", sub.plan_id)
-          .single()
+    if (plan) {
+      sendPaymentSuccessNotification(
+        sub.organization_id,
+        plan.name,
+        payment.value || 0,
+      )
+    }
+  }
 
-        if (plan) {
-          sendOverdueNotification(
-            sub.organization_id,
-            plan.name,
-            payment.dueDate || new Date().toISOString(),
-          )
-        }
-      }
+  if (payment.status === "OVERDUE") {
+    await admin
+      .from("subscriptions")
+      .update({ status: "past_due" })
+      .eq("organization_id", sub.organization_id)
+
+    // Suspend all active projects
+    await admin.rpc("suspend_org_projects", {
+      p_organization_id: sub.organization_id,
+    })
+
+    // Send overdue notification via WhatsApp
+    const { data: plan } = await admin
+      .from("plans")
+      .select("name")
+      .eq("id", sub.plan_id)
+      .single()
+
+    if (plan) {
+      sendOverdueNotification(
+        sub.organization_id,
+        plan.name,
+        payment.dueDate || new Date().toISOString(),
+      )
     }
   }
 }
@@ -192,11 +249,8 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
 
   const newStatus = statusMap[subscription.status] || subscription.status.toLowerCase()
 
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("organization_id")
-    .eq("asaas_subscription_id", subscription.id)
-    .single()
+  // Resolve org (with customer fallback for checkout-created subscriptions)
+  const sub = await resolveSubscription(admin, subscription.id, subscription.customer)
 
   await admin
     .from("subscriptions")

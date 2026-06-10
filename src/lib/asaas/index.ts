@@ -135,14 +135,13 @@ export async function createSubscription(
 }
 
 export async function createCheckout(
-  subscriptionId: string,
   customerId: string,
-  billingType: string = "PIX",
+  billingType: string,
   value: number,
   dueDate: string,
-  cycle: string = "MONTHLY",
-  planName?: string,
-  callbackUrl?: string,
+  cycle: string,
+  planName: string,
+  callbackUrl: string,
 ): Promise<AsaasCheckout> {
   const checkout = await asaasFetch<AsaasCheckout>("/checkouts", {
     method: "POST",
@@ -150,15 +149,18 @@ export async function createCheckout(
       billingTypes: [billingType],
       chargeTypes: ["RECURRENT"],
       items: [{
-        name: planName || "AR Business Studio",
+        name: planName,
         value,
         quantity: 1,
       }],
       callback: {
-        successUrl: (callbackUrl || process.env.NEXT_PUBLIC_APP_URL || "https://app.arbusiness.studio") + "/billing?checkout_success=true",
+        successUrl: `${callbackUrl}/billing?checkout_success=true`,
         autoRedirect: true,
       },
-      subscription: subscriptionId,
+      subscription: {
+        cycle,
+        nextDueDate: dueDate,
+      },
       customer: customerId,
     }),
   })
@@ -202,7 +204,7 @@ export function verifyWebhookSignature(body: string, signature: string): boolean
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
 }
 
-function getNextDueDate(): string {
+export function getNextDueDate(): string {
   const d = new Date()
   d.setMonth(d.getMonth() + 1)
   return d.toISOString().split("T")[0]

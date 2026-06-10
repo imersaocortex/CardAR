@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { configureAsaas, createCustomer, updateCustomer, createSubscription, createCheckout, cancelSubscription } from "@/lib/asaas"
+import { configureAsaas, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate } from "@/lib/asaas"
 
 async function ensureAsaasKey() {
   if (process.env.ASAAS_API_KEY) return
@@ -175,34 +175,23 @@ export async function POST(request: Request) {
         const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
         const billingType = body.billingType || "PIX"
 
-        // Create subscription at ASAAS
-        const asaasSub = await createSubscription(
-          asaasCustomerId,
-          plan.price,
-          billingType,
-          `AR Business Studio - ${plan.name}`,
-          asaasCycle,
-        )
-
-        // Create ASAAS checkout for payment
+        // Create ASAAS checkout (subscription is created inline by ASAAS)
         const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
         const checkout = await createCheckout(
-          asaasSub.id,
           asaasCustomerId,
           billingType,
           plan.price,
-          asaasSub.nextDueDate,
+          getNextDueDate(),
           asaasCycle,
           `AR Business Studio - ${plan.name}`,
           callbackUrl,
         )
 
-        // Update local subscription
+        // Update local subscription (asaas_subscription_id will be filled by webhook)
         await admin
           .from("subscriptions")
           .update({
             plan_id: plan.id,
-            asaas_subscription_id: asaasSub.id,
             status: "active",
             trial_ends_at: null,
           })
@@ -355,35 +344,22 @@ export async function POST(request: Request) {
         })
       }
 
-      // Create ASAAS subscription and checkout
+      // Create ASAAS checkout (subscription is created inline by ASAAS)
       const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
       const billingType = body.billingType || "PIX"
 
-      const asaasSub = await createSubscription(
-        asaasCustomerId,
-        plan.price,
-        billingType,
-        `AR Business Studio - ${plan.name}`,
-        asaasCycle,
-      )
-
       const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
       const checkout = await createCheckout(
-        asaasSub.id,
         asaasCustomerId,
         billingType,
         plan.price,
-        asaasSub.nextDueDate,
+        getNextDueDate(),
         asaasCycle,
         `AR Business Studio - ${plan.name}`,
         callbackUrl,
       )
 
-      // Save ASAAS subscription ID (don't change status — webhook will activate on payment)
-      await admin
-        .from("subscriptions")
-        .update({ asaas_subscription_id: asaasSub.id })
-        .eq("organization_id", orgId)
+      // Don't save ASAAS sub ID yet — webhook will fill it on first payment
 
       // Save checkout info
       await admin.from("asaas_checkouts").insert({

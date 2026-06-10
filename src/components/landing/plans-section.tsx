@@ -127,7 +127,7 @@ export function PlansSection() {
                   <p className="text-3xl font-bold">
                     {plan.price === 0
                       ? "Grátis"
-                      : `R$ ${(plan.price / 100).toFixed(2).replace('.', ',')}`
+                      : `R$ ${plan.price.toFixed(2).replace('.', ',')}`
                     }
                     {plan.price > 0 && (
                       <span className="text-sm font-normal text-muted-foreground">

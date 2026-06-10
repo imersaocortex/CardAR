@@ -166,7 +166,7 @@ export async function POST(request: Request) {
         const checkout = await createCheckout(
           asaasCustomerId,
           billingType,
-          plan.price / 100,
+          plan.price,
           getNextDueDate(),
           asaasCycle,
           `AR Business Studio - ${plan.name}`,
@@ -339,7 +339,7 @@ export async function POST(request: Request) {
       const checkout = await createCheckout(
         asaasCustomerId,
         billingType,
-        plan.price / 100,
+        plan.price,
         getNextDueDate(),
         asaasCycle,
         `AR Business Studio - ${plan.name}`,

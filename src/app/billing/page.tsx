@@ -366,7 +366,7 @@ export default function BillingPage() {
                   )}
                 </div>
                 <p className="text-3xl font-bold mb-4">
-                  R$ {(plan.price / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  R$ {plan.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   <span className="text-sm font-normal text-muted-foreground">{cycleLabel}</span>
                 </p>
 

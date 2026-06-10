@@ -168,7 +168,12 @@ export async function POST(request: Request) {
           .single()
 
         if (currentSub?.asaas_subscription_id) {
-          try { await cancelSubscription(currentSub.asaas_subscription_id) } catch {}
+          try {
+            await cancelSubscription(currentSub.asaas_subscription_id)
+            console.log("[billing] Cancelled old ASAAS subscription:", currentSub.asaas_subscription_id)
+          } catch (e) {
+            console.warn("[billing] Failed to cancel old ASAAS subscription:", currentSub.asaas_subscription_id, e)
+          }
         }
 
         // Determine cycle for ASAAS

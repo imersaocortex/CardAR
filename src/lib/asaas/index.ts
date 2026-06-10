@@ -172,9 +172,16 @@ export async function createCheckout(
 }
 
 export async function cancelSubscription(subscriptionId: string): Promise<void> {
-  await asaasFetch(`/subscriptions/${subscriptionId}`, {
-    method: "DELETE",
-  })
+  try {
+    await asaasFetch(`/subscriptions/${subscriptionId}`, {
+      method: "DELETE",
+    })
+  } catch {
+    // Some ASAAS versions use POST /subscriptions/{id}/cancel
+    await asaasFetch(`/subscriptions/${subscriptionId}/cancel`, {
+      method: "POST",
+    })
+  }
 }
 
 export async function getSubscription(subscriptionId: string): Promise<AsaasSubscription> {

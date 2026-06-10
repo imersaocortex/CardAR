@@ -50,6 +50,12 @@ export async function GET() {
         default_plan_id: null,
         trial_days: 7,
       },
+      evolution: {
+        enabled: false,
+        server_url: null,
+        api_key: null,
+        instance_name: null,
+      },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       updated_by: null,
@@ -81,11 +87,25 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: parsed.error.issues }, { status: 400 })
   }
 
-  const { branding, asaas, general } = parsed.data
+  const { branding, asaas, general, evolution } = parsed.data
 
   const updateData: Record<string, any> = {}
   if (branding) updateData.branding = branding
   if (general) updateData.general = general
+  if (evolution) {
+    const current = await admin.from("system_settings").select("evolution").eq("id", 1).single()
+    const currentEvolution = (current.data?.evolution as Record<string, any>) || {}
+
+    const merged: Record<string, any> = { ...currentEvolution }
+
+    for (const [k, v] of Object.entries(evolution)) {
+      if (v !== undefined) {
+        merged[k] = v
+      }
+    }
+
+    updateData.evolution = merged
+  }
   if (asaas) {
     const current = await admin.from("system_settings").select("asaas").eq("id", 1).single()
     const currentAsaas = (current.data?.asaas as Record<string, any>) || {}

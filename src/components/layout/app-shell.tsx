@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <>
                   <AlertTriangle className="h-4 w-4 text-destructive" />
                   <span>
-                    Sua assinatura está vencida. Regularize o pagamento para continuar usando a plataforma.
+                    Sua assinatura está vencida. Seus projetos foram suspensos. Regularize o pagamento para reativar.
                   </span>
                 </>
               )}

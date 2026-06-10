@@ -40,10 +40,12 @@ export function mapProjectStatus(status: string): string {
     published: "publicado",
     paused: "pausado",
     archived: "arquivado",
+    suspended: "suspenso",
     rascunho: "draft",
     publicado: "published",
     pausado: "paused",
     arquivado: "archived",
+    suspenso: "suspended",
   }
   return map[status] || status
 }

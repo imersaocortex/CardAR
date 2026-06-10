@@ -58,6 +58,17 @@ export async function PUT(
     reason: reason || null,
   })
 
+  // Suspend or unsuspend projects based on new status
+  if (status === "past_due" || status === "canceled") {
+    await admin.rpc("suspend_org_projects", {
+      p_organization_id: subscription.organization_id,
+    })
+  } else if (status === "active" || status === "trialing") {
+    await admin.rpc("unsuspend_org_projects", {
+      p_organization_id: subscription.organization_id,
+    })
+  }
+
   // If setting to active or trialing, ensure usage_limits match the plan
   if (status === "active" || status === "trialing") {
     const { data: plan } = await admin

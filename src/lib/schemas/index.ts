@@ -87,6 +87,12 @@ export const systemSettingsSchema = z.object({
     default_plan_id: z.string().uuid().nullable().optional(),
     trial_days: z.number().int().min(0).max(365).optional(),
   }).optional(),
+  evolution: z.object({
+    enabled: z.boolean().optional(),
+    server_url: z.string().optional(),
+    api_key: z.string().optional(),
+    instance_name: z.string().optional(),
+  }).passthrough().optional(),
 })
 
 export const createPlanSchema = z.object({

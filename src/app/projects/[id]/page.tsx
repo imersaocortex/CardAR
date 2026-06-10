@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Save, Play, QrCode, Eye, ArrowLeft, Monitor, Smartphone, Download, X, FileImage, Upload, Trash2 } from "lucide-react"
+import { Save, Play, QrCode, Eye, ArrowLeft, Monitor, Smartphone, Download, X, FileImage, Upload, Trash2, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/hooks/use-toast"
 import { useStudioStore } from "@/store"
@@ -40,6 +40,7 @@ export default function StudioPage() {
   const [markerFile, setMarkerFile] = useState<File | null>(null)
   const [markerPreview, setMarkerPreview] = useState<string | null>(null)
   const [uploadingMarker, setUploadingMarker] = useState(false)
+  const [subSuspended, setSubSuspended] = useState(false)
 
   useEffect(() => {
     const pid = params.id as string
@@ -57,6 +58,15 @@ export default function StudioPage() {
       if (project) {
         setProjectType(mapProjectType(project.type) as any)
         setProjectSlug(project.slug)
+
+        // Check subscription status
+        const { data: sub } = await supabase
+          .from("subscriptions")
+          .select("status")
+          .eq("organization_id", project.organization_id)
+          .single()
+
+        setSubSuspended(sub ? (sub.status === "past_due" || sub.status === "canceled") : false)
       }
 
       // Load marker data
@@ -273,6 +283,15 @@ export default function StudioPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {subSuspended && (
+        <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 flex items-center gap-2 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Assinatura vencida. Regularize o pagamento para continuar editando seus projetos.</span>
+          <Button variant="outline" size="sm" className="ml-auto text-xs" asChild>
+            <Link href="/billing">Ver Planos</Link>
+          </Button>
+        </div>
+      )}
       <header className="flex items-center justify-between px-4 h-14 border-b border-border bg-card/50 backdrop-blur-xl shrink-0">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild>
@@ -306,19 +325,19 @@ export default function StudioPage() {
 
           <Separator orientation="vertical" className="h-6" />
 
-          <Button variant="outline" size="sm" onClick={handleSave}>
+          <Button variant="outline" size="sm" onClick={handleSave} disabled={subSuspended}>
             <Save className="h-4 w-4 mr-1" />
             Salvar
           </Button>
-          <Button variant="outline" size="sm" onClick={handlePreview}>
+          <Button variant="outline" size="sm" onClick={handlePreview} disabled={subSuspended}>
             <Eye className="h-4 w-4 mr-1" />
             Preview
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleQrCode}>
+          <Button variant="secondary" size="sm" onClick={handleQrCode} disabled={subSuspended}>
             <QrCode className="h-4 w-4 mr-1" />
             QR Code
           </Button>
-          <Button variant="gradient" size="sm" onClick={handlePublish}>
+          <Button variant="gradient" size="sm" onClick={handlePublish} disabled={subSuspended}>
             Publicar
           </Button>
         </div>

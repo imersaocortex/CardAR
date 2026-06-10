@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -13,13 +14,46 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!project) return NextResponse.json({ error: "Projeto não encontrado" }, { status: 404 })
 
-  return NextResponse.json(project)
+  // Check if subscription is valid
+  const admin = createAdminClient()
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("status")
+    .eq("organization_id", project.organization_id)
+    .single()
+
+  const isDisabled = sub && (sub.status === "past_due" || sub.status === "canceled")
+
+  return NextResponse.json({
+    ...project,
+    disabled: !!isDisabled,
+  })
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
   const body = await request.json()
+
+  // Check if project is suspended before allowing edits
+  const { data: project } = await supabase
+    .from("projects")
+    .select("organization_id, status")
+    .eq("id", id)
+    .single()
+
+  if (!project) return NextResponse.json({ error: "Projeto não encontrado" }, { status: 404 })
+
+  const admin = createAdminClient()
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("status")
+    .eq("organization_id", project.organization_id)
+    .single()
+
+  if (sub && (sub.status === "past_due" || sub.status === "canceled")) {
+    return NextResponse.json({ error: "Assinatura vencida. Regularize o pagamento para editar projetos." }, { status: 403 })
+  }
 
   const { error } = await supabase
     .from("projects")

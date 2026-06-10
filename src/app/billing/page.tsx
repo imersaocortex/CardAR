@@ -259,7 +259,7 @@ export default function BillingPage() {
           <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
             <div className="text-sm">
-              <strong>Assinatura vencida.</strong> Regularize o pagamento para reativar seu plano.
+              <strong>Assinatura vencida.</strong> Regularize o pagamento para reativar seu plano e seus projetos.
               {checkout?.checkout_url && (
                 <a href={checkout.checkout_url} target="_blank" className="ml-2 underline hover:text-primary">
                   Ir para pagamento <ExternalLink className="h-3 w-3 inline" />

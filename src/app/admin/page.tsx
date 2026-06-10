@@ -11,6 +11,7 @@ import {
   Users,
   Settings,
   BarChart3,
+  MessageSquare,
   LogOut,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { FinancesTab } from "./tabs/finances-tab"
 import { CustomersTab } from "./tabs/customers-tab"
 import { AsaasTab } from "./tabs/asaas-tab"
 import { AnalyticsTab } from "./tabs/analytics-tab"
+import { EvolutionTab } from "./tabs/evolution-tab"
 
 const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
@@ -33,6 +35,7 @@ const TABS = [
   { id: "finances", label: "Financeiro", icon: DollarSign, adminOnly: false },
   { id: "customers", label: "Clientes", icon: Users, adminOnly: false },
   { id: "asaas", label: "ASAAS", icon: Settings, adminOnly: true },
+  { id: "evolution", label: "Evolution API", icon: MessageSquare, adminOnly: true },
   { id: "analytics", label: "Estatísticas", icon: BarChart3, adminOnly: false },
 ]
 
@@ -176,6 +179,9 @@ export default function AdminSettingsPage() {
             {activeTab === "customers" && <CustomersTab />}
             {activeTab === "asaas" && canAccessAsaas && (
               <AsaasTab settings={settings} onSaved={loadData} />
+            )}
+            {activeTab === "evolution" && canAccessAsaas && (
+              <EvolutionTab settings={settings} onSaved={loadData} />
             )}
             {activeTab === "analytics" && <AnalyticsTab />}
           </div>

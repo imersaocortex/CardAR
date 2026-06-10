@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { asaasWebhookSchema } from "@/lib/schemas"
+import {
+  sendPaymentSuccessNotification,
+  sendOverdueNotification,
+} from "@/lib/evolution"
 
 export async function POST(request: Request) {
   const body = await request.json()
@@ -82,7 +86,7 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
   if (payment.subscription) {
     const { data: sub } = await admin
       .from("subscriptions")
-      .select("organization_id")
+      .select("organization_id, plan_id")
       .eq("asaas_subscription_id", payment.subscription)
       .single()
 
@@ -125,6 +129,26 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
                 .eq("organization_id", sub.organization_id)
             }
           }
+
+          // Unsuspend projects if they were suspended
+          await admin.rpc("unsuspend_org_projects", {
+            p_organization_id: sub.organization_id,
+          })
+        }
+
+        // Send payment success notification via WhatsApp
+        const { data: plan } = await admin
+          .from("plans")
+          .select("name")
+          .eq("id", sub.plan_id)
+          .single()
+
+        if (plan) {
+          sendPaymentSuccessNotification(
+            sub.organization_id,
+            plan.name,
+            payment.value || 0,
+          )
         }
       }
 
@@ -133,6 +157,26 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
           .from("subscriptions")
           .update({ status: "past_due" })
           .eq("organization_id", sub.organization_id)
+
+        // Suspend all active projects
+        await admin.rpc("suspend_org_projects", {
+          p_organization_id: sub.organization_id,
+        })
+
+        // Send overdue notification via WhatsApp
+        const { data: plan } = await admin
+          .from("plans")
+          .select("name")
+          .eq("id", sub.plan_id)
+          .single()
+
+        if (plan) {
+          sendOverdueNotification(
+            sub.organization_id,
+            plan.name,
+            payment.dueDate || new Date().toISOString(),
+          )
+        }
       }
     }
   }
@@ -148,8 +192,27 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
 
   const newStatus = statusMap[subscription.status] || subscription.status.toLowerCase()
 
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("organization_id")
+    .eq("asaas_subscription_id", subscription.id)
+    .single()
+
   await admin
     .from("subscriptions")
     .update({ status: newStatus })
     .eq("asaas_subscription_id", subscription.id)
+
+  // Suspend or unsuspend projects based on new status
+  if (sub) {
+    if (newStatus === "past_due" || newStatus === "canceled") {
+      await admin.rpc("suspend_org_projects", {
+        p_organization_id: sub.organization_id,
+      })
+    } else if (newStatus === "active") {
+      await admin.rpc("unsuspend_org_projects", {
+        p_organization_id: sub.organization_id,
+      })
+    }
+  }
 }

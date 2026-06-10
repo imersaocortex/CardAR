@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       .eq("organization_id", project.organization_id)
       .maybeSingle()
 
-    if (subscription && subscription.status === "canceled") {
+    if (subscription && (subscription.status === "canceled" || subscription.status === "past_due")) {
       return NextResponse.json({ error: "Projeto não disponível" }, { status: 404 })
     }
 

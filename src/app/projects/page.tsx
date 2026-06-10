@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, FolderKanban, MoreHorizontal, Copy, Eye, Pause, Play, Trash2, Search, X, Upload, FileImage } from "lucide-react"
+import { Plus, FolderKanban, MoreHorizontal, Copy, Eye, Pause, Play, Trash2, Search, X, Upload, FileImage, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -44,6 +44,7 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false)
   const [markerFile, setMarkerFile] = useState<File | null>(null)
   const [markerPreview, setMarkerPreview] = useState<string | null>(null)
+  const [subSuspended, setSubSuspended] = useState(false)
   const markerInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -70,6 +71,15 @@ export default function ProjectsPage() {
         .order("updated_at", { ascending: false })
 
       setProjects(data || [])
+
+      // Check subscription status
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("organization_id", memberships.organization_id)
+        .single()
+
+      setSubSuspended(sub ? (sub.status === "past_due" || sub.status === "canceled") : false)
     }
     setLoading(false)
   }
@@ -163,10 +173,11 @@ export default function ProjectsPage() {
     }
   }
 
-  const statusColors: Record<string, "success" | "secondary" | "warning"> = {
+  const statusColors: Record<string, "success" | "secondary" | "warning" | "destructive"> = {
     published: "success",
     draft: "secondary",
     paused: "warning",
+    suspended: "destructive",
   }
 
   const typeLabels: Record<string, string> = {
@@ -193,9 +204,15 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-bold">Projetos</h1>
             <p className="text-muted-foreground text-sm mt-1">{projects.length} projetos criados</p>
           </div>
+          {subSuspended && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <span>Assinatura vencida — projetos suspensos</span>
+            </div>
+          )}
           <Dialog open={showNewModal} onOpenChange={setShowNewModal}>
             <DialogTrigger asChild>
-              <Button variant="gradient">
+              <Button variant="gradient" disabled={subSuspended}>
                 <Plus className="h-4 w-4" />
                 Novo Projeto
               </Button>

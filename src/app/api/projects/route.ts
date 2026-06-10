@@ -24,7 +24,26 @@ export async function GET() {
     .in("organization_id", orgIds)
     .order("updated_at", { ascending: false })
 
-  return NextResponse.json(data || [])
+  // Check subscription status for each org to determine if projects are disabled
+  const admin = createAdminClient()
+  const projectsWithStatus = await Promise.all(
+    (data || []).map(async (project) => {
+      const { data: sub } = await admin
+        .from("subscriptions")
+        .select("status")
+        .eq("organization_id", project.organization_id)
+        .single()
+
+      const isSuspended = sub && (sub.status === "past_due" || sub.status === "canceled")
+
+      return {
+        ...project,
+        disabled: !!isSuspended,
+      }
+    }),
+  )
+
+  return NextResponse.json(projectsWithStatus)
 }
 
 export async function POST(request: Request) {
@@ -50,8 +69,32 @@ export async function POST(request: Request) {
 
   const orgId = membership.organization_id
 
-  // Check limit
   const admin = createAdminClient()
+
+  // Check subscription status
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("status, trial_ends_at")
+    .eq("organization_id", orgId)
+    .single()
+
+  if (sub) {
+    const trialExpired = sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
+    if (sub.status === "past_due") {
+      return NextResponse.json({ error: "Assinatura vencida. Regularize o pagamento para criar projetos." }, { status: 403 })
+    }
+    if (sub.status === "canceled") {
+      return NextResponse.json({ error: "Assinatura cancelada. Escolha um plano para criar projetos." }, { status: 403 })
+    }
+    if (sub.status === "pending") {
+      return NextResponse.json({ error: "Assinatura pendente de pagamento. Acesse a página de cobrança para pagar." }, { status: 403 })
+    }
+    if (sub.status === "trialing" && trialExpired) {
+      return NextResponse.json({ error: "Período de teste expirado. Assine um plano para continuar." }, { status: 403 })
+    }
+  }
+
+  // Check limit
   const { data: limitOk } = await admin.rpc("check_project_limit", {
     p_organization_id: orgId,
   })

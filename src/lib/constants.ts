@@ -73,5 +73,5 @@ export const STORAGE_BUCKETS = {
 } as const
 
 export const PROJECT_TYPES = ["business_card", "flyer_a4", "square_1x1"] as const
-export const PROJECT_STATUSES = ["draft", "published", "paused", "archived"] as const
+export const PROJECT_STATUSES = ["draft", "published", "paused", "archived", "suspended"] as const
 export const ORG_ROLES = ["owner", "admin", "editor", "viewer"] as const

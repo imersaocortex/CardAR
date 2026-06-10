@@ -16,12 +16,14 @@ interface Plan {
   projects_limit: number
   assets_limit_label: string
   features: string[]
+  billing_cycle: string
 }
 
 export function PlansSection() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [isAnnual, setIsAnnual] = useState(false)
+  const [hasYearlyPlans, setHasYearlyPlans] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -31,12 +33,24 @@ export function PlansSection() {
       .eq("active", true)
       .order("price")
       .then(({ data }) => {
-        if (data) setPlans(data)
+        if (data) {
+          const normalized = data.map((p: any) => ({
+            ...p,
+            billing_cycle: p.billing_cycle || "monthly",
+          }))
+          setPlans(normalized)
+          setHasYearlyPlans(normalized.some((p: Plan) => p.billing_cycle === "yearly"))
+        }
         setLoading(false)
       })
   }, [])
 
   if (loading) return null
+
+  const filteredPlans = plans.filter((p) => {
+    if (!hasYearlyPlans) return true
+    return isAnnual ? p.billing_cycle === "yearly" : p.billing_cycle === "monthly"
+  })
 
   return (
     <section id="planos" className="relative py-24 px-4 bg-muted/30">
@@ -56,31 +70,33 @@ export function PlansSection() {
             Escolha o plano ideal para seu negócio. Cancele quando quiser.
           </p>
 
-          <div className="inline-flex items-center gap-3 bg-muted rounded-full p-1">
-            <button
-              onClick={() => setIsAnnual(false)}
-              className={cn(
-                "px-5 py-2 rounded-full text-sm font-medium transition-all",
-                !isAnnual ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-              )}
-            >
-              Mensal
-            </button>
-            <button
-              onClick={() => setIsAnnual(true)}
-              className={cn(
-                "px-5 py-2 rounded-full text-sm font-medium transition-all",
-                isAnnual ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-              )}
-            >
-              Anual{" "}
-              <span className="text-emerald-400 text-xs ml-1">-20%</span>
-            </button>
-          </div>
+          {hasYearlyPlans && (
+            <div className="inline-flex items-center gap-3 bg-muted rounded-full p-1">
+              <button
+                onClick={() => setIsAnnual(false)}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-medium transition-all",
+                  !isAnnual ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                )}
+              >
+                Mensal
+              </button>
+              <button
+                onClick={() => setIsAnnual(true)}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-medium transition-all",
+                  isAnnual ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                )}
+              >
+                Anual{" "}
+                <span className="text-emerald-400 text-xs ml-1">-20%</span>
+              </button>
+            </div>
+          )}
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {plans.map((plan, i) => {
+          {filteredPlans.map((plan, i) => {
             const isPro = plan.slug === "pro"
             return (
               <motion.div
@@ -110,10 +126,12 @@ export function PlansSection() {
                   <p className="text-3xl font-bold">
                     {plan.price === 0
                       ? "Grátis"
-                      : `R$ ${isAnnual ? Math.round(plan.price * 0.8) : plan.price}`
+                      : `R$ ${plan.price}`
                     }
                     {plan.price > 0 && (
-                      <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                      <span className="text-sm font-normal text-muted-foreground">
+                        {plan.billing_cycle === "yearly" ? "/ano" : "/mês"}
+                      </span>
                     )}
                   </p>
                 </div>

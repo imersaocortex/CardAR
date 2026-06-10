@@ -5,11 +5,36 @@ import {
   sendPaymentSuccessNotification,
   sendOverdueNotification,
 } from "@/lib/evolution"
+import { verifyWebhookSignature } from "@/lib/asaas"
+
+async function ensureWebhookSecret() {
+  if (process.env.ASAAS_WEBHOOK_SECRET) return
+  const admin = createAdminClient()
+  const { data: settings } = await admin
+    .from("system_settings")
+    .select("asaas")
+    .eq("id", 1)
+    .maybeSingle()
+  const config = settings?.asaas as Record<string, any> | undefined
+  if (!config) return
+  const env = config.environment || "debug"
+  const secret = config[`${env}_webhook_secret`] as string | undefined
+  if (secret) {
+    process.env.ASAAS_WEBHOOK_SECRET = secret
+  }
+}
 
 export async function POST(request: Request) {
   const body = await request.json()
   const signature = request.headers.get("asaas-signature") || ""
   const admin = createAdminClient()
+
+  // Verify webhook signature (load secret from DB if not in env)
+  await ensureWebhookSecret()
+  if (!verifyWebhookSignature(JSON.stringify(body), signature)) {
+    console.warn("[webhook] Invalid ASAAS signature")
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+  }
 
   // Idempotency check
   const eventId = body.event?.split("_")?.slice(1)?.join("_") || body.payment?.id || body.subscription?.id || "unknown"

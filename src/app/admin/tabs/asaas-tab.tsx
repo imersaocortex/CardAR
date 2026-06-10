@@ -30,7 +30,7 @@ const ENVIRONMENTS: { id: Environment; label: string; description: string; icon:
     color: "text-amber-500",
     bg: "bg-amber-500/10",
     border: "border-amber-500/30",
-    url: "https://sandbox.asaas.com/api/v3",
+    url: "https://api-sandbox.asaas.com/v3",
   },
   {
     id: "production",
@@ -40,7 +40,7 @@ const ENVIRONMENTS: { id: Environment; label: string; description: string; icon:
     color: "text-emerald-500",
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/30",
-    url: "https://api.asaas.com/api/v3",
+    url: "https://api.asaas.com/v3",
   },
 ]
 

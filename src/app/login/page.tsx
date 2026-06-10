@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { Zap, Eye, EyeOff } from "lucide-react"
+import { Zap, Eye, EyeOff, MailCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [name, setName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [signupSuccess, setSignupSuccess] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,7 +50,7 @@ export default function LoginPage() {
     setError("")
 
     const supabase = createClient()
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name } },
@@ -57,6 +58,13 @@ export default function LoginPage() {
 
     if (signUpError) {
       setError(signUpError.message)
+      setLoading(false)
+      return
+    }
+
+    // Email confirmation required — session is null
+    if (!data.session) {
+      setSignupSuccess(true)
       setLoading(false)
       return
     }
@@ -95,6 +103,21 @@ export default function LoginPage() {
             </div>
           )}
 
+          {signupSuccess ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+                <MailCheck className="h-8 w-8 text-emerald-400" />
+              </div>
+              <h2 className="text-lg font-bold mb-2">Cadastro realizado!</h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Enviamos um link de confirmação para <strong>{email}</strong>.
+                Verifique sua caixa de entrada e spam para ativar sua conta.
+              </p>
+              <Button variant="outline" onClick={() => router.push("/login")}>
+                Ok, entendi
+              </Button>
+            </div>
+          ) : (
           <Tabs defaultValue="login" className="mb-6">
             <TabsList className="w-full">
               <TabsTrigger value="login" className="flex-1">Entrar</TabsTrigger>
@@ -189,6 +212,7 @@ export default function LoginPage() {
               </form>
             </TabsContent>
           </Tabs>
+          )}
 
           <p className="text-xs text-muted-foreground text-center mt-6">
             Ao continuar, você aceita nossos{" "}

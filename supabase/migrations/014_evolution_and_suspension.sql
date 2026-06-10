@@ -46,3 +46,10 @@ $$;
 -- 4. Add evolution column to system_settings
 alter table public.system_settings
   add column if not exists evolution jsonb not null default '{}'::jsonb;
+
+-- 5. Add highlight column to plans (configurable "Mais Popular" badge)
+alter table public.plans
+  add column if not exists highlight boolean not null default false;
+
+-- 6. Set pro plan as highlighted by default
+update public.plans set highlight = true where slug = 'pro' and highlight = false;

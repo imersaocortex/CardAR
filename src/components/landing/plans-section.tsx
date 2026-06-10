@@ -97,7 +97,7 @@ export function PlansSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {filteredPlans.map((plan, i) => {
-            const isPro = plan.slug === "pro"
+            const isHighlighted = (plan as any).highlight === true
             return (
               <motion.div
                 key={plan.id}
@@ -107,12 +107,12 @@ export function PlansSection() {
                 transition={{ delay: i * 0.1 }}
                 className={cn(
                   "relative glass rounded-2xl p-8 border transition-all duration-300",
-                  isPro
+                  isHighlighted
                     ? "border-primary/40 shadow-xl shadow-primary/10 scale-105"
                     : "border-border hover:border-primary/20"
                 )}
               >
-                {isPro && (
+                {isHighlighted && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-xs font-medium">
                       <Sparkles className="h-3 w-3" />
@@ -146,12 +146,12 @@ export function PlansSection() {
                 </div>
 
                 <Button
-                  variant={isPro ? "gradient" : "outline"}
+                  variant={isHighlighted ? "gradient" : "outline"}
                   className="w-full"
                   asChild
                 >
                   <Link href="/login">
-                    {plan.slug === "starter" ? "Começar Grátis" : "Assinar Agora"}
+                    Assinar Agora
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>

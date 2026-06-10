@@ -63,6 +63,7 @@ export function PlansTab() {
     trial_days: 0,
     has_watermark: true,
     allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
+    highlight: false,
   })
 
   const loadPlans = async () => {
@@ -96,6 +97,7 @@ export function PlansTab() {
       trial_days: 0,
       has_watermark: true,
       allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
+      highlight: false,
     })
     setDialogOpen(true)
   }
@@ -117,6 +119,7 @@ export function PlansTab() {
       allowed_media_types: Array.isArray((plan as any).allowed_media_types)
         ? (plan as any).allowed_media_types.join(", ")
         : "image/png,image/jpeg,model/gltf-binary",
+      highlight: (plan as any).highlight === true,
     })
     setDialogOpen(true)
   }
@@ -164,6 +167,7 @@ export function PlansTab() {
         trial_days: form.trial_days,
         has_watermark: form.has_watermark,
         allowed_media_types: form.allowed_media_types.split(",").map((t) => t.trim()).filter(Boolean),
+        highlight: form.highlight,
       }
 
       if (editingPlan) {
@@ -472,6 +476,15 @@ export function PlansTab() {
                 onCheckedChange={(v) => setForm((p) => ({ ...p, active: v }))}
               />
               <Label htmlFor="plan-active">Plano ativo</Label>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Switch
+                id="plan-highlight"
+                checked={form.highlight}
+                onCheckedChange={(v) => setForm((p) => ({ ...p, highlight: v }))}
+              />
+              <Label htmlFor="plan-highlight">Destacar como "Mais Popular"</Label>
             </div>
           </div>
 

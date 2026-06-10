@@ -1,5 +1,10 @@
-const ASAAS_API_KEY = process.env.ASAAS_API_KEY
-const ASAAS_API_URL = process.env.ASAAS_API_URL || "https://sandbox.asaas.com/api/v3"
+let currentApiKey = process.env.ASAAS_API_KEY
+let currentApiUrl = process.env.ASAAS_API_URL || "https://sandbox.asaas.com/api/v3"
+
+export function configureAsaas(apiKey: string, apiUrl?: string) {
+  currentApiKey = apiKey
+  if (apiUrl) currentApiUrl = apiUrl
+}
 
 interface AsaasCustomer {
   id: string
@@ -42,16 +47,16 @@ interface AsaasPayment {
 }
 
 async function asaasFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  if (!ASAAS_API_KEY) {
+  if (!currentApiKey) {
     throw new Error("ASAAS_API_KEY não configurada")
   }
 
-  const url = `${ASAAS_API_URL}${path}`
+  const url = `${currentApiUrl}${path}`
   const res = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "access_token": ASAAS_API_KEY,
+      "access_token": currentApiKey,
       ...(options.headers || {}),
     },
   })

@@ -1,7 +1,27 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createCustomer, updateCustomer, createSubscription, createCheckout, cancelSubscription } from "@/lib/asaas"
+import { configureAsaas, createCustomer, updateCustomer, createSubscription, createCheckout, cancelSubscription } from "@/lib/asaas"
+
+async function ensureAsaasKey() {
+  if (process.env.ASAAS_API_KEY) return
+  const admin = createAdminClient()
+  const { data: settings } = await admin
+    .from("system_settings")
+    .select("asaas")
+    .eq("id", 1)
+    .maybeSingle()
+  const config = settings?.asaas as Record<string, any> | undefined
+  const env = config?.environment || "debug"
+  const apiKey = config?.[`${env}_api_key`] as string | undefined
+  const apiUrl = env === "production"
+    ? "https://api.asaas.com/api/v3"
+    : "https://sandbox.asaas.com/api/v3"
+  if (apiKey) {
+    process.env.ASAAS_API_KEY = apiKey
+    configureAsaas(apiKey, apiUrl)
+  }
+}
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -74,6 +94,9 @@ export async function POST(request: Request) {
 
   if (action === "upgrade") {
     if (!plan_id) return NextResponse.json({ error: "plan_id é obrigatório" }, { status: 400 })
+
+    // Try loading ASAAS key from DB settings if not in env
+    await ensureAsaasKey()
 
     const { data: plan } = await admin.from("plans").select("*").eq("id", plan_id).single()
     if (!plan) return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 })
@@ -229,6 +252,9 @@ export async function POST(request: Request) {
   }
 
   if (action === "first_payment") {
+    // Try loading ASAAS key from DB settings if not in env
+    await ensureAsaasKey()
+
     // First payment for a pending subscription (new user)
     const { data: currentSub } = await admin
       .from("subscriptions")

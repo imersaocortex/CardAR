@@ -173,7 +173,8 @@ export async function POST(request: Request) {
 
         // Determine cycle for ASAAS
         const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
-        const billingType = body.billingType || "PIX"
+        // Checkout v3 only supports CREDIT_CARD for RECURRENT subscriptions
+        const billingType = "CREDIT_CARD"
 
         // Create ASAAS checkout (subscription is created inline by ASAAS)
         const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
@@ -346,7 +347,8 @@ export async function POST(request: Request) {
 
       // Create ASAAS checkout (subscription is created inline by ASAAS)
       const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
-      const billingType = body.billingType || "PIX"
+      // Checkout v3 only supports CREDIT_CARD for RECURRENT subscriptions
+      const billingType = "CREDIT_CARD"
 
       const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
       const checkout = await createCheckout(

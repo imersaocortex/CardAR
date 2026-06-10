@@ -10,11 +10,12 @@ import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } fr
 interface ArPlayerProps {
   experience: ArExperienceData
   hasWatermark?: boolean
+  siteName?: string
   onStateChange?: (state: ArState) => void
   onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
 }
 
-export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInteraction }: ArPlayerProps) {
+export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Business Studio", onStateChange, onInteraction }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -957,7 +958,7 @@ export function ArPlayer({ experience, hasWatermark = true, onStateChange, onInt
       {hasWatermark && (
         <div className="absolute bottom-20 left-0 right-0 z-30 flex justify-center pointer-events-none">
           <div className="px-3 py-1 rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
-            <span className="text-[10px] text-white/50 font-medium">AR Business Studio</span>
+            <span className="text-[10px] text-white/50 font-medium">{siteName}</span>
           </div>
         </div>
       )}

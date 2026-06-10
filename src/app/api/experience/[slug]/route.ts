@@ -44,6 +44,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       }
     }
 
+    // Get system name from settings
+    const { data: settings } = await admin
+      .from("system_settings")
+      .select("branding")
+      .eq("id", 1)
+      .maybeSingle()
+    const siteName = (settings?.branding as any)?.site_name || "AR Business Studio"
+
     await admin.rpc("increment_project_views", { p_project_id: project.id })
 
     const scene = project.scenes?.[0] || null
@@ -54,6 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     return NextResponse.json({
       hasWatermark,
+      siteName,
       project: {
         id: project.id,
         name: project.name,

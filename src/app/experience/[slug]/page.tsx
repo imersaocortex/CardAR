@@ -35,6 +35,7 @@ export default function ExperiencePage() {
   const params = useParams()
   const [experience, setExperience] = useState<ArExperienceData | null>(null)
   const [hasWatermark, setHasWatermark] = useState(true)
+  const [siteName, setSiteName] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [arState, setArState] = useState<ArState>("loading")
@@ -62,6 +63,7 @@ export default function ExperiencePage() {
         }
         setExperience(data.project)
         setHasWatermark(data.hasWatermark !== false)
+        setSiteName(data.siteName || "")
 
         // Track initial view
         sendAnalytics(data.project.id, "view", {}, sessionIdRef.current)
@@ -124,6 +126,7 @@ export default function ExperiencePage() {
       <ArPlayer
         experience={experience}
         hasWatermark={hasWatermark}
+        siteName={siteName}
         onStateChange={handleStateChange}
         onInteraction={handleInteraction}
       />

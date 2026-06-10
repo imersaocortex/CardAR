@@ -6,6 +6,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Project: AR Business Studio
 
+### Critical Rules (never forget)
+- **Watermark**: AR experience watermark must always use `siteName` from API (system branding config), never hardcode "AR Business Studio"
+- **City/Country encoding**: Always `safeDecode()` URL-encoded city/country values from Vercel geo headers before storing/displaying
+
 ### Architecture
 - Next.js 16.2.7 (Turbopack) app router
 - Supabase for auth, DB, storage

@@ -1,5 +1,5 @@
 let currentApiKey = process.env.ASAAS_API_KEY
-let currentApiUrl = process.env.ASAAS_API_URL || "https://sandbox.asaas.com/api/v3"
+let currentApiUrl = process.env.ASAAS_API_URL || "https://api-sandbox.asaas.com/v3"
 
 export function configureAsaas(apiKey: string, apiUrl?: string) {
   currentApiKey = apiKey
@@ -23,8 +23,10 @@ interface AsaasCustomer {
 
 interface AsaasCheckout {
   id: string
-  url: string
-  subscription: string
+  link: string | null
+  url?: string
+  status?: string
+  subscription?: string
 }
 
 interface AsaasSubscription {
@@ -139,19 +141,28 @@ export async function createCheckout(
   value: number,
   dueDate: string,
   cycle: string = "MONTHLY",
+  planName?: string,
+  callbackUrl?: string,
 ): Promise<AsaasCheckout> {
-  return asaasFetch<AsaasCheckout>("/checkouts", {
+  const checkout = await asaasFetch<AsaasCheckout>("/checkouts", {
     method: "POST",
     body: JSON.stringify({
+      billingTypes: [billingType],
+      chargeTypes: ["RECURRENT"],
+      items: [{
+        name: planName || "AR Business Studio",
+        value,
+      }],
+      callback: {
+        successUrl: (callbackUrl || process.env.NEXT_PUBLIC_APP_URL || "https://app.arbusiness.studio") + "/billing?checkout_success=true",
+        autoRedirect: true,
+      },
       subscription: subscriptionId,
       customer: customerId,
-      billingTypes: [billingType],
-      chargeType: "RECURRENT",
-      value,
-      dueDateLimitDays: 5,
-      maxInstallmentCount: 1,
     }),
   })
+  checkout.url = checkout.link || undefined
+  return checkout
 }
 
 export async function cancelSubscription(subscriptionId: string): Promise<void> {

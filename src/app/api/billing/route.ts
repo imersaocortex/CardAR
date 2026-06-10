@@ -15,8 +15,8 @@ async function ensureAsaasKey() {
   const env = config?.environment || "debug"
   const apiKey = config?.[`${env}_api_key`] as string | undefined
   const apiUrl = env === "production"
-    ? "https://api.asaas.com/api/v3"
-    : "https://sandbox.asaas.com/api/v3"
+    ? "https://api.asaas.com/v3"
+    : "https://api-sandbox.asaas.com/v3"
   if (apiKey) {
     process.env.ASAAS_API_KEY = apiKey
     configureAsaas(apiKey, apiUrl)
@@ -185,6 +185,7 @@ export async function POST(request: Request) {
         )
 
         // Create ASAAS checkout for payment
+        const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
         const checkout = await createCheckout(
           asaasSub.id,
           asaasCustomerId,
@@ -192,6 +193,8 @@ export async function POST(request: Request) {
           plan.price,
           asaasSub.nextDueDate,
           asaasCycle,
+          `AR Business Studio - ${plan.name}`,
+          callbackUrl,
         )
 
         // Update local subscription
@@ -364,6 +367,7 @@ export async function POST(request: Request) {
         asaasCycle,
       )
 
+      const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
       const checkout = await createCheckout(
         asaasSub.id,
         asaasCustomerId,
@@ -371,6 +375,8 @@ export async function POST(request: Request) {
         plan.price,
         asaasSub.nextDueDate,
         asaasCycle,
+        `AR Business Studio - ${plan.name}`,
+        callbackUrl,
       )
 
       // Save ASAAS subscription ID (don't change status — webhook will activate on payment)

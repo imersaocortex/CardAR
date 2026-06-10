@@ -146,6 +146,7 @@ export async function createCheckout(
       subscription: subscriptionId,
       customer: customerId,
       billingTypes: [billingType],
+      chargeType: "RECURRENT",
       value,
       dueDateLimitDays: 5,
       maxInstallmentCount: 1,

@@ -108,47 +108,47 @@ async function resolveSubscription(
 }
 
 async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, payment: any) {
-  // Upsert payment record
+  if (!payment.subscription) return
+
+  // Resolve org first (needed for payment insert FK)
+  const sub = await resolveSubscription(admin, payment.subscription, payment.customer)
+  if (!sub) return
+
+  // Get local subscription UUID for FK reference
+  const { data: localSub } = await admin
+    .from("subscriptions")
+    .select("id")
+    .eq("organization_id", sub.organization_id)
+    .single()
+
+  // Upsert payment record (org_id and local sub_id required)
   const { data: existingPayment } = await admin
     .from("asaas_payments")
     .select("id")
     .eq("asaas_payment_id", payment.id)
     .single()
 
+  const paymentData: Record<string, any> = {
+    organization_id: sub.organization_id,
+    subscription_id: localSub?.id || null,
+    status: payment.status,
+    value: payment.value,
+    due_date: payment.dueDate,
+    paid_date: payment.paidDate || null,
+    invoice_url: payment.invoiceUrl || null,
+  }
+
   if (existingPayment) {
     await admin
       .from("asaas_payments")
-      .update({
-        status: payment.status,
-        paid_date: payment.paidDate || null,
-        invoice_url: payment.invoiceUrl || null,
-      })
+      .update(paymentData)
       .eq("asaas_payment_id", payment.id)
   } else {
+    paymentData.asaas_payment_id = payment.id
     await admin
       .from("asaas_payments")
-      .insert({
-        asaas_payment_id: payment.id,
-        status: payment.status,
-        value: payment.value,
-        due_date: payment.dueDate,
-        paid_date: payment.paidDate || null,
-        invoice_url: payment.invoiceUrl || null,
-        subscription_id: payment.subscription || null,
-      })
+      .insert(paymentData)
   }
-
-  if (!payment.subscription) return
-
-  // Find org (with customer fallback for checkout-created subscriptions)
-  const sub = await resolveSubscription(admin, payment.subscription, payment.customer)
-  if (!sub) return
-
-  // Link payment to org
-  await admin
-    .from("asaas_payments")
-    .update({ organization_id: sub.organization_id })
-    .eq("asaas_payment_id", payment.id)
 
   if (payment.status === "RECEIVED" || payment.status === "CONFIRMED") {
     const { data: currentSub } = await admin

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 
+function safeDecode(str: string): string {
+  try {
+    return decodeURIComponent(str.replace(/\+/g, " "))
+  } catch {
+    return str
+  }
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
@@ -73,7 +81,8 @@ export async function GET(
 
   const countryMap: Record<string, number> = {}
   for (const row of countries || []) {
-    countryMap[row.country] = (countryMap[row.country] || 0) + 1
+    const c = safeDecode(row.country)
+    countryMap[c] = (countryMap[c] || 0) + 1
   }
   const countryBreakdown = Object.entries(countryMap)
     .map(([country, count]) => ({ country, count }))
@@ -88,7 +97,8 @@ export async function GET(
 
   const cityMap: Record<string, number> = {}
   for (const row of cities || []) {
-    cityMap[row.city] = (cityMap[row.city] || 0) + 1
+    const c = safeDecode(row.city)
+    cityMap[c] = (cityMap[c] || 0) + 1
   }
   const cityBreakdown = Object.entries(cityMap)
     .map(([city, count]) => ({ city, count }))

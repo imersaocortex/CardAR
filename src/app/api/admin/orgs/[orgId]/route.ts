@@ -2,6 +2,14 @@ import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 
+function safeDecode(str: string): string {
+  try {
+    return decodeURIComponent(str.replace(/\+/g, " "))
+  } catch {
+    return str
+  }
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ orgId: string }> },
@@ -65,7 +73,12 @@ export async function GET(
     .single()
 
   // Aggregate analytics
-  const analytics = analyticsRes.data || []
+  const analytics = (analyticsRes.data || []).map((a: any) => ({
+    ...a,
+    city: a.city ? safeDecode(a.city) : null,
+    country: a.country ? safeDecode(a.country) : null,
+    region: a.region ? safeDecode(a.region) : null,
+  }))
   const totalViews = analytics.filter((a: any) => a.event_type === "view").length
   const totalClicks = analytics.filter((a: any) => a.event_type === "click").length
   const uniqueCountries = new Set(analytics.map((a: any) => a.country).filter(Boolean)).size

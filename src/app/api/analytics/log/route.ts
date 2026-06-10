@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+function safeDecode(str: string): string {
+  try {
+    return decodeURIComponent(str.replace(/\+/g, " "))
+  } catch {
+    return str
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -31,9 +39,9 @@ export async function POST(request: NextRequest) {
 
     // Geo from Vercel headers if available
     if (request.headers.get("x-vercel-ip-country")) {
-      country = request.headers.get("x-vercel-ip-country") || ""
-      city = request.headers.get("x-vercel-ip-city") || ""
-      region = request.headers.get("x-vercel-ip-country-region") || ""
+      country = safeDecode(request.headers.get("x-vercel-ip-country") || "")
+      city = safeDecode(request.headers.get("x-vercel-ip-city") || "")
+      region = safeDecode(request.headers.get("x-vercel-ip-country-region") || "")
     } else if (ip) {
       try {
         const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=country,city,regionName`, {
@@ -41,9 +49,9 @@ export async function POST(request: NextRequest) {
         })
         const geoData = await geoRes.json()
         if (geoData.status === "success") {
-          country = geoData.country || ""
-          city = geoData.city || ""
-          region = geoData.regionName || ""
+          country = safeDecode(geoData.country || "")
+          city = safeDecode(geoData.city || "")
+          region = safeDecode(geoData.regionName || "")
         }
       } catch {}
     }

@@ -197,6 +197,11 @@ export async function getPayments(subscriptionId?: string): Promise<AsaasPayment
   return result.data || []
 }
 
+export async function getPaymentsByCustomer(customerId: string): Promise<AsaasPayment[]> {
+  const result = await asaasFetch<{ data: AsaasPayment[] }>(`/payments?customer=${customerId}&limit=10`)
+  return result.data || []
+}
+
 export async function getPayment(paymentId: string): Promise<AsaasPayment> {
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}`)
 }
@@ -218,4 +223,38 @@ export function getNextDueDate(): string {
   const d = new Date()
   d.setMonth(d.getMonth() + 1)
   return d.toISOString().split("T")[0]
+}
+
+export async function ensureAsaasKey(admin: any) {
+  if (process.env.ASAAS_API_KEY) return
+  const { data: settings } = await admin
+    .from("system_settings")
+    .select("asaas")
+    .eq("id", 1)
+    .maybeSingle()
+  const config = settings?.asaas as Record<string, any> | undefined
+  const env = config?.environment || "debug"
+  const apiKey = config?.[`${env}_api_key`] as string | undefined
+  const apiUrl = env === "production"
+    ? "https://api.asaas.com/v3"
+    : "https://api-sandbox.asaas.com/v3"
+  if (apiKey) {
+    process.env.ASAAS_API_KEY = apiKey
+    configureAsaas(apiKey, apiUrl)
+  }
+}
+
+export async function loadWebhookSecret(admin: any) {
+  if (process.env.ASAAS_WEBHOOK_SECRET) return
+  const { data: settings } = await admin
+    .from("system_settings")
+    .select("asaas")
+    .eq("id", 1)
+    .maybeSingle()
+  const config = settings?.asaas as Record<string, any> | undefined
+  const env = config?.environment || "debug"
+  const secret = config?.[`${env}_webhook_secret`] as string | undefined
+  if (secret) {
+    process.env.ASAAS_WEBHOOK_SECRET = secret
+  }
 }

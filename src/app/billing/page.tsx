@@ -53,6 +53,18 @@ export default function BillingPage() {
       setUpgraded(true)
       window.history.replaceState({}, "", "/billing")
     }
+    if (window.location.search.includes("checkout_success=true")) {
+      window.history.replaceState({}, "", "/billing")
+      fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "checkout_success" }),
+      }).then((r) => r.json()).then((data) => {
+        if (data.success) {
+          setUpgraded(true)
+        }
+      }).catch(() => {})
+    }
     loadData()
   }, [])
 
@@ -354,7 +366,7 @@ export default function BillingPage() {
                   )}
                 </div>
                 <p className="text-3xl font-bold mb-4">
-                  R$ {plan.price}
+                  R$ {(plan.price / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   <span className="text-sm font-normal text-muted-foreground">{cycleLabel}</span>
                 </p>
 
@@ -446,7 +458,7 @@ export default function BillingPage() {
                     {payments.map((payment) => (
                       <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                         <td className="py-3 px-2 font-mono text-xs">{payment.asaas_payment_id?.slice(0, 12)}...</td>
-                        <td className="py-3 px-2">R$ {(payment.value / 100).toFixed(2)}</td>
+                        <td className="py-3 px-2">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td className="py-3 px-2 text-muted-foreground">
                           {new Date(payment.due_date).toLocaleDateString("pt-BR")}
                         </td>

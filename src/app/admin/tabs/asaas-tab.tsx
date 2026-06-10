@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import {
   Settings, Key, Globe, Save, CheckCircle2, XCircle, HelpCircle,
-  Bug, Rocket, ShieldAlert, ExternalLink,
+  Bug, Rocket, ShieldAlert, ExternalLink, RefreshCw,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -346,6 +346,96 @@ export function AsaasTab({ settings, onSaved }: AsaasTabProps) {
           </CardContent>
         </Card>
       </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="glass border-border/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-primary" />
+              Sincronização Manual
+            </CardTitle>
+            <CardDescription>
+              Sincronize pagamentos do ASAAS manualmente para uma organização específica
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SyncSection />
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
+  )
+}
+
+function SyncSection() {
+  const { toast } = useToast()
+  const [syncing, setSyncing] = useState(false)
+  const [orgId, setOrgId] = useState("")
+  const [result, setResult] = useState<any>(null)
+
+  const handleSync = async () => {
+    if (!orgId.trim()) {
+      toast({ title: "Informe o ID da organização", variant: "destructive" })
+      return
+    }
+    setSyncing(true)
+    setResult(null)
+    try {
+      const res = await fetch("/api/asaas/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: orgId.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setResult(data)
+        toast({ title: "Sincronização concluída!", description: `${data.synced} pagamentos processados` })
+      } else {
+        toast({ title: "Erro na sincronização", description: data.error, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Erro ao sincronizar", variant: "destructive" })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-end gap-3">
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="sync-org-id">ID da Organização</Label>
+          <Input
+            id="sync-org-id"
+            value={orgId}
+            onChange={(e) => setOrgId(e.target.value)}
+            placeholder="uuid da organização..."
+            className="font-mono text-xs"
+          />
+        </div>
+        <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
+          <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+          {syncing ? "Sincronizando..." : "Sincronizar"}
+        </Button>
+      </div>
+
+      {result && (
+        <div className="p-3 rounded-lg bg-muted/20 border border-border text-xs font-mono max-h-48 overflow-y-auto">
+          <p className="text-muted-foreground mb-1">
+            {result.synced} pagamento(s) encontrado(s):
+          </p>
+          {result.results?.map((r: any, i: number) => (
+            <p key={i} className={r.action === "created" ? "text-emerald-500" : "text-muted-foreground"}>
+              {r.payment_id} — {r.status} ({r.action === "created" ? "criado" : "já existente"})
+            </p>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Use quando pagamentos não aparecerem automaticamente após o checkout ASAAS.
+        Necessita da chave de API ASAAS configurada.
+      </p>
     </div>
   )
 }

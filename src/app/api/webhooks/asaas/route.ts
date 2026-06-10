@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { asaasWebhookSchema } from "@/lib/schemas"
+import {
+  ensureAsaasKey,
+  getPaymentsByCustomer,
+  loadWebhookSecret,
+} from "@/lib/asaas"
 import {
   sendPaymentSuccessNotification,
   sendOverdueNotification,
@@ -13,8 +17,12 @@ export async function POST(request: Request) {
 
   console.log("[webhook] Received event:", eventType, "has payment:", !!body.payment, "has subscription:", !!body.subscription, "has checkout:", !!body.checkout)
 
-  // Idempotency check
-  const eventId = body.event?.split("_")?.slice(1)?.join("_") || body.payment?.id || body.subscription?.id || body.checkout?.id || "unknown"
+  // Ensure ASAAS API key loaded from DB
+  await ensureAsaasKey(admin)
+  await loadWebhookSecret(admin)
+
+  // Idempotency check — use ASAAS webhook event ID if available
+  const eventId = body.id || body.payment?.id || body.subscription?.id || body.checkout?.id || `evt_${Date.now()}`
 
   const { data: existing } = await admin
     .from("webhook_events")
@@ -44,8 +52,13 @@ export async function POST(request: Request) {
       await handleSubscriptionEvent(admin, body.subscription)
     }
 
-    if (!body.payment && !body.subscription && body.checkout) {
-      console.log("[webhook] Checkout event only (no payment/sub data):", body.checkout.id)
+    if (body.checkout && eventType === "CHECKOUT_PAID") {
+      console.log("[webhook] CHECKOUT_PAID - fetching payments for customer:", body.checkout.customer)
+      await handleCheckoutPaid(admin, body.checkout)
+    }
+
+    if (body.checkout && eventType !== "CHECKOUT_PAID" && !body.payment && !body.subscription) {
+      console.log("[webhook] Checkout event only (no payment/sub data):", body.checkout.id, eventType)
     }
 
     // Mark as processed
@@ -187,7 +200,7 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
     if (currentSub) {
       const updates: Record<string, any> = { status: "active" }
 
-      const newEnd = new Date(currentSub.current_period_end)
+      const newEnd = new Date(currentSub.current_period_end || Date.now())
       newEnd.setMonth(newEnd.getMonth() + 1)
       updates.current_period_end = newEnd.toISOString()
 
@@ -304,4 +317,58 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
       })
     }
   }
+}
+
+async function handleCheckoutPaid(admin: ReturnType<typeof createAdminClient>, checkout: any) {
+  const customerId = checkout.customer
+  if (!customerId) {
+    console.error("[webhook] CHECKOUT_PAID has no customer ID")
+    return
+  }
+
+  // Resolve org from customer
+  const { data: customer } = await admin
+    .from("asaas_customers")
+    .select("organization_id")
+    .eq("asaas_customer_id", customerId)
+    .single()
+
+  if (!customer) {
+    console.error("[webhook] CHECKOUT_PAID - unknown customer:", customerId)
+    return
+  }
+
+  // Fetch payments from ASAAS for this customer
+  const payments = await getPaymentsByCustomer(customerId)
+  if (!payments.length) {
+    console.log("[webhook] CHECKOUT_PAID - no payments found for customer:", customerId)
+    return
+  }
+
+  // Find the most recent RECEIVED/CONFIRMED payment with a subscription
+  const paidPayment = payments.find(
+    (p: any) => (p.status === "RECEIVED" || p.status === "CONFIRMED") && p.subscription
+  )
+
+  if (!paidPayment) {
+    console.log("[webhook] CHECKOUT_PAID - no paid payment with subscription found for customer:", customerId, "payments:", payments.map((p: any) => ({ id: p.id, status: p.status, sub: p.subscription })))
+    return
+  }
+
+  console.log("[webhook] CHECKOUT_PAID - processing payment:", paidPayment.id, "sub:", paidPayment.subscription)
+
+  if (!paidPayment.subscription) {
+    console.log("[webhook] CHECKOUT_PAID - payment has no subscription ID")
+    return
+  }
+
+  // Resolve subscription (this saves asaas_subscription_id to the local subscription)
+  const sub = await resolveSubscription(admin, paidPayment.subscription, customerId)
+  if (!sub) {
+    console.error("[webhook] CHECKOUT_PAID - could not resolve subscription for payment:", paidPayment.id)
+    return
+  }
+
+  // Process the payment using the existing handler
+  await handlePaymentEvent(admin, paidPayment)
 }

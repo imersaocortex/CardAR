@@ -1,27 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { configureAsaas, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate } from "@/lib/asaas"
-
-async function ensureAsaasKey() {
-  if (process.env.ASAAS_API_KEY) return
-  const admin = createAdminClient()
-  const { data: settings } = await admin
-    .from("system_settings")
-    .select("asaas")
-    .eq("id", 1)
-    .maybeSingle()
-  const config = settings?.asaas as Record<string, any> | undefined
-  const env = config?.environment || "debug"
-  const apiKey = config?.[`${env}_api_key`] as string | undefined
-  const apiUrl = env === "production"
-    ? "https://api.asaas.com/v3"
-    : "https://api-sandbox.asaas.com/v3"
-  if (apiKey) {
-    process.env.ASAAS_API_KEY = apiKey
-    configureAsaas(apiKey, apiUrl)
-  }
-}
+import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getPaymentsByCustomer } from "@/lib/asaas"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -96,7 +76,7 @@ export async function POST(request: Request) {
     if (!plan_id) return NextResponse.json({ error: "plan_id é obrigatório" }, { status: 400 })
 
     // Try loading ASAAS key from DB settings if not in env
-    await ensureAsaasKey()
+    await ensureAsaasKey(admin)
 
     const { data: plan } = await admin.from("plans").select("*").eq("id", plan_id).single()
     if (!plan) return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 })
@@ -186,7 +166,7 @@ export async function POST(request: Request) {
         const checkout = await createCheckout(
           asaasCustomerId,
           billingType,
-          plan.price,
+          plan.price / 100,
           getNextDueDate(),
           asaasCycle,
           `AR Business Studio - ${plan.name}`,
@@ -257,7 +237,7 @@ export async function POST(request: Request) {
 
   if (action === "first_payment") {
     // Try loading ASAAS key from DB settings if not in env
-    await ensureAsaasKey()
+    await ensureAsaasKey(admin)
 
     // First payment for a pending subscription (new user)
     const { data: currentSub } = await admin
@@ -359,7 +339,7 @@ export async function POST(request: Request) {
       const checkout = await createCheckout(
         asaasCustomerId,
         billingType,
-        plan.price,
+        plan.price / 100,
         getNextDueDate(),
         asaasCycle,
         `AR Business Studio - ${plan.name}`,
@@ -422,6 +402,118 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true })
+  }
+
+  if (action === "checkout_success") {
+    await ensureAsaasKey(admin)
+
+    if (!process.env.ASAAS_API_KEY) {
+      return NextResponse.json({ success: true })
+    }
+
+    // Find ASAAS customer for this org
+    const { data: existingCustomer } = await admin
+      .from("asaas_customers")
+      .select("asaas_customer_id")
+      .eq("organization_id", orgId)
+      .single()
+
+    if (!existingCustomer) {
+      return NextResponse.json({ success: true })
+    }
+
+    try {
+      const payments = await getPaymentsByCustomer(existingCustomer.asaas_customer_id)
+      const paidPayment = payments.find(
+        (p: any) => (p.status === "RECEIVED" || p.status === "CONFIRMED") && p.subscription
+      )
+
+      if (!paidPayment) {
+        console.log("[billing] checkout_success - no paid payment with subscription found")
+        return NextResponse.json({ success: true })
+      }
+
+      // Save ASAAS subscription ID
+      if (paidPayment.subscription) {
+        await admin
+          .from("subscriptions")
+          .update({ asaas_subscription_id: paidPayment.subscription })
+          .eq("organization_id", orgId)
+      }
+
+      // Check if payment already saved
+      const { data: existingPayment } = await admin
+        .from("asaas_payments")
+        .select("id")
+        .eq("asaas_payment_id", paidPayment.id)
+        .single()
+
+      if (!existingPayment) {
+        const { data: localSub } = await admin
+          .from("subscriptions")
+          .select("id")
+          .eq("organization_id", orgId)
+          .single()
+
+        await admin.from("asaas_payments").insert({
+          organization_id: orgId,
+          subscription_id: localSub?.id || null,
+          asaas_payment_id: paidPayment.id,
+          status: paidPayment.status || "PENDING",
+          value: paidPayment.value || 0,
+          due_date: paidPayment.dueDate || new Date().toISOString().split("T")[0],
+          paid_date: paidPayment.paidDate || null,
+          invoice_url: paidPayment.invoiceUrl || null,
+        })
+        console.log("[billing] checkout_success - payment record created:", paidPayment.id)
+      }
+
+      // Extend subscription period
+      const { data: currentSub } = await admin
+        .from("subscriptions")
+        .select("current_period_end, status, plan_id")
+        .eq("organization_id", orgId)
+        .single()
+
+      if (currentSub) {
+        const updates: Record<string, any> = { status: "active" }
+        const newEnd = new Date(currentSub.current_period_end || Date.now())
+        newEnd.setMonth(newEnd.getMonth() + 1)
+        updates.current_period_end = newEnd.toISOString()
+
+        await admin
+          .from("subscriptions")
+          .update(updates)
+          .eq("organization_id", orgId)
+
+        if (currentSub.status === "pending") {
+          const { data: plan } = await admin
+            .from("plans")
+            .select("projects_limit, assets_limit_bytes")
+            .eq("id", currentSub.plan_id)
+            .single()
+
+          if (plan) {
+            await admin
+              .from("usage_limits")
+              .update({
+                projects_limit: plan.projects_limit,
+                assets_limit_bytes: plan.assets_limit_bytes,
+              })
+              .eq("organization_id", orgId)
+          }
+
+          await admin.rpc("unsuspend_org_projects", {
+            p_organization_id: orgId,
+          })
+        }
+      }
+
+      return NextResponse.json({ success: true })
+    } catch (err: any) {
+      console.error("[billing] checkout_success error:", err?.message || err)
+      return NextResponse.json({ success: true })
+    }
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 })

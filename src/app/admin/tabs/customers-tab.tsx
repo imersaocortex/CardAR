@@ -566,7 +566,7 @@ export function CustomersTab() {
                             {orgDetail.payments.map((payment: any) => (
                               <tr key={payment.id} className="border-b border-border/50">
                                 <td className="py-2 px-2 font-mono">{payment.asaas_payment_id?.slice(0, 12)}...</td>
-                                <td className="py-2 px-2">R$ {(payment.value / 100).toFixed(2)}</td>
+                                <td className="py-2 px-2">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 <td className="py-2 px-2 text-muted-foreground">
                                   {new Date(payment.due_date).toLocaleDateString("pt-BR")}
                                 </td>

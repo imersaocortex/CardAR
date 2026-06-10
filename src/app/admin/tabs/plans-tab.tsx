@@ -277,7 +277,7 @@ export function PlansTab() {
                         </div>
                       </td>
                       <td className="py-3 px-4 font-medium">
-                        {plan.price === 0 ? "Gratuito" : `R$ ${plan.price.toFixed(2).replace('.', ',')}/mês`}
+                        {plan.price === 0 ? "Gratuito" : `R$ ${(plan.price / 100).toFixed(2).replace('.', ',')}/mês`}
                       </td>
                       <td className="py-3 px-4">
                         {plan.projects_limit === 0 ? "Ilimitado" : plan.projects_limit}

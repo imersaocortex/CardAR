@@ -291,7 +291,7 @@ export function FinancesTab() {
                   <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                     <td className="py-3 px-4 font-medium">{payment.organizations?.name || "-"}</td>
                     <td className="py-3 px-4 font-mono text-xs">{payment.asaas_payment_id?.slice(0, 16)}</td>
-                    <td className="py-3 px-4 font-medium">R$ {(payment.value / 100).toFixed(2)}</td>
+                    <td className="py-3 px-4 font-medium">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="py-3 px-4 text-muted-foreground">
                       {new Date(payment.due_date).toLocaleDateString("pt-BR")}
                     </td>

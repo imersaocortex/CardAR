@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Check, Crown, ArrowRight, CreditCard, ExternalLink, Sparkles, AlertTriangle } from "lucide-react"
+import { Check, Crown, ArrowRight, CreditCard, ExternalLink, Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -46,8 +46,13 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true)
   const [upgrading, setUpgrading] = useState<string | null>(null)
   const [trialDaysLeft, setTrialDaysLeft] = useState(0)
+  const [upgraded, setUpgraded] = useState(false)
 
   useEffect(() => {
+    if (window.location.search.includes("upgraded=true")) {
+      setUpgraded(true)
+      window.history.replaceState({}, "", "/billing")
+    }
     loadData()
   }, [])
 
@@ -137,6 +142,10 @@ export default function BillingPage() {
         toast({ title: data.error, variant: "destructive" })
       } else {
         if (data.checkout_url) {
+          if (data.checkout_url.startsWith("/")) {
+            window.location.href = data.checkout_url
+            return
+          }
           window.open(data.checkout_url, "_blank")
         }
         toast({ title: "Checkout criado! Finalize o pagamento." })
@@ -162,6 +171,10 @@ export default function BillingPage() {
         toast({ title: data.error, variant: "destructive" })
       } else {
         if (data.checkout_url) {
+          if (data.checkout_url.startsWith("/")) {
+            window.location.href = data.checkout_url
+            return
+          }
           window.open(data.checkout_url, "_blank")
         }
         toast({ title: "Assinatura realizada com sucesso!" })
@@ -224,6 +237,15 @@ export default function BillingPage() {
           <h1 className="text-2xl font-bold">Faturamento</h1>
           <p className="text-muted-foreground text-sm mt-1">Gerencie seu plano, assinatura e histórico de pagamentos</p>
         </div>
+
+        {upgraded && (
+          <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            <div className="text-sm">
+              <strong>Plano ativado com sucesso!</strong> Sua assinatura já está ativa e você pode usar todos os recursos do plano.
+            </div>
+          </div>
+        )}
 
         {/* Trial / Status Banner */}
         {isTrialing && (

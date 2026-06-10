@@ -215,7 +215,16 @@ export async function POST(request: Request) {
         })
         .eq("organization_id", orgId)
 
-      return NextResponse.json({ success: true })
+      // Create fake checkout so billing page shows redirect link
+      await admin.from("asaas_checkouts").insert({
+        organization_id: orgId,
+        plan_id: plan.id,
+        asaas_checkout_id: "sandbox",
+        checkout_url: "/billing?upgraded=true",
+        status: "pending",
+      })
+
+      return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
     }
   }
 
@@ -251,7 +260,15 @@ export async function POST(request: Request) {
         projects_limit: plan.projects_limit,
         assets_limit_bytes: plan.assets_limit_bytes,
       }).eq("organization_id", orgId)
-      return NextResponse.json({ success: true })
+      // Create fake checkout so billing page shows redirect link
+      await admin.from("asaas_checkouts").insert({
+        organization_id: orgId,
+        plan_id: plan.id,
+        asaas_checkout_id: "sandbox",
+        checkout_url: "/billing?upgraded=true",
+        status: "pending",
+      })
+      return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
     }
 
     // Get or create ASAAS customer

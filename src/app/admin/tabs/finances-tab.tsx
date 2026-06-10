@@ -59,8 +59,8 @@ export function FinancesTab() {
 
   const { summary } = data
 
-  const formatBRL = (cents: number) =>
-    `R$ ${(cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+  const formatBRL = (value: number) =>
+    `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
 
   const metrics = [
     {

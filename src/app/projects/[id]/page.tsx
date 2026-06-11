@@ -374,7 +374,7 @@ export default function StudioPage() {
       </div>
 
       <StudioTimeline />
-      <StudioPreview />
+      <StudioPreview markerImageUrl={markerImageUrl} markerTargetUrl={markerTargetUrl} />
 
       <Dialog open={markerDialogOpen} onOpenChange={setMarkerDialogOpen}>
         <DialogContent>

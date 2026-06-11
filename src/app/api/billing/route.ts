@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getPaymentsByCustomer, getSubscriptionsByCustomer } from "@/lib/asaas"
+import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getTodayDate, getPayments, getPaymentsByCustomer, getSubscriptionsByCustomer } from "@/lib/asaas"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -159,6 +159,26 @@ export async function POST(request: Request) {
           } catch (e) {
             console.warn("[billing] Failed to cancel old ASAAS subscription:", currentSub.asaas_subscription_id, e)
           }
+
+          // Mark local pending payments from the cancelled subscription as CANCELLED
+          // to avoid showing duplicate pending invoices
+          try {
+            const oldPayments = await getPayments(currentSub.asaas_subscription_id)
+            const oldPaymentIds = oldPayments.map((p: any) => p.id)
+            if (oldPaymentIds.length > 0) {
+              const { error: updateErr } = await admin
+                .from("asaas_payments")
+                .update({ status: "CANCELLED" })
+                .in("asaas_payment_id", oldPaymentIds)
+              if (updateErr) {
+                console.warn("[billing] Failed to mark old payments as CANCELLED:", updateErr)
+              } else {
+                console.log("[billing] Marked", oldPaymentIds.length, "old payments as CANCELLED")
+              }
+            }
+          } catch (e) {
+            console.warn("[billing] Failed to fetch old payments for cancellation:", e)
+          }
         }
 
         // Also find and cancel any other active ASAAS subscriptions for this customer
@@ -184,12 +204,13 @@ export async function POST(request: Request) {
         const billingType = "CREDIT_CARD"
 
         // Create ASAAS checkout (subscription is created inline by ASAAS)
+        // Use today's date so the first charge is immediate (credit card will be processed on due date)
         const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
         const checkout = await createCheckout(
           asaasCustomerId,
           billingType,
           plan.price,
-          getNextDueDate(),
+          getTodayDate(),
           asaasCycle,
           `AR Business Studio - ${plan.name}`,
           callbackUrl,
@@ -373,7 +394,7 @@ export async function POST(request: Request) {
         asaasCustomerId,
         billingType,
         plan.price,
-        getNextDueDate(),
+        getTodayDate(),
         asaasCycle,
         `AR Business Studio - ${plan.name}`,
         callbackUrl,
@@ -465,20 +486,29 @@ export async function POST(request: Request) {
 
     try {
       const payments = await getPaymentsByCustomer(existingCustomer.asaas_customer_id)
-      const paidPayment = payments.find(
+
+      // Look first for RECEIVED/CONFIRMED, fall back to any payment with subscription
+      let foundPayment = payments.find(
         (p: any) => (p.status === "RECEIVED" || p.status === "CONFIRMED") && p.subscription
       )
+      if (!foundPayment) {
+        foundPayment = payments.find(
+          (p: any) => p.subscription
+        )
+      }
 
-      if (!paidPayment) {
-        console.log("[billing] checkout_success - no paid payment with subscription found")
+      if (!foundPayment) {
+        console.log("[billing] checkout_success - no payment with subscription found")
         return NextResponse.json({ success: true })
       }
 
+      const isPaid = foundPayment.status === "RECEIVED" || foundPayment.status === "CONFIRMED"
+
       // Save ASAAS subscription ID
-      if (paidPayment.subscription) {
+      if (foundPayment.subscription) {
         await admin
           .from("subscriptions")
-          .update({ asaas_subscription_id: paidPayment.subscription })
+          .update({ asaas_subscription_id: foundPayment.subscription })
           .eq("organization_id", orgId)
       }
 
@@ -486,7 +516,7 @@ export async function POST(request: Request) {
       const { data: existingPayment } = await admin
         .from("asaas_payments")
         .select("id")
-        .eq("asaas_payment_id", paidPayment.id)
+        .eq("asaas_payment_id", foundPayment.id)
         .single()
 
       if (!existingPayment) {
@@ -499,17 +529,24 @@ export async function POST(request: Request) {
         await admin.from("asaas_payments").insert({
           organization_id: orgId,
           subscription_id: localSub?.id || null,
-          asaas_payment_id: paidPayment.id,
-          status: paidPayment.status || "PENDING",
-          value: paidPayment.value || 0,
-          due_date: paidPayment.dueDate || new Date().toISOString().split("T")[0],
-          paid_date: paidPayment.paidDate || null,
-          invoice_url: paidPayment.invoiceUrl || null,
+          asaas_payment_id: foundPayment.id,
+          status: foundPayment.status || "PENDING",
+          value: foundPayment.value || 0,
+          due_date: foundPayment.dueDate || new Date().toISOString().split("T")[0],
+          paid_date: foundPayment.paidDate || null,
+          invoice_url: foundPayment.invoiceUrl || null,
         })
-        console.log("[billing] checkout_success - payment record created:", paidPayment.id)
+        console.log("[billing] checkout_success - payment record created:", foundPayment.id, "status:", foundPayment.status)
+      } else if (isPaid) {
+        // Update status if it was PENDING and is now paid
+        await admin
+          .from("asaas_payments")
+          .update({ status: foundPayment.status, paid_date: foundPayment.paidDate || null })
+          .eq("asaas_payment_id", foundPayment.id)
       }
 
-      // Extend subscription period
+      // Activate subscription even if payment is still PENDING (credit card processing)
+      // The webhook will confirm it later
       const { data: currentSub } = await admin
         .from("subscriptions")
         .select("current_period_end, status, plan_id")

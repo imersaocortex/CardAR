@@ -281,6 +281,11 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       }
     }
   }
+
+  if (payment.status === "CANCELLED" || payment.status === "REFUNDED") {
+    console.log("[webhook] Payment", payment.id, "status:", payment.status)
+    // Just update local record, no subscription action needed
+  }
 }
 
 async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClient>, subscription: any) {

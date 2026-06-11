@@ -246,6 +246,10 @@ export function getNextDueDate(): string {
   return d.toISOString().split("T")[0]
 }
 
+export function getTodayDate(): string {
+  return new Date().toISOString().split("T")[0]
+}
+
 export async function ensureAsaasKey(admin: any) {
   if (process.env.ASAAS_API_KEY) return
   const { data: settings } = await admin

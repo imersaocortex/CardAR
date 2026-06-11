@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="50%" stop-color="#16213e"/>
+      <stop offset="100%" stop-color="#0f3460"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(124,58,237,0.15)"/>
+      <stop offset="100%" stop-color="rgba(6,182,212,0.1)"/>
+    </linearGradient>
+    <linearGradient id="phone" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(124,58,237,0.3)"/>
+      <stop offset="100%" stop-color="rgba(6,182,212,0.1)"/>
+    </linearGradient>
+    <filter id="glowFilter">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="phoneClip">
+      <rect x="400" y="180" width="160" height="320" rx="24"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="url(#bg)"/>
+
+  <!-- Grid pattern -->
+  <g opacity="0.03">
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#7c3aed" stroke-width="0.5"/>
+    </pattern>
+    <rect width="1200" height="900" fill="url(#grid)"/>
+  </g>
+
+  <!-- Glow orbs -->
+  <circle cx="200" cy="300" r="200" fill="url(#glow)" opacity="0.4"/>
+  <circle cx="900" cy="600" r="250" fill="rgba(6,182,212,0.08)"/>
+  <circle cx="600" cy="150" r="150" fill="rgba(124,58,237,0.1)"/>
+
+  <!-- Floating shapes -->
+  <g opacity="0.15">
+    <rect x="100" y="200" width="60" height="60" rx="12" fill="none" stroke="#7c3aed" stroke-width="1" transform="rotate(15, 130, 230)"/>
+    <rect x="950" y="300" width="50" height="50" rx="10" fill="none" stroke="#06b6d4" stroke-width="1" transform="rotate(-10, 975, 325)"/>
+    <rect x="850" y="650" width="45" height="45" rx="8" fill="none" stroke="#7c3aed" stroke-width="1" transform="rotate(25, 872, 672)"/>
+  </g>
+
+  <!-- Main phone mockup -->
+  <g filter="url(#glowFilter)">
+    <!-- Phone body -->
+    <rect x="380" y="160" width="200" height="380" rx="32" fill="url(#card)" stroke="rgba(124,58,237,0.2)" stroke-width="1.5"/>
+    <!-- Phone screen -->
+    <rect x="395" y="180" width="170" height="340" rx="20" fill="#0a0a1a"/>
+    <!-- Status bar -->
+    <rect x="395" y="180" width="170" height="40" rx="20" fill="rgba(124,58,237,0.1)"/>
+    <!-- Camera notch -->
+    <rect x="465" y="168" width="30" height="6" rx="3" fill="#1a1a2e"/>
+    <!-- Screen content - mock AR view -->
+    <circle cx="480" cy="320" r="60" fill="none" stroke="rgba(6,182,212,0.3)" stroke-width="0.5"/>
+    <circle cx="480" cy="320" r="40" fill="none" stroke="rgba(124,58,237,0.2)" stroke-width="0.5"/>
+    <circle cx="480" cy="320" r="20" fill="rgba(124,58,237,0.15)"/>
+    <!-- 3D object placeholder in center -->
+    <polygon points="480,290 500,310 480,330 460,310" fill="rgba(6,182,212,0.4)" stroke="rgba(6,182,212,0.6)" stroke-width="1"/>
+    <polygon points="480,300 495,315 480,330 465,315" fill="rgba(124,58,237,0.3)" stroke="rgba(124,58,237,0.5)" stroke-width="0.5"/>
+    <!-- Bottom dots -->
+    <circle cx="460" cy="490" r="3" fill="rgba(124,58,237,0.5)"/>
+    <circle cx="480" cy="490" r="3" fill="rgba(6,182,212,0.5)"/>
+    <circle cx="500" cy="490" r="3" fill="rgba(124,58,237,0.3)"/>
+    <!-- Home indicator -->
+    <rect x="450" y="510" width="60" height="4" rx="2" fill="rgba(255,255,255,0.15)"/>
+  </g>
+
+  <!-- Floating AR badge -->
+  <rect x="610" y="220" width="130" height="36" rx="10" fill="rgba(18,18,26,0.8)" stroke="rgba(124,58,237,0.3)" stroke-width="1"/>
+  <circle cx="630" cy="238" r="6" fill="#7c3aed"/>
+  <circle cx="630" cy="238" r="2" fill="white"/>
+  <text x="642" y="242" font-family="system-ui, sans-serif" font-size="12" fill="rgba(255,255,255,0.8)">AR Experience</text>
+
+  <!-- Floating Live badge -->
+  <rect x="610" y="440" width="90" height="32" rx="10" fill="rgba(18,18,26,0.8)" stroke="rgba(6,182,212,0.3)" stroke-width="1"/>
+  <circle cx="630" cy="456" r="4" fill="#22c55e"/>
+  <text x="640" y="460" font-family="system-ui, sans-serif" font-size="11" fill="rgba(255,255,255,0.8)">Ao Vivo</text>
+
+  <!-- Floating stats card -->
+  <rect x="350" y="490" width="140" height="40" rx="12" fill="rgba(18,18,26,0.8)" stroke="rgba(124,58,237,0.2)" stroke-width="1"/>
+  <!-- Avatars -->
+  <circle cx="370" cy="510" r="12" fill="url(#phone)"/>
+  <circle cx="390" cy="510" r="12" fill="#7c3aed"/>
+  <circle cx="410" cy="510" r="12" fill="#06b6d4"/>
+  <text x="430" y="514" font-family="system-ui, sans-serif" font-size="10" fill="rgba(255,255,255,0.6)"><tspan font-weight="bold" fill="rgba(255,255,255,0.9)">+500</tspan> empresas</text>
+
+  <!-- Connection lines between phone and badges -->
+  <path d="M580 238 Q 590 238 610 238" fill="none" stroke="rgba(124,58,237,0.2)" stroke-width="1" stroke-dasharray="3,3"/>
+  <path d="M580 456 Q 590 456 610 456" fill="none" stroke="rgba(6,182,212,0.2)" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Data visualization elements on the right -->
+  <g opacity="0.1">
+    <rect x="700" y="300" width="200" height="4" rx="2" fill="#7c3aed"/>
+    <rect x="720" y="320" width="160" height="4" rx="2" fill="#06b6d4"/>
+    <rect x="710" y="340" width="180" height="4" rx="2" fill="#7c3aed"/>
+    <rect x="730" y="360" width="140" height="4" rx="2" fill="#06b6d4"/>
+  </g>
+
+  <!-- Small decorative elements -->
+  <g opacity="0.08">
+    <circle cx="200" cy="650" r="4" fill="#7c3aed"/>
+    <circle cx="220" cy="660" r="3" fill="#06b6d4"/>
+    <circle cx="210" cy="670" r="5" fill="#7c3aed"/>
+    <circle cx="230" cy="680" r="2" fill="#06b6d4"/>
+  </g>
+
+  <!-- Bottom gradient overlay -->
+  <rect x="0" y="750" width="1200" height="150" fill="url(#bg)" opacity="0.8"/>
+  <rect x="0" y="800" width="1200" height="100" fill="#1a1a2e"/>
+</svg>

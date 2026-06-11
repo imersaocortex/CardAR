@@ -299,25 +299,9 @@ export function HeroSection() {
                   {/* Image */}
                   <div className="relative aspect-[4/3] bg-gradient-to-br from-muted to-muted/50 overflow-hidden">
                     <img
-                      src="/image-hero.png"
+                      src="/image-hero.svg"
                       alt="AR Business Studio Platform"
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        const t = e.target as HTMLImageElement
-                        t.style.display = "none"
-                        const parent = t.parentElement
-                        if (parent) {
-                          parent.classList.add("flex", "items-center", "justify-center")
-                          const placeholder = document.createElement("div")
-                          placeholder.className = "text-center p-8"
-                          placeholder.innerHTML = `
-                            <div class="text-6xl mb-4">🚀</div>
-                            <p class="text-lg font-medium text-muted-foreground">image-hero.png</p>
-                            <p class="text-sm text-muted-foreground/60 mt-1">Adicione sua imagem em /public/image-hero.png</p>
-                          `
-                          parent.appendChild(placeholder)
-                        }
-                      }}
                     />
 
                     {/* Overlay gradient */}

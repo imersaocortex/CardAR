@@ -93,34 +93,20 @@ function FloatingOrbs() {
     <>
       <motion.div
         className="absolute top-20 left-[10%] w-72 h-72 rounded-full opacity-20"
-        style={{
-          background: "radial-gradient(circle, rgba(139,92,246,0.3) 0%, transparent 70%)",
-        }}
-        animate={{
-          y: [0, -30, 0],
-          scale: [1, 1.1, 1],
-        }}
+        style={{ background: "radial-gradient(circle, rgba(139,92,246,0.3) 0%, transparent 70%)" }}
+        animate={{ y: [0, -30, 0], scale: [1, 1.1, 1] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
         className="absolute bottom-40 right-[10%] w-96 h-96 rounded-full opacity-20"
-        style={{
-          background: "radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)",
-        }}
-        animate={{
-          y: [0, 40, 0],
-          scale: [1, 1.15, 1],
-        }}
+        style={{ background: "radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)" }}
+        animate={{ y: [0, 40, 0], scale: [1, 1.15, 1] }}
         transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full opacity-10"
-        style={{
-          background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 60%)",
-        }}
-        animate={{
-          scale: [1, 1.2, 1],
-        }}
+        style={{ background: "radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 60%)" }}
+        animate={{ scale: [1, 1.2, 1] }}
         transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
       />
     </>
@@ -141,15 +127,10 @@ function FloatingShapes() {
           key={i}
           className="absolute hidden lg:flex items-center justify-center w-16 h-16 rounded-2xl border border-border/40 backdrop-blur-xl bg-background/30"
           style={{ left: s.x, top: s.y }}
-          animate={{
-            y: [0, -20, 0],
-            rotate: [0, 5, -5, 0],
-          }}
+          animate={{ y: [0, -20, 0], rotate: [0, 5, -5, 0] }}
           transition={{ duration: 6, delay: s.delay, repeat: Infinity, ease: "easeInOut" }}
         >
-          <div className={`rounded-xl p-2 bg-gradient-to-br ${s.color}`}>
-            {s.icon}
-          </div>
+          <div className={`rounded-xl p-2 bg-gradient-to-br ${s.color}`}>{s.icon}</div>
         </motion.div>
       ))}
     </>
@@ -162,10 +143,7 @@ export function HeroSection() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [isHovering, setIsHovering] = useState(false)
 
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end start"],
-  })
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end start"] })
 
   const imageY = useTransform(scrollYProgress, [0, 1], [0, 150])
   const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0])
@@ -180,10 +158,7 @@ export function HeroSection() {
   }
 
   return (
-    <section
-      ref={sectionRef}
-      className="relative min-h-screen flex items-center overflow-hidden bg-grid"
-    >
+    <section ref={sectionRef} className="relative min-h-screen flex items-center overflow-hidden bg-grid">
       <ParticleNetwork />
       <FloatingOrbs />
       <FloatingShapes />
@@ -268,7 +243,7 @@ export function HeroSection() {
               </motion.div>
             </motion.div>
 
-            {/* Right - 3D Image Mockup */}
+            {/* Right - Hero Image */}
             <motion.div
               initial={{ opacity: 0, x: 60 }}
               animate={{ opacity: 1, x: 0 }}
@@ -283,127 +258,29 @@ export function HeroSection() {
                 onMouseLeave={() => { setIsHovering(false); setMousePos({ x: 0, y: 0 }) }}
                 className="relative perspective-[1000px]"
               >
-                {/* Glow behind image */}
                 <div className="absolute -inset-10 bg-gradient-to-br from-primary/20 via-secondary/10 to-cyan-500/20 rounded-[40px] blur-3xl opacity-60 animate-pulse-slow" />
 
-                {/* 3D Card */}
                 <motion.div
-                  className="relative rounded-2xl overflow-hidden border border-border/40 shadow-2xl"
                   animate={{
-                    rotateX: isHovering ? mousePos.y * -20 : 0,
-                    rotateY: isHovering ? mousePos.x * 20 : 0,
+                    rotateX: isHovering ? mousePos.y * -15 : 0,
+                    rotateY: isHovering ? mousePos.x * 15 : 0,
                   }}
                   transition={{ type: "spring", stiffness: 150, damping: 20 }}
                   style={{ transformStyle: "preserve-3d" }}
                 >
-                  {/* Phone Mockup */}
-                  <div className="relative aspect-[4/3] bg-gradient-to-br from-[#0a0a1a] to-[#1a0a2e] overflow-hidden flex items-center justify-center">
-                    {/* Grid dots */}
-                    <div
-                      className="absolute inset-0 opacity-[0.04]"
-                      style={{
-                        backgroundImage: "radial-gradient(circle, #7c3aed 1px, transparent 1px)",
-                        backgroundSize: "40px 40px",
-                      }}
-                    />
-
-                    {/* Background glow */}
-                    <div className="absolute w-3/4 h-3/4 rounded-full bg-primary/5 blur-[80px]" />
-                    <div className="absolute top-10 left-10 w-40 h-40 rounded-full bg-cyan-500/5 blur-[60px]" />
-                    <div className="absolute bottom-10 right-10 w-48 h-48 rounded-full bg-primary/5 blur-[60px]" />
-
-                    {/* Phone frame */}
-                    <div
-                      className="relative z-10 flex flex-col items-center"
-                      style={{ transformStyle: "preserve-3d" }}
-                    >
-                      <motion.div
-                        className="w-[170px] rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/[0.08] to-cyan-500/[0.06] p-[6px]"
-                        animate={{
-                          y: isHovering ? mousePos.y * -8 : 0,
-                          x: isHovering ? mousePos.x * 8 : 0,
-                        }}
-                        style={{ transformStyle: "preserve-3d", transform: "translateZ(40px)" }}
-                      >
-                        {/* Screen */}
-                        <div className="rounded-[22px] bg-[#0a0a1a] overflow-hidden relative">
-                          <img
-                            src="/image-hero.png"
-                            alt="AR Business Studio"
-                            className="w-full h-full object-cover"
-                          />
-                          {/* Status bar overlay */}
-                          <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/40 to-transparent" />
-                          {/* Home indicator overlay */}
-                          <div className="absolute bottom-0 inset-x-0 flex justify-center pb-1.5">
-                            <div className="w-10 h-[3px] rounded-full bg-white/30" />
-                          </div>
-                        </div>
-                      </motion.div>
-
-                      {/* Floating badge: AR Experience */}
-                      <motion.div
-                        className="absolute -right-16 top-6 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-md border border-primary/30 text-[10px] font-medium"
-                        animate={{
-                          y: isHovering ? mousePos.y * -6 : 0,
-                          x: isHovering ? mousePos.x * 6 : 0,
-                        }}
-                        style={{ transformStyle: "preserve-3d", transform: "translateZ(60px)" }}
-                      >
-                        <Smartphone className="h-3 w-3 text-primary" />
-                        AR Experience
-                      </motion.div>
-
-                      {/* Floating badge: Ao Vivo */}
-                      <motion.div
-                        className="absolute -right-12 bottom-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-md border border-cyan-500/20 text-[10px] font-medium"
-                        animate={{
-                          y: isHovering ? mousePos.y * -4 : 0,
-                          x: isHovering ? mousePos.x * 4 : 0,
-                        }}
-                        style={{ transformStyle: "preserve-3d", transform: "translateZ(50px)" }}
-                      >
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                        Ao Vivo
-                      </motion.div>
-
-                      {/* Floating stats card */}
-                      <motion.div
-                        className="absolute -left-20 bottom-32 flex items-center gap-2 px-3 py-2 rounded-xl bg-background/80 backdrop-blur-md border border-border/30"
-                        animate={{
-                          y: isHovering ? mousePos.y * -5 : 0,
-                          x: isHovering ? mousePos.x * 5 : 0,
-                        }}
-                        style={{ transformStyle: "preserve-3d", transform: "translateZ(45px)" }}
-                      >
-                        <div className="flex -space-x-1.5">
-                          {[1, 2, 3].map((i) => (
-                            <div
-                              key={i}
-                              className="w-5 h-5 rounded-full border-2 border-background bg-gradient-to-br from-primary to-secondary"
-                            />
-                          ))}
-                        </div>
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          <strong className="text-foreground">+500</strong> empresas
-                        </span>
-                      </motion.div>
-                    </div>
-                  </div>
+                  <img
+                    src="/image-hero.png"
+                    alt="AR Business Studio"
+                    className="w-full h-auto rounded-xl shadow-2xl"
+                    style={{ transform: "translateZ(20px)" }}
+                  />
                 </motion.div>
-
-                {/* Bottom reflection/glare */}
-                <div
-                  className="absolute bottom-0 left-[10%] right-[10%] h-20 bg-gradient-to-r from-transparent via-primary/5 to-transparent blur-xl rounded-full"
-                  style={{ transform: "translateY(50%)" }}
-                />
               </div>
             </motion.div>
           </div>
         </div>
       </motion.div>
 
-      {/* Scroll indicator */}
       <motion.div
         className="absolute bottom-8 left-1/2 -translate-x-1/2"
         animate={{ y: [0, 8, 0] }}

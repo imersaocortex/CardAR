@@ -288,7 +288,7 @@ export function HeroSection() {
 
                 {/* 3D Card */}
                 <motion.div
-                  className="relative rounded-2xl overflow-hidden border border-border/40 shadow-2xl bg-background/50 backdrop-blur-sm"
+                  className="relative rounded-2xl overflow-hidden border border-border/40 shadow-2xl"
                   animate={{
                     rotateX: isHovering ? mousePos.y * -20 : 0,
                     rotateY: isHovering ? mousePos.x * 20 : 0,
@@ -296,63 +296,120 @@ export function HeroSection() {
                   transition={{ type: "spring", stiffness: 150, damping: 20 }}
                   style={{ transformStyle: "preserve-3d" }}
                 >
-                  {/* Image */}
-                  <div className="relative aspect-[4/3] bg-gradient-to-br from-muted to-muted/50 overflow-hidden">
-                    <img
-                      src="/image-hero.svg"
-                      alt="AR Business Studio Platform"
-                      className="w-full h-full object-cover"
+                  {/* Phone Mockup */}
+                  <div className="relative aspect-[4/3] bg-gradient-to-br from-[#0a0a1a] to-[#1a0a2e] overflow-hidden flex items-center justify-center">
+                    {/* Grid dots */}
+                    <div
+                      className="absolute inset-0 opacity-[0.04]"
+                      style={{
+                        backgroundImage: "radial-gradient(circle, #7c3aed 1px, transparent 1px)",
+                        backgroundSize: "40px 40px",
+                      }}
                     />
 
-                    {/* Overlay gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-background/40 via-transparent to-transparent" />
+                    {/* Background glow */}
+                    <div className="absolute w-3/4 h-3/4 rounded-full bg-primary/5 blur-[80px]" />
+                    <div className="absolute top-10 left-10 w-40 h-40 rounded-full bg-cyan-500/5 blur-[60px]" />
+                    <div className="absolute bottom-10 right-10 w-48 h-48 rounded-full bg-primary/5 blur-[60px]" />
 
-                    {/* Floating UI elements on the image */}
-                    <motion.div
-                      className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/70 backdrop-blur-md border border-border/30 text-xs font-medium"
-                      animate={{
-                        y: isHovering ? mousePos.y * -5 : 0,
-                        x: isHovering ? mousePos.x * 5 : 0,
-                      }}
-                      style={{ transformStyle: "preserve-3d", transform: "translateZ(30px)" }}
+                    {/* Phone frame */}
+                    <div
+                      className="relative z-10 flex flex-col items-center"
+                      style={{ transformStyle: "preserve-3d" }}
                     >
-                      <Smartphone className="h-3.5 w-3.5 text-primary" />
-                      AR Experience
-                    </motion.div>
+                      <motion.div
+                        className="w-[170px] rounded-[28px] border border-primary/20 bg-gradient-to-br from-primary/[0.08] to-cyan-500/[0.06] p-[6px]"
+                        animate={{
+                          y: isHovering ? mousePos.y * -8 : 0,
+                          x: isHovering ? mousePos.x * 8 : 0,
+                        }}
+                        style={{ transformStyle: "preserve-3d", transform: "translateZ(40px)" }}
+                      >
+                        {/* Screen */}
+                        <div className="rounded-[22px] bg-[#0a0a1a] overflow-hidden">
+                          {/* Status bar */}
+                          <div className="h-7 bg-primary/[0.06] flex items-center justify-center relative">
+                            {/* Camera notch */}
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-[3px] rounded-b bg-[#1a1a2e]" />
+                          </div>
 
-                    <motion.div
-                      className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-background/70 backdrop-blur-md border border-border/30 text-xs font-medium"
-                      animate={{
-                        y: isHovering ? mousePos.y * -5 : 0,
-                        x: isHovering ? mousePos.x * 5 : 0,
-                      }}
-                      style={{ transformStyle: "preserve-3d", transform: "translateZ(20px)" }}
-                    >
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      Ao Vivo
-                    </motion.div>
+                          {/* AR Content */}
+                          <div className="px-4 py-8 flex flex-col items-center gap-3">
+                            {/* Target circles */}
+                            <div className="relative w-24 h-24 flex items-center justify-center">
+                              <div className="absolute inset-0 rounded-full border border-cyan-500/20" />
+                              <div className="absolute inset-2 rounded-full border border-primary/20" />
+                              <div className="absolute inset-4 rounded-full bg-primary/10" />
+                              {/* 3D diamond shape */}
+                              <svg width="28" height="28" viewBox="0 0 28 28" className="relative">
+                                <polygon points="14,4 24,14 14,24 4,14" fill="rgba(6,182,212,0.3)" stroke="rgba(6,182,212,0.5)" strokeWidth="1" />
+                                <polygon points="14,8 20,14 14,20 8,14" fill="rgba(124,58,237,0.2)" stroke="rgba(124,58,237,0.4)" strokeWidth="0.5" />
+                              </svg>
+                            </div>
 
-                    {/* Stats overlay */}
-                    <motion.div
-                      className="absolute bottom-4 left-4 flex items-center gap-3 px-4 py-2 rounded-xl bg-background/70 backdrop-blur-md border border-border/30"
-                      animate={{
-                        y: isHovering ? mousePos.y * -3 : 0,
-                        x: isHovering ? mousePos.x * 3 : 0,
-                      }}
-                      style={{ transformStyle: "preserve-3d", transform: "translateZ(15px)" }}
-                    >
-                      <div className="flex -space-x-2">
-                        {[1, 2, 3].map((i) => (
-                          <div
-                            key={i}
-                            className="w-6 h-6 rounded-full border-2 border-background bg-gradient-to-br from-primary to-secondary"
-                          />
-                        ))}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        <strong className="text-foreground">+500</strong> empresas
-                      </span>
-                    </motion.div>
+                            {/* Bottom dots */}
+                            <div className="flex gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/60" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+                            </div>
+                          </div>
+
+                          {/* Home indicator */}
+                          <div className="flex justify-center pb-2">
+                            <div className="w-10 h-[3px] rounded-full bg-white/15" />
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Floating badge: AR Experience */}
+                      <motion.div
+                        className="absolute -right-16 top-6 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-md border border-primary/30 text-[10px] font-medium"
+                        animate={{
+                          y: isHovering ? mousePos.y * -6 : 0,
+                          x: isHovering ? mousePos.x * 6 : 0,
+                        }}
+                        style={{ transformStyle: "preserve-3d", transform: "translateZ(60px)" }}
+                      >
+                        <Smartphone className="h-3 w-3 text-primary" />
+                        AR Experience
+                      </motion.div>
+
+                      {/* Floating badge: Ao Vivo */}
+                      <motion.div
+                        className="absolute -right-12 bottom-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-md border border-cyan-500/20 text-[10px] font-medium"
+                        animate={{
+                          y: isHovering ? mousePos.y * -4 : 0,
+                          x: isHovering ? mousePos.x * 4 : 0,
+                        }}
+                        style={{ transformStyle: "preserve-3d", transform: "translateZ(50px)" }}
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        Ao Vivo
+                      </motion.div>
+
+                      {/* Floating stats card */}
+                      <motion.div
+                        className="absolute -left-20 bottom-32 flex items-center gap-2 px-3 py-2 rounded-xl bg-background/80 backdrop-blur-md border border-border/30"
+                        animate={{
+                          y: isHovering ? mousePos.y * -5 : 0,
+                          x: isHovering ? mousePos.x * 5 : 0,
+                        }}
+                        style={{ transformStyle: "preserve-3d", transform: "translateZ(45px)" }}
+                      >
+                        <div className="flex -space-x-1.5">
+                          {[1, 2, 3].map((i) => (
+                            <div
+                              key={i}
+                              className="w-5 h-5 rounded-full border-2 border-background bg-gradient-to-br from-primary to-secondary"
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          <strong className="text-foreground">+500</strong> empresas
+                        </span>
+                      </motion.div>
+                    </div>
                   </div>
                 </motion.div>
 

@@ -142,6 +142,16 @@ export function HeroSection() {
   const imageRef = useRef<HTMLDivElement>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [isHovering, setIsHovering] = useState(false)
+  const [siteName, setSiteName] = useState("AR Business Studio")
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.branding?.site_name) setSiteName(data.branding.site_name)
+      })
+      .catch(() => {})
+  }, [])
 
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end start"] })
 
@@ -270,7 +280,7 @@ export function HeroSection() {
                 >
                   <img
                     src="/image-hero.png"
-                    alt="AR Business Studio"
+                    alt={siteName}
                     className="w-full h-auto rounded-xl shadow-2xl"
                     style={{ transform: "translateZ(20px)" }}
                   />

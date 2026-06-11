@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { useState, useEffect } from "react"
 import { X, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -17,6 +18,17 @@ const comparisons = [
 ]
 
 export function ComparisonSection() {
+  const [siteName, setSiteName] = useState("AR Business Studio")
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.branding?.site_name) setSiteName(data.branding.site_name)
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <section className="relative py-24 px-4">
       <div className="mx-auto max-w-4xl">
@@ -28,7 +40,7 @@ export function ComparisonSection() {
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             Material impresso vs{" "}
-            <span className="text-gradient">AR Business</span>
+            <span className="text-gradient">{siteName}</span>
           </h2>
           <p className="text-muted-foreground">
             Veja a diferença entre um material tradicional e um material com realidade aumentada.
@@ -44,7 +56,7 @@ export function ComparisonSection() {
           <div className="grid grid-cols-3 border-b border-border">
             <div className="p-4 font-semibold text-sm">Recurso</div>
             <div className="p-4 font-semibold text-sm text-center text-muted-foreground">Tradicional</div>
-            <div className="p-4 font-semibold text-sm text-center text-gradient">AR Business</div>
+            <div className="p-4 font-semibold text-sm text-center text-gradient">{siteName}</div>
           </div>
           {comparisons.map((item, i) => (
             <div

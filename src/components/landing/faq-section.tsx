@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 import { faqItems } from "@/lib/mock-data"
@@ -8,6 +8,16 @@ import { cn } from "@/lib/utils"
 
 export function FaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
+  const [siteName, setSiteName] = useState("AR Business Studio")
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.branding?.site_name) setSiteName(data.branding.site_name)
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <section id="faq" className="relative py-24 px-4 bg-muted/30">
@@ -23,7 +33,7 @@ export function FaqSection() {
             <span className="text-gradient">Frequentes</span>
           </h2>
           <p className="text-muted-foreground">
-            Tire suas dúvidas sobre o AR Business Studio.
+            Tire suas dúvidas sobre o {siteName}.
           </p>
         </motion.div>
 

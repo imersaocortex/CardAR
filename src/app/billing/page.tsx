@@ -154,11 +154,8 @@ export default function BillingPage() {
         toast({ title: data.error, variant: "destructive" })
       } else {
         if (data.checkout_url) {
-          if (data.checkout_url.startsWith("/")) {
-            window.location.href = data.checkout_url
-            return
-          }
-          window.open(data.checkout_url, "_blank")
+          window.location.href = data.checkout_url
+          return
         }
         toast({ title: "Checkout criado! Finalize o pagamento." })
         loadData()
@@ -183,11 +180,8 @@ export default function BillingPage() {
         toast({ title: data.error, variant: "destructive" })
       } else {
         if (data.checkout_url) {
-          if (data.checkout_url.startsWith("/")) {
-            window.location.href = data.checkout_url
-            return
-          }
-          window.open(data.checkout_url, "_blank")
+          window.location.href = data.checkout_url
+          return
         }
         toast({ title: "Assinatura realizada com sucesso!" })
         loadData()

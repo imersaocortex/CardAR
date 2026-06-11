@@ -224,21 +224,16 @@ export async function POST(request: Request) {
           console.log("[billing] Saving ASAAS subscription ID from checkout:", asaasSubId)
         }
 
-        // Update local subscription
-        const subUpdate: Record<string, any> = {
-          plan_id: plan.id,
-          status: "active",
-          trial_ends_at: null,
-        }
+        // Update local subscription: save ASAAS sub ID but keep current plan/status
+        // Plan/status will be updated on checkout_success or webhook after payment
         if (asaasSubId) {
-          subUpdate.asaas_subscription_id = asaasSubId
+          await admin
+            .from("subscriptions")
+            .update({ asaas_subscription_id: asaasSubId })
+            .eq("organization_id", orgId)
         }
-        await admin
-          .from("subscriptions")
-          .update(subUpdate)
-          .eq("organization_id", orgId)
 
-        // Save checkout info
+        // Save checkout info with the target plan_id for later activation
         await admin.from("asaas_checkouts").insert({
           organization_id: orgId,
           plan_id: plan.id,
@@ -247,14 +242,7 @@ export async function POST(request: Request) {
           status: "pending",
         })
 
-        // Update usage limits
-        await admin
-          .from("usage_limits")
-          .update({
-            projects_limit: plan.projects_limit,
-            assets_limit_bytes: plan.assets_limit_bytes,
-          })
-          .eq("organization_id", orgId)
+        // Do NOT update usage_limits yet — wait for payment confirmation
 
         return NextResponse.json({ success: true, checkout_url: checkout.url })
 
@@ -539,18 +527,62 @@ export async function POST(request: Request) {
         })
         console.log("[billing] checkout_success - payment record created:", foundPayment.id, "status:", foundPayment.status)
       } else if (isPaid) {
-        // Update status if it was PENDING and is now paid
         await admin
           .from("asaas_payments")
           .update({ status: foundPayment.status, paid_date: foundPayment.paidDate || null })
           .eq("asaas_payment_id", foundPayment.id)
       }
 
-      // Activate subscription even if payment is still PENDING (credit card processing)
-      // The webhook will confirm it later
+      // Find the target plan from the pending checkout (set during upgrade)
+      // Fall back to matching by payment value
+      let targetPlanId: string | null = null
+      let targetPlanName = ""
+
+      // Look for the most recent pending checkout for this org
+      const { data: pendingCheckout } = await admin
+        .from("asaas_checkouts")
+        .select("plan_id")
+        .eq("organization_id", orgId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (pendingCheckout?.plan_id) {
+        targetPlanId = pendingCheckout.plan_id
+        const { data: plan } = await admin
+          .from("plans")
+          .select("name, projects_limit, assets_limit_bytes")
+          .eq("id", targetPlanId)
+          .single()
+        if (plan) {
+          targetPlanName = plan.name
+          // Update plan_id and usage_limits to the new plan
+          await admin
+            .from("subscriptions")
+            .update({ plan_id: targetPlanId })
+            .eq("organization_id", orgId)
+
+          await admin
+            .from("usage_limits")
+            .update({
+              projects_limit: plan.projects_limit,
+              assets_limit_bytes: plan.assets_limit_bytes,
+            })
+            .eq("organization_id", orgId)
+        }
+        // Mark checkout as completed
+        await admin
+          .from("asaas_checkouts")
+          .update({ status: "completed" })
+          .eq("organization_id", orgId)
+          .eq("status", "pending")
+      }
+
+      // Activate subscription
       const { data: currentSub } = await admin
         .from("subscriptions")
-        .select("current_period_end, status, plan_id")
+        .select("current_period_end, status")
         .eq("organization_id", orgId)
         .single()
 
@@ -566,43 +598,21 @@ export async function POST(request: Request) {
           .eq("organization_id", orgId)
 
         if (currentSub.status === "pending") {
-          const { data: plan } = await admin
-            .from("plans")
-            .select("projects_limit, assets_limit_bytes")
-            .eq("id", currentSub.plan_id)
-            .single()
-
-          if (plan) {
-            await admin
-              .from("usage_limits")
-              .update({
-                projects_limit: plan.projects_limit,
-                assets_limit_bytes: plan.assets_limit_bytes,
-              })
-              .eq("organization_id", orgId)
-          }
-
           await admin.rpc("unsuspend_org_projects", {
             p_organization_id: orgId,
           })
         }
       }
 
-      // Send WhatsApp notification if payment was received/confirmed
-      if (isPaid && currentSub) {
-        const { data: plan } = await admin
-          .from("plans")
-          .select("name")
-          .eq("id", currentSub.plan_id)
-          .single()
+      // Send WhatsApp notification
+      const notificationPlanName = targetPlanName || (foundPayment.value?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })) || ""
 
-        if (plan) {
-          sendPaymentSuccessNotification(
-            orgId,
-            plan.name,
-            foundPayment.value || 0,
-          ).catch((e: any) => console.warn("[billing] Failed to send payment notification:", e))
-        }
+      if (notificationPlanName) {
+        sendPaymentSuccessNotification(
+          orgId,
+          notificationPlanName,
+          foundPayment.value || 0,
+        ).catch((e: any) => console.warn("[billing] Failed to send payment notification:", e))
       }
 
       return NextResponse.json({ success: true })

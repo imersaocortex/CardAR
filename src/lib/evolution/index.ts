@@ -3,6 +3,7 @@ interface EvolutionConfig {
   api_key: string
   instance_name: string
   enabled: boolean
+  site_name: string
 }
 
 interface EvolutionMessage {
@@ -17,7 +18,7 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
     const admin = createAdminClient()
     const { data, error } = await admin
       .from("system_settings")
-      .select("evolution")
+      .select("evolution, branding")
       .eq("id", 1)
       .single()
 
@@ -32,6 +33,7 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
     }
 
     const config = data.evolution as Record<string, any>
+    const branding = data.branding as Record<string, any> | undefined
 
     if (!config.enabled) {
       console.warn("[Evolution] Evolution API está desabilitada nas configurações")
@@ -53,13 +55,15 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
       return null
     }
 
-    console.log("[Evolution] Config carregada:", { server_url: config.server_url, instance_name: config.instance_name, enabled: config.enabled })
+    const site_name = branding?.site_name || "AR Business Studio"
+    console.log("[Evolution] Config carregada:", { server_url: config.server_url, instance_name: config.instance_name, enabled: config.enabled, site_name })
 
     return {
       server_url: config.server_url.replace(/\/+$/, ""),
       api_key: config.api_key,
       instance_name: config.instance_name,
       enabled: true,
+      site_name,
     }
   } catch (err) {
     console.error("[Evolution] Erro ao carregar config:", err)
@@ -150,10 +154,10 @@ export async function sendPaymentSuccessNotification(
   if (!phone) return false
 
   const formattedValue = value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const text = `✅ *Pagamento Confirmado - AR Business Studio*\n\n` +
+  const text = `✅ *Pagamento Confirmado - ${config.site_name}*\n\n` +
     `Olá! Recebemos o pagamento do plano *${planName}* no valor de *R$ ${formattedValue}*.\n\n` +
     `Sua assinatura está ativa e todos os recursos já estão liberados.\n\n` +
-    `Obrigado por escolher a AR Business Studio! 🚀`
+    `Obrigado por escolher a ${config.site_name}! 🚀`
 
   return sendMessage(config, phone, text)
 }
@@ -170,7 +174,7 @@ export async function sendOverdueNotification(
   if (!phone) return false
 
   const formattedDate = new Date(dueDate).toLocaleDateString("pt-BR")
-  const text = `⚠️ *Fatura Vencida - AR Business Studio*\n\n` +
+  const text = `⚠️ *Fatura Vencida - ${config.site_name}*\n\n` +
     `Olá! A fatura do plano *${planName}* com vencimento em *${formattedDate}* está vencida.\n\n` +
     `Seus projetos foram temporariamente desabilitados até a regularização.\n\n` +
     `Acesse o painel e efetue o pagamento para reativar seus projetos.`
@@ -188,7 +192,7 @@ export async function sendSystemWarningNotification(
   const phone = await getOrgPhone(organizationId)
   if (!phone) return false
 
-  const text = `🔔 *Aviso Importante - AR Business Studio*\n\n${message}`
+  const text = `🔔 *Aviso Importante - ${config.site_name}*\n\n${message}`
 
   return sendMessage(config, phone, text)
 }
@@ -207,11 +211,11 @@ export async function sendUpcomingPaymentNotification(
 
   const formattedDate = new Date(dueDate).toLocaleDateString("pt-BR")
   const formattedValue = value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const text = `🔔 *Lembrete de Cobrança - AR Business Studio*\n\n` +
+  const text = `🔔 *Lembrete de Cobrança - ${config.site_name}*\n\n` +
     `Olá! Sua fatura do plano *${planName}* no valor de *R$ ${formattedValue}* ` +
     `vence no dia *${formattedDate}*.\n\n` +
     `Mantenha seu plano ativo para continuar usando todos os recursos.\n\n` +
-    `Para mais detalhes, acesse o painel da AR Business Studio.`
+    `Para mais detalhes, acesse o painel da ${config.site_name}.`
 
   return sendMessage(config, phone, text)
 }

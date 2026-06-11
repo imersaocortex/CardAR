@@ -409,7 +409,7 @@ export default function BillingPage() {
                     onClick={() => handleUpgrade(plan.id)}
                     disabled={upgrading === plan.id}
                   >
-                    {upgrading === plan.id ? "Processando..." : plan.slug === "starter" ? "Plano Gratuito" : "Assinar Agora"}
+                    {upgrading === plan.id ? "Processando..." : "Assinar Agora"}
                     {upgrading !== plan.id && <ArrowRight className="h-4 w-4 ml-2" />}
                   </Button>
                 )}

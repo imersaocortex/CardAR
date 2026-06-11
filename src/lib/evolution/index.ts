@@ -67,9 +67,19 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
   }
 }
 
+function normalizePhone(number: string): string {
+  const digits = number.replace(/\D/g, "")
+  if (digits.length < 10) return digits
+  // If number has 10-11 digits (Brazilian mobile/landline without country code), add 55
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith("55")) {
+    return "55" + digits
+  }
+  return digits
+}
+
 async function sendMessage(config: EvolutionConfig, number: string, text: string): Promise<boolean> {
   try {
-    const formattedNumber = number.replace(/\D/g, "")
+    const formattedNumber = normalizePhone(number)
     if (formattedNumber.length < 10) return false
 
     const response = await fetch(

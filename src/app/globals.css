@@ -95,6 +95,16 @@
       linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
     background-size: 60px 60px;
   }
+  .perspective-\[1000px\] {
+    perspective: 1000px;
+  }
+  .animate-pulse-slow {
+    animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.3; }
+  }
 }
 
 /* Animation keyframes for shadcn/ui */

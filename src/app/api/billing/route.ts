@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getTodayDate, getPayments, getPaymentsByCustomer, getSubscriptionsByCustomer } from "@/lib/asaas"
+import { sendPaymentSuccessNotification } from "@/lib/evolution"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -584,6 +585,23 @@ export async function POST(request: Request) {
           await admin.rpc("unsuspend_org_projects", {
             p_organization_id: orgId,
           })
+        }
+      }
+
+      // Send WhatsApp notification if payment was received/confirmed
+      if (isPaid && currentSub) {
+        const { data: plan } = await admin
+          .from("plans")
+          .select("name")
+          .eq("id", currentSub.plan_id)
+          .single()
+
+        if (plan) {
+          sendPaymentSuccessNotification(
+            orgId,
+            plan.name,
+            foundPayment.value || 0,
+          ).catch((e: any) => console.warn("[billing] Failed to send payment notification:", e))
         }
       }
 

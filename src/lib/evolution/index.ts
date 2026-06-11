@@ -15,18 +15,45 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
   try {
     const { createAdminClient } = await import("@/lib/supabase/admin")
     const admin = createAdminClient()
-    const { data } = await admin
+    const { data, error } = await admin
       .from("system_settings")
       .select("evolution")
       .eq("id", 1)
       .single()
 
-    if (!data?.evolution) return null
-
-    const config = data.evolution as Record<string, any>
-    if (!config.enabled || !config.server_url || !config.api_key || !config.instance_name) {
+    if (error) {
+      console.error("[Evolution] Erro ao buscar config:", error.message)
       return null
     }
+
+    if (!data?.evolution) {
+      console.warn("[Evolution] Nenhuma config encontrada em system_settings")
+      return null
+    }
+
+    const config = data.evolution as Record<string, any>
+
+    if (!config.enabled) {
+      console.warn("[Evolution] Evolution API está desabilitada nas configurações")
+      return null
+    }
+
+    if (!config.server_url) {
+      console.warn("[Evolution] server_url não configurado")
+      return null
+    }
+
+    if (!config.api_key) {
+      console.warn("[Evolution] api_key não configurada")
+      return null
+    }
+
+    if (!config.instance_name) {
+      console.warn("[Evolution] instance_name não configurado")
+      return null
+    }
+
+    console.log("[Evolution] Config carregada:", { server_url: config.server_url, instance_name: config.instance_name, enabled: config.enabled })
 
     return {
       server_url: config.server_url.replace(/\/+$/, ""),
@@ -34,7 +61,8 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
       instance_name: config.instance_name,
       enabled: true,
     }
-  } catch {
+  } catch (err) {
+    console.error("[Evolution] Erro ao carregar config:", err)
     return null
   }
 }
@@ -111,8 +139,9 @@ export async function sendPaymentSuccessNotification(
   const phone = await getOrgPhone(organizationId)
   if (!phone) return false
 
+  const formattedValue = value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const text = `✅ *Pagamento Confirmado - AR Business Studio*\n\n` +
-    `Olá! Recebemos o pagamento do plano *${planName}* no valor de *R$ ${(value / 100).toFixed(2)}*.\n\n` +
+    `Olá! Recebemos o pagamento do plano *${planName}* no valor de *R$ ${formattedValue}*.\n\n` +
     `Sua assinatura está ativa e todos os recursos já estão liberados.\n\n` +
     `Obrigado por escolher a AR Business Studio! 🚀`
 
@@ -150,6 +179,29 @@ export async function sendSystemWarningNotification(
   if (!phone) return false
 
   const text = `🔔 *Aviso Importante - AR Business Studio*\n\n${message}`
+
+  return sendMessage(config, phone, text)
+}
+
+export async function sendUpcomingPaymentNotification(
+  organizationId: string,
+  planName: string,
+  value: number,
+  dueDate: string,
+): Promise<boolean> {
+  const config = await getEvolutionConfig()
+  if (!config) return false
+
+  const phone = await getOrgPhone(organizationId)
+  if (!phone) return false
+
+  const formattedDate = new Date(dueDate).toLocaleDateString("pt-BR")
+  const formattedValue = value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const text = `🔔 *Lembrete de Cobrança - AR Business Studio*\n\n` +
+    `Olá! Sua fatura do plano *${planName}* no valor de *R$ ${formattedValue}* ` +
+    `vence no dia *${formattedDate}*.\n\n` +
+    `Mantenha seu plano ativo para continuar usando todos os recursos.\n\n` +
+    `Para mais detalhes, acesse o painel da AR Business Studio.`
 
   return sendMessage(config, phone, text)
 }

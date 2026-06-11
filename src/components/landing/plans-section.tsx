@@ -17,6 +17,7 @@ interface Plan {
   assets_limit_label: string
   features: string[]
   billing_cycle: string
+  trial_days: number
 }
 
 export function PlansSection() {
@@ -118,6 +119,15 @@ export function PlansSection() {
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-xs font-medium">
                       <Sparkles className="h-3 w-3" />
                       Mais Popular
+                    </span>
+                  </div>
+                )}
+
+                {plan.trial_days > 0 && (
+                  <div className="mb-4">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+                      <Sparkles className="h-3 w-3" />
+                      {plan.trial_days} dias grátis
                     </span>
                   </div>
                 )}

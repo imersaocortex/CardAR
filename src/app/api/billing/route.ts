@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getPaymentsByCustomer } from "@/lib/asaas"
+import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getPaymentsByCustomer, getSubscriptionsByCustomer } from "@/lib/asaas"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -140,20 +140,42 @@ export async function POST(request: Request) {
           })
         }
 
-        // Cancel old subscription if exists
+        // Cancel ALL ASAAS subscriptions for this customer to avoid duplicate charges
+        // This covers both the saved asaas_subscription_id and any orphaned subscriptions in ASAAS
         const { data: currentSub } = await admin
           .from("subscriptions")
           .select("asaas_subscription_id")
           .eq("organization_id", orgId)
           .single()
 
+        const cancelledIds = new Set<string>()
+
+        // Cancel locally saved subscription ID
         if (currentSub?.asaas_subscription_id) {
+          cancelledIds.add(currentSub.asaas_subscription_id)
           try {
             await cancelSubscription(currentSub.asaas_subscription_id)
             console.log("[billing] Cancelled old ASAAS subscription:", currentSub.asaas_subscription_id)
           } catch (e) {
             console.warn("[billing] Failed to cancel old ASAAS subscription:", currentSub.asaas_subscription_id, e)
           }
+        }
+
+        // Also find and cancel any other active ASAAS subscriptions for this customer
+        try {
+          const asaasSubs = await getSubscriptionsByCustomer(asaasCustomerId)
+          for (const asaasSub of asaasSubs) {
+            if (asaasSub.status !== "CANCELED" && asaasSub.status !== "EXPIRED" && !cancelledIds.has(asaasSub.id)) {
+              try {
+                await cancelSubscription(asaasSub.id)
+                console.log("[billing] Cancelled extra ASAAS subscription:", asaasSub.id)
+              } catch (e) {
+                console.warn("[billing] Failed to cancel extra ASAAS subscription:", asaasSub.id, e)
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[billing] Failed to list ASAAS subscriptions for customer:", e)
         }
 
         // Determine cycle for ASAAS
@@ -173,14 +195,25 @@ export async function POST(request: Request) {
           callbackUrl,
         )
 
-        // Update local subscription (asaas_subscription_id will be filled by webhook)
+        // Save the ASAAS subscription ID from checkout response immediately
+        // so we can cancel it properly on future upgrades
+        const asaasSubId = checkout.subscription || null
+        if (asaasSubId) {
+          console.log("[billing] Saving ASAAS subscription ID from checkout:", asaasSubId)
+        }
+
+        // Update local subscription
+        const subUpdate: Record<string, any> = {
+          plan_id: plan.id,
+          status: "active",
+          trial_ends_at: null,
+        }
+        if (asaasSubId) {
+          subUpdate.asaas_subscription_id = asaasSubId
+        }
         await admin
           .from("subscriptions")
-          .update({
-            plan_id: plan.id,
-            status: "active",
-            trial_ends_at: null,
-          })
+          .update(subUpdate)
           .eq("organization_id", orgId)
 
         // Save checkout info
@@ -346,7 +379,15 @@ export async function POST(request: Request) {
         callbackUrl,
       )
 
-      // Don't save ASAAS sub ID yet — webhook will fill it on first payment
+      // Save the ASAAS subscription ID from checkout response immediately
+      // to prevent duplicate subscriptions on future upgrades
+      if (checkout.subscription) {
+        await admin
+          .from("subscriptions")
+          .update({ asaas_subscription_id: checkout.subscription })
+          .eq("organization_id", orgId)
+        console.log("[billing] first_payment - saved ASAAS subscription ID from checkout:", checkout.subscription)
+      }
 
       // Save checkout info
       await admin.from("asaas_checkouts").insert({

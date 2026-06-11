@@ -29,6 +29,11 @@ interface AsaasCheckout {
   subscription?: string
 }
 
+interface AsaasPaymentDeleteResponse {
+  deleted: boolean
+  id: string
+}
+
 interface AsaasSubscription {
   id: string
   customer: string
@@ -188,6 +193,11 @@ export async function getSubscription(subscriptionId: string): Promise<AsaasSubs
   return asaasFetch<AsaasSubscription>(`/subscriptions/${subscriptionId}`)
 }
 
+export async function getSubscriptionsByCustomer(customerId: string): Promise<AsaasSubscription[]> {
+  const result = await asaasFetch<{ data: AsaasSubscription[] }>(`/subscriptions?customer=${customerId}&limit=10`)
+  return result.data || []
+}
+
 export async function getPayments(subscriptionId?: string): Promise<AsaasPayment[]> {
   let path = "/payments"
   if (subscriptionId) {
@@ -204,6 +214,17 @@ export async function getPaymentsByCustomer(customerId: string): Promise<AsaasPa
 
 export async function getPayment(paymentId: string): Promise<AsaasPayment> {
   return asaasFetch<AsaasPayment>(`/payments/${paymentId}`)
+}
+
+export async function deletePaymentFromAsaas(paymentId: string): Promise<void> {
+  try {
+    await asaasFetch(`/payments/${paymentId}`, {
+      method: "DELETE",
+    })
+  } catch {
+    // Some ASAAS versions return different status codes for already-deleted payments
+    console.warn(`[asaas] Could not DELETE payment ${paymentId} — may already be deleted`)
+  }
 }
 
 export function verifyWebhookSignature(body: string, signature: string): boolean {

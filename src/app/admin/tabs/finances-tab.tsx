@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, AlertTriangle, BarChart3, Users } from "lucide-react"
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, AlertTriangle, BarChart3, Users, Trash2, RefreshCw } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
 
 interface FinanceData {
   summary: {
@@ -27,21 +29,65 @@ interface FinanceData {
 }
 
 export function FinancesTab() {
+  const { toast } = useToast()
   const [data, setData] = useState<FinanceData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/admin/finances")
+      const json = await res.json()
+      setData(json)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta fatura? Esta ação não pode ser desfeita.")) return
+    setDeletingId(paymentId)
+    try {
+      const res = await fetch(`/api/admin/payments/${paymentId}`, { method: "DELETE" })
+      if (res.ok) {
+        toast({ title: "Fatura excluída com sucesso" })
+        load()
+      } else {
+        const err = await res.json()
+        toast({ title: "Erro ao excluir", description: err.error, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Erro ao excluir fatura", variant: "destructive" })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const handleClearAll = async () => {
+    if (!confirm("Tem certeza que deseja EXCLUIR TODAS as faturas? Esta ação não pode ser desfeita.")) return
+    setClearingAll(true)
+    try {
+      const res = await fetch("/api/admin/payments", { method: "DELETE" })
+      if (res.ok) {
+        const result = await res.json()
+        toast({ title: `${result.deleted} fatura(s) excluída(s) com sucesso` })
+        load()
+      } else {
+        const err = await res.json()
+        toast({ title: "Erro ao excluir", description: err.error, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Erro ao excluir todas as faturas", variant: "destructive" })
+    } finally {
+      setClearingAll(false)
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/api/admin/finances")
-        const json = await res.json()
-        setData(json)
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
-    }
     load()
   }, [])
 
@@ -261,10 +307,28 @@ export function FinancesTab() {
 
       <Card className="glass border-border/50">
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-primary" />
-            Últimos Pagamentos
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-primary" />
+              Últimos Pagamentos
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={load} disabled={loading} className="gap-1">
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                Atualizar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleClearAll}
+                disabled={clearingAll || data.payments.length === 0}
+                className="gap-1"
+              >
+                <Trash2 className="h-4 w-4" />
+                {clearingAll ? "Excluindo..." : "Excluir Todas"}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -277,12 +341,13 @@ export function FinancesTab() {
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Vencimento</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Pagamento</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {data.payments.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
                       Nenhum pagamento encontrado
                     </td>
                   </tr>
@@ -304,6 +369,17 @@ export function FinancesTab() {
                       <Badge variant={statusVariant[payment.status] || "secondary"}>
                         {statusLabel[payment.status] || payment.status}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeletePayment(payment.id)}
+                        disabled={deletingId === payment.id}
+                        className="text-muted-foreground hover:text-destructive h-8 w-8"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </td>
                   </tr>
                 ))}

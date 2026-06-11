@@ -10,6 +10,7 @@ import { ComparisonSection } from "@/components/landing/comparison-section"
 import { FaqSection } from "@/components/landing/faq-section"
 import { CtaSection } from "@/components/landing/cta-section"
 import { FooterSection } from "@/components/landing/footer-section"
+import { WhatsAppButton } from "@/components/landing/whatsapp-button"
 
 export default function LandingPage() {
   return (
@@ -24,6 +25,7 @@ export default function LandingPage() {
       <FaqSection />
       <CtaSection />
       <FooterSection />
+      <WhatsAppButton />
     </div>
   )
 }

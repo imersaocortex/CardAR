@@ -326,38 +326,17 @@ export function HeroSection() {
                         style={{ transformStyle: "preserve-3d", transform: "translateZ(40px)" }}
                       >
                         {/* Screen */}
-                        <div className="rounded-[22px] bg-[#0a0a1a] overflow-hidden">
-                          {/* Status bar */}
-                          <div className="h-7 bg-primary/[0.06] flex items-center justify-center relative">
-                            {/* Camera notch */}
-                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-[3px] rounded-b bg-[#1a1a2e]" />
-                          </div>
-
-                          {/* AR Content */}
-                          <div className="px-4 py-8 flex flex-col items-center gap-3">
-                            {/* Target circles */}
-                            <div className="relative w-24 h-24 flex items-center justify-center">
-                              <div className="absolute inset-0 rounded-full border border-cyan-500/20" />
-                              <div className="absolute inset-2 rounded-full border border-primary/20" />
-                              <div className="absolute inset-4 rounded-full bg-primary/10" />
-                              {/* 3D diamond shape */}
-                              <svg width="28" height="28" viewBox="0 0 28 28" className="relative">
-                                <polygon points="14,4 24,14 14,24 4,14" fill="rgba(6,182,212,0.3)" stroke="rgba(6,182,212,0.5)" strokeWidth="1" />
-                                <polygon points="14,8 20,14 14,20 8,14" fill="rgba(124,58,237,0.2)" stroke="rgba(124,58,237,0.4)" strokeWidth="0.5" />
-                              </svg>
-                            </div>
-
-                            {/* Bottom dots */}
-                            <div className="flex gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
-                              <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/60" />
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-                            </div>
-                          </div>
-
-                          {/* Home indicator */}
-                          <div className="flex justify-center pb-2">
-                            <div className="w-10 h-[3px] rounded-full bg-white/15" />
+                        <div className="rounded-[22px] bg-[#0a0a1a] overflow-hidden relative">
+                          <img
+                            src="/image-hero.png"
+                            alt="AR Business Studio"
+                            className="w-full h-full object-cover"
+                          />
+                          {/* Status bar overlay */}
+                          <div className="absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-black/40 to-transparent" />
+                          {/* Home indicator overlay */}
+                          <div className="absolute bottom-0 inset-x-0 flex justify-center pb-1.5">
+                            <div className="w-10 h-[3px] rounded-full bg-white/30" />
                           </div>
                         </div>
                       </motion.div>

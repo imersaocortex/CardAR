@@ -74,11 +74,13 @@ export function AppSidebar() {
         {logoUrl ? (
           <img src={logoUrl} alt={siteName} className="h-8 w-auto" />
         ) : (
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary">
-            <Zap className="h-4 w-4 text-white" />
-          </div>
+          <>
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary">
+              <Zap className="h-4 w-4 text-white" />
+            </div>
+            <span className="font-bold">{siteName}</span>
+          </>
         )}
-        <span className="font-bold">{siteName}</span>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">

@@ -37,6 +37,8 @@ export async function GET() {
         accent_color: "#06b6d4",
         og_image_url: null,
         footer_text: null,
+        meta_title: null,
+        meta_description: null,
       },
       asaas: {
         environment: "debug",

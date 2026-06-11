@@ -74,6 +74,8 @@ export const systemSettingsSchema = z.object({
     accent_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida").optional(),
     og_image_url: z.string().nullable().optional(),
     footer_text: z.string().max(200).nullable().optional(),
+    meta_title: z.string().max(200).nullable().optional(),
+    meta_description: z.string().max(500).nullable().optional(),
   }).optional(),
   asaas: z.object({
     environment: z.enum(["debug", "sandbox", "production"]).optional(),

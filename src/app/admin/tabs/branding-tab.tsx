@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Palette, Save, Image, Globe, Upload, Trash2, Loader2 } from "lucide-react"
+import { Palette, Save, Image, Globe, Upload, Trash2, Loader2, Search } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -40,6 +40,8 @@ export function BrandingTab({ settings, onSaved }: BrandingTabProps) {
     accent_color: "#06b6d4",
     og_image_url: "",
     footer_text: "",
+    meta_title: "",
+    meta_description: "",
   })
 
   useEffect(() => {
@@ -112,6 +114,8 @@ export function BrandingTab({ settings, onSaved }: BrandingTabProps) {
             accent_color: branding.accent_color,
             og_image_url: branding.og_image_url || null,
             footer_text: branding.footer_text || null,
+            meta_title: branding.meta_title || null,
+            meta_description: branding.meta_description || null,
           },
         }),
       })
@@ -176,6 +180,38 @@ export function BrandingTab({ settings, onSaved }: BrandingTabProps) {
                     onChange={(e) => setBranding((p) => ({ ...p, footer_text: e.target.value }))}
                     placeholder="© 2026 AR Business Studio"
                   />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Search className="h-4 w-4" />
+                SEO / COMPARTILHAMENTO
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="meta_title">Meta Título</Label>
+                  <Input
+                    id="meta_title"
+                    value={branding.meta_title}
+                    onChange={(e) => setBranding((p) => ({ ...p, meta_title: e.target.value }))}
+                    placeholder="AR Business Studio - Realidade Aumentada para Negócios"
+                  />
+                  <p className="text-xs text-muted-foreground">Usado como título em compartilhamentos (WhatsApp, redes sociais)</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="meta_description">Meta Descrição</Label>
+                  <Input
+                    id="meta_description"
+                    value={branding.meta_description}
+                    onChange={(e) => setBranding((p) => ({ ...p, meta_description: e.target.value }))}
+                    placeholder="Crie experiências de realidade aumentada para cartões de visita, panfletos e materiais impressos."
+                  />
+                  <p className="text-xs text-muted-foreground">Usado como descrição em compartilhamentos (WhatsApp, redes sociais)</p>
                 </div>
               </div>
             </div>

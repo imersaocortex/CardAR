@@ -220,6 +220,44 @@ export async function sendUpcomingPaymentNotification(
   return sendMessage(config, phone, text)
 }
 
+export async function sendPlanChangeNotification(
+  organizationId: string,
+  oldPlanName: string,
+  newPlanName: string,
+): Promise<boolean> {
+  const config = await getEvolutionConfig()
+  if (!config) return false
+
+  const phone = await getOrgPhone(organizationId)
+  if (!phone) return false
+
+  const text = `🔄 *Alteração de Plano - ${config.site_name}*\n\n` +
+    `Olá! Seu plano foi alterado com sucesso.\n\n` +
+    `*Plano anterior:* ${oldPlanName}\n` +
+    `*Novo plano:* ${newPlanName}\n\n` +
+    `Aproveite todos os recursos do seu novo plano! 🚀`
+
+  return sendMessage(config, phone, text)
+}
+
+export async function sendSubscriptionCanceledNotification(
+  organizationId: string,
+  planName: string,
+): Promise<boolean> {
+  const config = await getEvolutionConfig()
+  if (!config) return false
+
+  const phone = await getOrgPhone(organizationId)
+  if (!phone) return false
+
+  const text = `❌ *Assinatura Cancelada - ${config.site_name}*\n\n` +
+    `Olá! Sua assinatura do plano *${planName}* foi cancelada.\n\n` +
+    `Seus projetos foram desabilitados. Seu plano agora é o Starter.\n\n` +
+    `Caso queira reativar, acesse o painel e escolha um novo plano.`
+
+  return sendMessage(config, phone, text)
+}
+
 export async function sendCustomMessage(
   organizationId: string,
   text: string,

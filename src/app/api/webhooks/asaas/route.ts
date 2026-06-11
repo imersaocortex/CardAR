@@ -43,9 +43,13 @@ export async function POST(request: Request) {
     raw_body: body,
   })
 
+  // Track processed payment IDs within this request to avoid duplicate notifications
+  const processedPaymentIds = new Set<string>()
+
   try {
     if (body.payment) {
       await handlePaymentEvent(admin, body.payment)
+      if (body.payment.id) processedPaymentIds.add(body.payment.id)
     }
 
     if (body.subscription) {
@@ -53,8 +57,9 @@ export async function POST(request: Request) {
     }
 
     if (body.checkout && eventType === "CHECKOUT_PAID") {
+      // Skip if payment was already processed via body.payment
       console.log("[webhook] CHECKOUT_PAID - fetching payments for customer:", body.checkout.customer)
-      await handleCheckoutPaid(admin, body.checkout)
+      await handleCheckoutPaid(admin, body.checkout, processedPaymentIds)
     }
 
     if (body.checkout && eventType !== "CHECKOUT_PAID" && !body.payment && !body.subscription) {
@@ -197,7 +202,10 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       .eq("organization_id", sub.organization_id)
       .single()
 
+    let wasAlreadyActive = false
+
     if (currentSub) {
+      wasAlreadyActive = currentSub.status === "active"
       const updates: Record<string, any> = { status: "active" }
 
       const newEnd = new Date(currentSub.current_period_end || Date.now())
@@ -232,24 +240,29 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
       })
     }
 
-    // Send payment success notification via WhatsApp
-    const { data: plan } = await admin
-      .from("plans")
-      .select("name")
-      .eq("id", sub.plan_id)
-      .single()
+    // Send payment success notification only if sub was not already active
+    // (prevents duplicate notifications when ASAAS sends CHECKOUT_PAID + PAYMENT_RECEIVED)
+    if (!wasAlreadyActive) {
+      const { data: plan } = await admin
+        .from("plans")
+        .select("name")
+        .eq("id", sub.plan_id)
+        .single()
 
-    if (plan) {
-      try {
-        await sendPaymentSuccessNotification(
-          sub.organization_id,
-          plan.name,
-          payment.value || 0,
-        )
-        console.log("[webhook] Payment notification sent for org:", sub.organization_id)
-      } catch (e) {
-        console.error("[webhook] Failed to send payment notification:", e)
+      if (plan) {
+        try {
+          await sendPaymentSuccessNotification(
+            sub.organization_id,
+            plan.name,
+            payment.value || 0,
+          )
+          console.log("[webhook] Payment notification sent for org:", sub.organization_id)
+        } catch (e) {
+          console.error("[webhook] Failed to send payment notification:", e)
+        }
       }
+    } else {
+      console.log("[webhook] Skip notification - sub was already active (already notified):", sub.organization_id)
     }
   }
 
@@ -324,7 +337,7 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
   }
 }
 
-async function handleCheckoutPaid(admin: ReturnType<typeof createAdminClient>, checkout: any) {
+async function handleCheckoutPaid(admin: ReturnType<typeof createAdminClient>, checkout: any, skipPaymentIds?: Set<string>) {
   const customerId = checkout.customer
   if (!customerId) {
     console.error("[webhook] CHECKOUT_PAID has no customer ID")
@@ -371,6 +384,12 @@ async function handleCheckoutPaid(admin: ReturnType<typeof createAdminClient>, c
   const sub = await resolveSubscription(admin, paidPayment.subscription, customerId)
   if (!sub) {
     console.error("[webhook] CHECKOUT_PAID - could not resolve subscription for payment:", paidPayment.id)
+    return
+  }
+
+  // Skip if this payment was already processed via body.payment
+  if (skipPaymentIds?.has(paidPayment.id)) {
+    console.log("[webhook] CHECKOUT_PAID - payment already processed, skipping:", paidPayment.id)
     return
   }
 

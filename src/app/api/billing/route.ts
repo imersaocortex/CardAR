@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getTodayDate, getPayments, getPaymentsByCustomer, getSubscriptionsByCustomer } from "@/lib/asaas"
-import { sendPaymentSuccessNotification } from "@/lib/evolution"
+import { sendPlanChangeNotification, sendSubscriptionCanceledNotification } from "@/lib/evolution"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -419,9 +419,20 @@ export async function POST(request: Request) {
   if (action === "cancel") {
     const { data: currentSub } = await admin
       .from("subscriptions")
-      .select("asaas_subscription_id")
+      .select("asaas_subscription_id, plan_id")
       .eq("organization_id", orgId)
       .single()
+
+    // Get current plan name before canceling
+    let canceledPlanName = ""
+    if (currentSub?.plan_id) {
+      const { data: p } = await admin
+        .from("plans")
+        .select("name")
+        .eq("id", currentSub.plan_id)
+        .single()
+      if (p) canceledPlanName = p.name
+    }
 
     if (currentSub?.asaas_subscription_id) {
       try { await cancelSubscription(currentSub.asaas_subscription_id) } catch {}
@@ -450,6 +461,13 @@ export async function POST(request: Request) {
           assets_limit_bytes: starterPlan.assets_limit_bytes,
         })
         .eq("organization_id", orgId)
+    }
+
+    // Send cancellation notification
+    if (canceledPlanName) {
+      sendSubscriptionCanceledNotification(orgId, canceledPlanName).catch((e: any) =>
+        console.warn("[billing] Failed to send cancel notification:", e)
+      )
     }
 
     return NextResponse.json({ success: true })
@@ -534,9 +552,9 @@ export async function POST(request: Request) {
       }
 
       // Find the target plan from the pending checkout (set during upgrade)
-      // Fall back to matching by payment value
       let targetPlanId: string | null = null
       let targetPlanName = ""
+      let oldPlanName = ""
 
       // Look for the most recent pending checkout for this org
       const { data: pendingCheckout } = await admin
@@ -550,6 +568,23 @@ export async function POST(request: Request) {
 
       if (pendingCheckout?.plan_id) {
         targetPlanId = pendingCheckout.plan_id
+
+        // Get old plan name before updating
+        const { data: currentSubPlan } = await admin
+          .from("subscriptions")
+          .select("plan_id")
+          .eq("organization_id", orgId)
+          .single()
+
+        if (currentSubPlan?.plan_id && currentSubPlan.plan_id !== targetPlanId) {
+          const { data: oldPlan } = await admin
+            .from("plans")
+            .select("name")
+            .eq("id", currentSubPlan.plan_id)
+            .single()
+          if (oldPlan) oldPlanName = oldPlan.name
+        }
+
         const { data: plan } = await admin
           .from("plans")
           .select("name, projects_limit, assets_limit_bytes")
@@ -604,15 +639,11 @@ export async function POST(request: Request) {
         }
       }
 
-      // Send WhatsApp notification
-      const notificationPlanName = targetPlanName || (foundPayment.value?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })) || ""
-
-      if (notificationPlanName) {
-        sendPaymentSuccessNotification(
-          orgId,
-          notificationPlanName,
-          foundPayment.value || 0,
-        ).catch((e: any) => console.warn("[billing] Failed to send payment notification:", e))
+      // Notify plan change if applicable
+      if (oldPlanName && targetPlanName && oldPlanName !== targetPlanName) {
+        sendPlanChangeNotification(orgId, oldPlanName, targetPlanName).catch((e: any) =>
+          console.warn("[billing] Failed to send plan change notification:", e)
+        )
       }
 
       return NextResponse.json({ success: true })

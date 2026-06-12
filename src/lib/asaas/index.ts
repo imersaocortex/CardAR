@@ -1,5 +1,5 @@
 let currentApiKey = process.env.ASAAS_API_KEY
-let currentApiUrl = process.env.ASAAS_API_URL || "https://api-sandbox.asaas.com/v3"
+let currentApiUrl = process.env.ASAAS_API_URL || "https://sandbox.asaas.com/api/v3"
 
 export function configureAsaas(apiKey: string, apiUrl?: string) {
   currentApiKey = apiKey
@@ -262,7 +262,7 @@ export async function ensureAsaasKey(admin: any) {
   const apiKey = config?.[`${env}_api_key`] as string | undefined
   const apiUrl = env === "production"
     ? "https://api.asaas.com/v3"
-    : "https://api-sandbox.asaas.com/v3"
+    : "https://sandbox.asaas.com/api/v3"
   if (apiKey) {
     process.env.ASAAS_API_KEY = apiKey
     configureAsaas(apiKey, apiUrl)

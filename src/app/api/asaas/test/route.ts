@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const environment = body.environment || "debug"
   const baseUrl =
     environment === "production"
-      ? "https://api.asaas.com/api/v3"
+      ? "https://api.asaas.com/v3"
       : "https://sandbox.asaas.com/api/v3"
 
   if (!apiKey) {

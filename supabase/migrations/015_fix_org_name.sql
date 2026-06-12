@@ -4,7 +4,7 @@
 
 -- 1. Fix existing organizations
 update public.organizations
-set name = regexp_replace(name, ''''s Organization$', '')
+set name = regexp_replace(name, '''s Organization$', '')
 where name like '%''s Organization';
 
 -- 2. Update handle_new_user function to not append "'s Organization"

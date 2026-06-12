@@ -43,7 +43,7 @@ begin
 
   -- Create a personal organization
   insert into public.organizations (name, slug)
-  values (v_name || '''s Organization', 'org-' || substr(new.id::text, 1, 8))
+  values (v_name, 'org-' || substr(new.id::text, 1, 8))
   returning id into v_org_id;
 
   -- Add user as owner

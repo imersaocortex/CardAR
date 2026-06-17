@@ -469,6 +469,32 @@ export async function POST(request: Request) {
               }
             }
 
+            const paymentIntentId = session.payment_intent || session.id
+            const { data: existingPayment } = await admin
+              .from("stripe_payments")
+              .select("id")
+              .eq("stripe_payment_intent_id", paymentIntentId)
+              .maybeSingle()
+
+            if (!existingPayment) {
+              const { data: localSub } = await admin
+                .from("subscriptions")
+                .select("id")
+                .eq("organization_id", orgId)
+                .single()
+
+              await admin.from("stripe_payments").insert({
+                organization_id: orgId,
+                subscription_id: localSub?.id || null,
+                stripe_payment_intent_id: paymentIntentId,
+                status: "paid",
+                value: (session.amount_total || 0) / 100,
+                due_date: new Date().toISOString().split("T")[0],
+                paid_date: new Date().toISOString(),
+                invoice_url: null,
+              })
+            }
+
             await admin
               .from("stripe_checkouts")
               .update({ status: "completed" })
@@ -476,7 +502,7 @@ export async function POST(request: Request) {
           }
         }
 
-        // Try to sync invoices from Stripe to populate stripe_payments
+        // Sync invoices from Stripe to populate stripe_payments (catch missing invoice_url / renewals)
         try {
           const { data: stripeCustomer } = await admin
             .from("stripe_customers")
@@ -493,22 +519,22 @@ export async function POST(request: Request) {
               .single()
 
             for (const inv of stripeInvoices) {
-              const paymentIntentId = inv.payment_intent || inv.id
+              const piId = inv.payment_intent || inv.id
               const { data: existing } = await admin
                 .from("stripe_payments")
                 .select("id")
-                .eq("stripe_payment_intent_id", paymentIntentId)
+                .eq("stripe_payment_intent_id", piId)
                 .maybeSingle()
 
               if (!existing && inv.status === "paid") {
                 await admin.from("stripe_payments").insert({
                   organization_id: orgId,
                   subscription_id: localSub?.id || null,
-                  stripe_payment_intent_id: paymentIntentId,
+                  stripe_payment_intent_id: piId,
                   status: "paid",
                   value: (inv.amount_paid || 0) / 100,
                   due_date: new Date(inv.created * 1000).toISOString().split("T")[0],
-                  paid_date: new Date(inv.status_transformed?.paid_at || inv.created * 1000).toISOString(),
+                  paid_date: new Date(inv.status_transitions?.paid_at || inv.created * 1000).toISOString(),
                   invoice_url: inv.hosted_invoice_url || null,
                 })
               }

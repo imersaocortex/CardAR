@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { ensureAsaasKey, createCustomer, updateCustomer, createCheckout, cancelSubscription, getNextDueDate, getTodayDate, getPayments, getPaymentsByCustomer, getSubscriptionsByCustomer } from "@/lib/asaas"
+import { ensureAsaasKey, createCustomer as asaasCreateCustomer, updateCustomer as asaasUpdateCustomer, createCheckout as asaasCreateCheckout, cancelSubscription as asaasCancelSubscription, getNextDueDate, getTodayDate, getPayments as asaasGetPayments, getPaymentsByCustomer as asaasGetPaymentsByCustomer, getSubscriptionsByCustomer as asaasGetSubscriptionsByCustomer } from "@/lib/asaas"
+import { ensureStripeKey, createCustomer as stripeCreateCustomer, createCheckoutSession as stripeCreateCheckoutSession, cancelSubscription as stripeCancelSubscription, getCheckoutSession as stripeGetCheckoutSession } from "@/lib/stripe"
 import { sendPlanChangeNotification, sendSubscriptionCanceledNotification } from "@/lib/evolution"
 
 export async function GET() {
@@ -26,11 +27,10 @@ export async function GET() {
     .eq("organization_id", orgId)
     .single()
 
-  const { data: payments } = await supabase
-    .from("asaas_payments")
-    .select("*")
-    .eq("organization_id", orgId)
-    .order("due_date", { ascending: false })
+  const [asaasResult, stripeResult] = await Promise.all([
+    supabase.from("asaas_payments").select("*").eq("organization_id", orgId).order("due_date", { ascending: false }),
+    supabase.from("stripe_payments").select("*").eq("organization_id", orgId).order("due_date", { ascending: false }),
+  ])
 
   const { data: usage } = await supabase
     .from("usage_limits")
@@ -45,11 +45,28 @@ export async function GET() {
     .order("created_at", { ascending: false })
     .limit(1)
 
+  const { data: stripeCheckouts } = await supabase
+    .from("stripe_checkouts")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  const allPayments = [
+    ...((asaasResult.data || []) as any[]).map((p: any) => ({ ...p, _gateway: "asaas" })),
+    ...((stripeResult.data || []) as any[]).map((p: any) => ({ ...p, _gateway: "stripe" })),
+  ].sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
+
+  const provider = subscription?.payment_provider || "asaas"
+  const checkout = provider === "stripe"
+    ? stripeCheckouts?.[0] || null
+    : asaasCheckouts?.[0] || null
+
   return NextResponse.json({
     subscription,
-    payments: payments || [],
+    payments: allPayments,
     usage,
-    checkout: asaasCheckouts?.[0] || null,
+    checkout,
   })
 }
 
@@ -59,7 +76,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
 
   const body = await request.json()
-  const { action, plan_id } = body
+  const { action, plan_id, payment_provider = "asaas" } = body
   const admin = createAdminClient()
 
   const { data: memberships } = await supabase
@@ -76,23 +93,25 @@ export async function POST(request: Request) {
   if (action === "upgrade") {
     if (!plan_id) return NextResponse.json({ error: "plan_id é obrigatório" }, { status: 400 })
 
-    // Try loading ASAAS key from DB settings if not in env
     await ensureAsaasKey(admin)
+    await ensureStripeKey(admin)
 
     const { data: plan } = await admin.from("plans").select("*").eq("id", plan_id).single()
     if (!plan) return NextResponse.json({ error: "Plano não encontrado" }, { status: 404 })
 
-    // Get profile data for ASAAS
     const { data: profile } = await admin
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single()
 
-    // Check if ASAAS is configured
+    if (payment_provider === "stripe") {
+      return handleStripeUpgrade(admin, request, orgId, user, profile, plan)
+    }
+
+    // ----- ASAAS UPGRADE (existing flow) -----
     if (process.env.ASAAS_API_KEY) {
       try {
-        // Get or create ASAAS customer with profile data
         let asaasCustomerId: string
         const { data: existingCustomer } = await admin
           .from("asaas_customers")
@@ -102,10 +121,9 @@ export async function POST(request: Request) {
 
         if (existingCustomer) {
           asaasCustomerId = existingCustomer.asaas_customer_id
-          // Update customer data if profile has changed
           if (profile?.cpf_cnpj || profile?.phone) {
             try {
-              await updateCustomer(asaasCustomerId, {
+              await asaasUpdateCustomer(asaasCustomerId, {
                 name: profile?.name || user.email || orgId,
                 email: user.email!,
                 cpfCnpj: profile?.cpf_cnpj || undefined,
@@ -121,7 +139,7 @@ export async function POST(request: Request) {
             } catch {}
           }
         } else {
-          asaasCustomerId = await createCustomer(
+          asaasCustomerId = await asaasCreateCustomer(
             orgId,
             profile?.name || user.email || orgId,
             user.email!,
@@ -141,8 +159,6 @@ export async function POST(request: Request) {
           })
         }
 
-        // Cancel ALL ASAAS subscriptions for this customer to avoid duplicate charges
-        // This covers both the saved asaas_subscription_id and any orphaned subscriptions in ASAAS
         const { data: currentSub } = await admin
           .from("subscriptions")
           .select("asaas_subscription_id")
@@ -151,45 +167,31 @@ export async function POST(request: Request) {
 
         const cancelledIds = new Set<string>()
 
-        // Cancel locally saved subscription ID
         if (currentSub?.asaas_subscription_id) {
           cancelledIds.add(currentSub.asaas_subscription_id)
           try {
-            await cancelSubscription(currentSub.asaas_subscription_id)
-            console.log("[billing] Cancelled old ASAAS subscription:", currentSub.asaas_subscription_id)
+            await asaasCancelSubscription(currentSub.asaas_subscription_id)
           } catch (e) {
             console.warn("[billing] Failed to cancel old ASAAS subscription:", currentSub.asaas_subscription_id, e)
           }
 
-          // Mark local pending payments from the cancelled subscription as CANCELLED
-          // to avoid showing duplicate pending invoices
           try {
-            const oldPayments = await getPayments(currentSub.asaas_subscription_id)
+            const oldPayments = await asaasGetPayments(currentSub.asaas_subscription_id)
             const oldPaymentIds = oldPayments.map((p: any) => p.id)
             if (oldPaymentIds.length > 0) {
-              const { error: updateErr } = await admin
-                .from("asaas_payments")
-                .update({ status: "CANCELLED" })
-                .in("asaas_payment_id", oldPaymentIds)
-              if (updateErr) {
-                console.warn("[billing] Failed to mark old payments as CANCELLED:", updateErr)
-              } else {
-                console.log("[billing] Marked", oldPaymentIds.length, "old payments as CANCELLED")
-              }
+              await admin.from("asaas_payments").update({ status: "CANCELLED" }).in("asaas_payment_id", oldPaymentIds)
             }
           } catch (e) {
             console.warn("[billing] Failed to fetch old payments for cancellation:", e)
           }
         }
 
-        // Also find and cancel any other active ASAAS subscriptions for this customer
         try {
-          const asaasSubs = await getSubscriptionsByCustomer(asaasCustomerId)
+          const asaasSubs = await asaasGetSubscriptionsByCustomer(asaasCustomerId)
           for (const asaasSub of asaasSubs) {
             if (asaasSub.status !== "CANCELED" && asaasSub.status !== "EXPIRED" && !cancelledIds.has(asaasSub.id)) {
               try {
-                await cancelSubscription(asaasSub.id)
-                console.log("[billing] Cancelled extra ASAAS subscription:", asaasSub.id)
+                await asaasCancelSubscription(asaasSub.id)
               } catch (e) {
                 console.warn("[billing] Failed to cancel extra ASAAS subscription:", asaasSub.id, e)
               }
@@ -199,15 +201,11 @@ export async function POST(request: Request) {
           console.warn("[billing] Failed to list ASAAS subscriptions for customer:", e)
         }
 
-        // Determine cycle for ASAAS
         const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
-        // Checkout v3 only supports CREDIT_CARD for RECURRENT subscriptions
         const billingType = "CREDIT_CARD"
 
-        // Create ASAAS checkout (subscription is created inline by ASAAS)
-        // Use today's date so the first charge is immediate (credit card will be processed on due date)
         const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
-        const checkout = await createCheckout(
+        const checkout = await asaasCreateCheckout(
           asaasCustomerId,
           billingType,
           plan.price,
@@ -217,23 +215,11 @@ export async function POST(request: Request) {
           callbackUrl,
         )
 
-        // Save the ASAAS subscription ID from checkout response immediately
-        // so we can cancel it properly on future upgrades
         const asaasSubId = checkout.subscription || null
         if (asaasSubId) {
-          console.log("[billing] Saving ASAAS subscription ID from checkout:", asaasSubId)
+          await admin.from("subscriptions").update({ asaas_subscription_id: asaasSubId, payment_provider: "asaas" }).eq("organization_id", orgId)
         }
 
-        // Update local subscription: save ASAAS sub ID but keep current plan/status
-        // Plan/status will be updated on checkout_success or webhook after payment
-        if (asaasSubId) {
-          await admin
-            .from("subscriptions")
-            .update({ asaas_subscription_id: asaasSubId })
-            .eq("organization_id", orgId)
-        }
-
-        // Save checkout info with the target plan_id for later activation
         await admin.from("asaas_checkouts").insert({
           organization_id: orgId,
           plan_id: plan.id,
@@ -242,47 +228,26 @@ export async function POST(request: Request) {
           status: "pending",
         })
 
-        // Do NOT update usage_limits yet — wait for payment confirmation
-
         return NextResponse.json({ success: true, checkout_url: checkout.url })
-
       } catch (err: any) {
         console.error("[billing] ASAAS error:", err?.message || err)
         return NextResponse.json({ error: `Erro ao processar pagamento no ASAAS: ${err?.message || "Falha na comunicação"}` }, { status: 502 })
       }
     } else {
-      // No ASAAS — just update locally (sandbox mode)
-      await admin
-        .from("subscriptions")
-        .update({ plan_id: plan.id, status: "active", trial_ends_at: null })
-        .eq("organization_id", orgId)
-
-      await admin
-        .from("usage_limits")
-        .update({
-          projects_limit: plan.projects_limit,
-          assets_limit_bytes: plan.assets_limit_bytes,
-        })
-        .eq("organization_id", orgId)
-
-      // Create fake checkout so billing page shows redirect link
+      // No ASAAS — sandbox mode
+      await admin.from("subscriptions").update({ plan_id: plan.id, status: "active", trial_ends_at: null, payment_provider: "asaas" }).eq("organization_id", orgId)
+      await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
       await admin.from("asaas_checkouts").insert({
-        organization_id: orgId,
-        plan_id: plan.id,
-        asaas_checkout_id: "sandbox",
-        checkout_url: "/billing?upgraded=true",
-        status: "pending",
+        organization_id: orgId, plan_id: plan.id, asaas_checkout_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
       })
-
       return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
     }
   }
 
   if (action === "first_payment") {
-    // Try loading ASAAS key from DB settings if not in env
     await ensureAsaasKey(admin)
+    await ensureStripeKey(admin)
 
-    // First payment for a pending subscription (new user)
     const { data: currentSub } = await admin
       .from("subscriptions")
       .select("*, plans(*)")
@@ -295,37 +260,41 @@ export async function POST(request: Request) {
 
     const plan = currentSub.plans
 
-    // Check profile has CPF
     const { data: profile } = await admin
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single()
 
+    if (payment_provider === "stripe") {
+      if (!process.env.STRIPE_SECRET_KEY) {
+        // No Stripe — activate immediately (sandbox)
+        await admin.from("subscriptions").update({ status: "active", payment_provider: "stripe" }).eq("organization_id", orgId)
+        await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
+        await admin.from("stripe_checkouts").insert({
+          organization_id: orgId, plan_id: plan.id, stripe_session_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
+        })
+        return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
+      }
+
+      return handleStripeFirstPayment(admin, request, orgId, user, profile, plan)
+    }
+
+    // ----- ASAAS FIRST PAYMENT (existing flow) -----
     if (!profile?.cpf_cnpj) {
       return NextResponse.json({ error: "Complete seu CPF/CNPJ no perfil antes de pagar", redirect: "/profile" }, { status: 400 })
     }
 
     if (!process.env.ASAAS_API_KEY) {
-      // No ASAAS — activate immediately (sandbox)
-      await admin.from("subscriptions").update({ status: "active" }).eq("organization_id", orgId)
-      await admin.from("usage_limits").update({
-        projects_limit: plan.projects_limit,
-        assets_limit_bytes: plan.assets_limit_bytes,
-      }).eq("organization_id", orgId)
-      // Create fake checkout so billing page shows redirect link
+      await admin.from("subscriptions").update({ status: "active", payment_provider: "asaas" }).eq("organization_id", orgId)
+      await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
       await admin.from("asaas_checkouts").insert({
-        organization_id: orgId,
-        plan_id: plan.id,
-        asaas_checkout_id: "sandbox",
-        checkout_url: "/billing?upgraded=true",
-        status: "pending",
+        organization_id: orgId, plan_id: plan.id, asaas_checkout_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
       })
       return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
     }
 
     try {
-      // Get or create ASAAS customer
       let asaasCustomerId: string
       const { data: existingCustomer } = await admin
         .from("asaas_customers")
@@ -337,79 +306,42 @@ export async function POST(request: Request) {
         asaasCustomerId = existingCustomer.asaas_customer_id
         if (profile?.cpf_cnpj || profile?.phone) {
           try {
-            await updateCustomer(asaasCustomerId, {
-              name: profile?.name || user.email || orgId,
-              email: user.email!,
-              cpfCnpj: profile?.cpf_cnpj || undefined,
-              phone: profile?.phone || undefined,
-              address: profile?.address || undefined,
-              addressNumber: profile?.address_number || undefined,
-              complement: profile?.address_complement || undefined,
-              province: profile?.address_neighborhood || undefined,
-              city: profile?.address_city || undefined,
-              state: profile?.address_state || undefined,
+            await asaasUpdateCustomer(asaasCustomerId, {
+              name: profile?.name || user.email || orgId, email: user.email!,
+              cpfCnpj: profile?.cpf_cnpj || undefined, phone: profile?.phone || undefined,
+              address: profile?.address || undefined, addressNumber: profile?.address_number || undefined,
+              complement: profile?.address_complement || undefined, province: profile?.address_neighborhood || undefined,
+              city: profile?.address_city || undefined, state: profile?.address_state || undefined,
               postalCode: profile?.address_zipcode || undefined,
             })
           } catch {}
         }
       } else {
-        asaasCustomerId = await createCustomer(
-          orgId,
-          profile?.name || user.email || orgId,
-          user.email!,
-          profile?.cpf_cnpj || undefined,
-          profile?.phone || undefined,
-          profile?.address || undefined,
-          profile?.address_number || undefined,
-          profile?.address_complement || undefined,
-          profile?.address_neighborhood || undefined,
-          profile?.address_city || undefined,
-          profile?.address_state || undefined,
+        asaasCustomerId = await asaasCreateCustomer(
+          orgId, profile?.name || user.email || orgId, user.email!,
+          profile?.cpf_cnpj || undefined, profile?.phone || undefined,
+          profile?.address || undefined, profile?.address_number || undefined,
+          profile?.address_complement || undefined, profile?.address_neighborhood || undefined,
+          profile?.address_city || undefined, profile?.address_state || undefined,
           profile?.address_zipcode || undefined,
         )
-        await admin.from("asaas_customers").insert({
-          organization_id: orgId,
-          asaas_customer_id: asaasCustomerId,
-        })
+        await admin.from("asaas_customers").insert({ organization_id: orgId, asaas_customer_id: asaasCustomerId })
       }
 
-      // Create ASAAS checkout (subscription is created inline by ASAAS)
       const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
-      // Checkout v3 only supports CREDIT_CARD for RECURRENT subscriptions
       const billingType = "CREDIT_CARD"
-
       const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
-      const checkout = await createCheckout(
-        asaasCustomerId,
-        billingType,
-        plan.price,
-        getTodayDate(),
-        asaasCycle,
-        `AR Business Studio - ${plan.name}`,
-        callbackUrl,
-      )
+      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl)
 
-      // Save the ASAAS subscription ID from checkout response immediately
-      // to prevent duplicate subscriptions on future upgrades
       if (checkout.subscription) {
-        await admin
-          .from("subscriptions")
-          .update({ asaas_subscription_id: checkout.subscription })
-          .eq("organization_id", orgId)
-        console.log("[billing] first_payment - saved ASAAS subscription ID from checkout:", checkout.subscription)
+        await admin.from("subscriptions").update({ asaas_subscription_id: checkout.subscription, payment_provider: "asaas" }).eq("organization_id", orgId)
       }
 
-      // Save checkout info
       await admin.from("asaas_checkouts").insert({
-        organization_id: orgId,
-        plan_id: plan.id,
-        asaas_checkout_id: checkout.id,
-        checkout_url: checkout.url,
-        status: "pending",
+        organization_id: orgId, plan_id: plan.id, asaas_checkout_id: checkout.id, checkout_url: checkout.url, status: "pending",
       })
 
       return NextResponse.json({ success: true, checkout_url: checkout.url })
-
     } catch (err: any) {
       console.error("[billing] ASAAS error:", err?.message || err)
       return NextResponse.json({ error: `Erro ao processar pagamento no ASAAS: ${err?.message || "Falha na comunicação"}` }, { status: 502 })
@@ -419,23 +351,24 @@ export async function POST(request: Request) {
   if (action === "cancel") {
     const { data: currentSub } = await admin
       .from("subscriptions")
-      .select("asaas_subscription_id, plan_id")
+      .select("asaas_subscription_id, stripe_subscription_id, plan_id, payment_provider")
       .eq("organization_id", orgId)
       .single()
 
-    // Get current plan name before canceling
     let canceledPlanName = ""
     if (currentSub?.plan_id) {
-      const { data: p } = await admin
-        .from("plans")
-        .select("name")
-        .eq("id", currentSub.plan_id)
-        .single()
+      const { data: p } = await admin.from("plans").select("name").eq("id", currentSub.plan_id).single()
       if (p) canceledPlanName = p.name
     }
 
-    if (currentSub?.asaas_subscription_id) {
-      try { await cancelSubscription(currentSub.asaas_subscription_id) } catch {}
+    if (currentSub?.payment_provider === "stripe") {
+      if (currentSub.stripe_subscription_id) {
+        try { await stripeCancelSubscription(currentSub.stripe_subscription_id) } catch {}
+      }
+    } else {
+      if (currentSub?.asaas_subscription_id) {
+        try { await asaasCancelSubscription(currentSub.asaas_subscription_id) } catch {}
+      }
     }
 
     const { data: starterPlan } = await admin
@@ -445,25 +378,14 @@ export async function POST(request: Request) {
       .single()
 
     if (starterPlan) {
-      await admin
-        .from("subscriptions")
-        .update({
-          plan_id: starterPlan.id,
-          asaas_subscription_id: null,
-          status: "canceled",
-        })
-        .eq("organization_id", orgId)
-
-      await admin
-        .from("usage_limits")
-        .update({
-          projects_limit: starterPlan.projects_limit,
-          assets_limit_bytes: starterPlan.assets_limit_bytes,
-        })
-        .eq("organization_id", orgId)
+      await admin.from("subscriptions").update({
+        plan_id: starterPlan.id, asaas_subscription_id: null, stripe_subscription_id: null, status: "canceled",
+      }).eq("organization_id", orgId)
+      await admin.from("usage_limits").update({
+        projects_limit: starterPlan.projects_limit, assets_limit_bytes: starterPlan.assets_limit_bytes,
+      }).eq("organization_id", orgId)
     }
 
-    // Send cancellation notification
     if (canceledPlanName) {
       sendSubscriptionCanceledNotification(orgId, canceledPlanName).catch((e: any) =>
         console.warn("[billing] Failed to send cancel notification:", e)
@@ -475,12 +397,23 @@ export async function POST(request: Request) {
 
   if (action === "checkout_success") {
     await ensureAsaasKey(admin)
+    await ensureStripeKey(admin)
 
+    const { data: sub } = await admin
+      .from("subscriptions")
+      .select("payment_provider")
+      .eq("organization_id", orgId)
+      .single()
+
+    if (sub?.payment_provider === "stripe") {
+      return NextResponse.json({ success: true })
+    }
+
+    // ----- ASAAS checkout_success (existing flow) -----
     if (!process.env.ASAAS_API_KEY) {
       return NextResponse.json({ success: true })
     }
 
-    // Find ASAAS customer for this org
     const { data: existingCustomer } = await admin
       .from("asaas_customers")
       .select("asaas_customer_id")
@@ -492,16 +425,13 @@ export async function POST(request: Request) {
     }
 
     try {
-      const payments = await getPaymentsByCustomer(existingCustomer.asaas_customer_id)
+      const payments = await asaasGetPaymentsByCustomer(existingCustomer.asaas_customer_id)
 
-      // Look first for RECEIVED/CONFIRMED, fall back to any payment with subscription
       let foundPayment = payments.find(
         (p: any) => (p.status === "RECEIVED" || p.status === "CONFIRMED") && p.subscription
       )
       if (!foundPayment) {
-        foundPayment = payments.find(
-          (p: any) => p.subscription
-        )
+        foundPayment = payments.find((p: any) => p.subscription)
       }
 
       if (!foundPayment) {
@@ -511,15 +441,10 @@ export async function POST(request: Request) {
 
       const isPaid = foundPayment.status === "RECEIVED" || foundPayment.status === "CONFIRMED"
 
-      // Save ASAAS subscription ID
       if (foundPayment.subscription) {
-        await admin
-          .from("subscriptions")
-          .update({ asaas_subscription_id: foundPayment.subscription })
-          .eq("organization_id", orgId)
+        await admin.from("subscriptions").update({ asaas_subscription_id: foundPayment.subscription }).eq("organization_id", orgId)
       }
 
-      // Check if payment already saved
       const { data: existingPayment } = await admin
         .from("asaas_payments")
         .select("id")
@@ -527,36 +452,21 @@ export async function POST(request: Request) {
         .single()
 
       if (!existingPayment) {
-        const { data: localSub } = await admin
-          .from("subscriptions")
-          .select("id")
-          .eq("organization_id", orgId)
-          .single()
-
+        const { data: localSub } = await admin.from("subscriptions").select("id").eq("organization_id", orgId).single()
         await admin.from("asaas_payments").insert({
-          organization_id: orgId,
-          subscription_id: localSub?.id || null,
-          asaas_payment_id: foundPayment.id,
-          status: foundPayment.status || "PENDING",
-          value: foundPayment.value || 0,
+          organization_id: orgId, subscription_id: localSub?.id || null, asaas_payment_id: foundPayment.id,
+          status: foundPayment.status || "PENDING", value: foundPayment.value || 0,
           due_date: foundPayment.dueDate || new Date().toISOString().split("T")[0],
-          paid_date: foundPayment.paidDate || null,
-          invoice_url: foundPayment.invoiceUrl || null,
+          paid_date: foundPayment.paidDate || null, invoice_url: foundPayment.invoiceUrl || null,
         })
-        console.log("[billing] checkout_success - payment record created:", foundPayment.id, "status:", foundPayment.status)
       } else if (isPaid) {
-        await admin
-          .from("asaas_payments")
-          .update({ status: foundPayment.status, paid_date: foundPayment.paidDate || null })
-          .eq("asaas_payment_id", foundPayment.id)
+        await admin.from("asaas_payments").update({ status: foundPayment.status, paid_date: foundPayment.paidDate || null }).eq("asaas_payment_id", foundPayment.id)
       }
 
-      // Find the target plan from the pending checkout (set during upgrade)
       let targetPlanId: string | null = null
       let targetPlanName = ""
       let oldPlanName = ""
 
-      // Look for the most recent pending checkout for this org
       const { data: pendingCheckout } = await admin
         .from("asaas_checkouts")
         .select("plan_id")
@@ -568,78 +478,33 @@ export async function POST(request: Request) {
 
       if (pendingCheckout?.plan_id) {
         targetPlanId = pendingCheckout.plan_id
-
-        // Get old plan name before updating
-        const { data: currentSubPlan } = await admin
-          .from("subscriptions")
-          .select("plan_id")
-          .eq("organization_id", orgId)
-          .single()
-
+        const { data: currentSubPlan } = await admin.from("subscriptions").select("plan_id").eq("organization_id", orgId).single()
         if (currentSubPlan?.plan_id && currentSubPlan.plan_id !== targetPlanId) {
-          const { data: oldPlan } = await admin
-            .from("plans")
-            .select("name")
-            .eq("id", currentSubPlan.plan_id)
-            .single()
+          const { data: oldPlan } = await admin.from("plans").select("name").eq("id", currentSubPlan.plan_id).single()
           if (oldPlan) oldPlanName = oldPlan.name
         }
 
-        const { data: plan } = await admin
-          .from("plans")
-          .select("name, projects_limit, assets_limit_bytes")
-          .eq("id", targetPlanId)
-          .single()
+        const { data: plan } = await admin.from("plans").select("name, projects_limit, assets_limit_bytes").eq("id", targetPlanId).single()
         if (plan) {
           targetPlanName = plan.name
-          // Update plan_id and usage_limits to the new plan
-          await admin
-            .from("subscriptions")
-            .update({ plan_id: targetPlanId })
-            .eq("organization_id", orgId)
-
-          await admin
-            .from("usage_limits")
-            .update({
-              projects_limit: plan.projects_limit,
-              assets_limit_bytes: plan.assets_limit_bytes,
-            })
-            .eq("organization_id", orgId)
+          await admin.from("subscriptions").update({ plan_id: targetPlanId }).eq("organization_id", orgId)
+          await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
         }
-        // Mark checkout as completed
-        await admin
-          .from("asaas_checkouts")
-          .update({ status: "completed" })
-          .eq("organization_id", orgId)
-          .eq("status", "pending")
+        await admin.from("asaas_checkouts").update({ status: "completed" }).eq("organization_id", orgId).eq("status", "pending")
       }
 
-      // Activate subscription
-      const { data: currentSub } = await admin
-        .from("subscriptions")
-        .select("current_period_end, status")
-        .eq("organization_id", orgId)
-        .single()
-
+      const { data: currentSub } = await admin.from("subscriptions").select("current_period_end, status").eq("organization_id", orgId).single()
       if (currentSub) {
         const updates: Record<string, any> = { status: "active" }
         const newEnd = new Date(currentSub.current_period_end || Date.now())
         newEnd.setMonth(newEnd.getMonth() + 1)
         updates.current_period_end = newEnd.toISOString()
-
-        await admin
-          .from("subscriptions")
-          .update(updates)
-          .eq("organization_id", orgId)
-
+        await admin.from("subscriptions").update(updates).eq("organization_id", orgId)
         if (currentSub.status === "pending") {
-          await admin.rpc("unsuspend_org_projects", {
-            p_organization_id: orgId,
-          })
+          await admin.rpc("unsuspend_org_projects", { p_organization_id: orgId })
         }
       }
 
-      // Notify plan change if applicable
       if (oldPlanName && targetPlanName && oldPlanName !== targetPlanName) {
         sendPlanChangeNotification(orgId, oldPlanName, targetPlanName).catch((e: any) =>
           console.warn("[billing] Failed to send plan change notification:", e)
@@ -654,4 +519,138 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
+}
+
+// ----- STRIPE HELPERS -----
+
+async function handleStripeUpgrade(
+  admin: ReturnType<typeof createAdminClient>,
+  request: Request,
+  orgId: string,
+  user: any,
+  profile: any,
+  plan: any,
+) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    await admin.from("subscriptions").update({ plan_id: plan.id, status: "active", trial_ends_at: null, payment_provider: "stripe" }).eq("organization_id", orgId)
+    await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
+    await admin.from("stripe_checkouts").insert({
+      organization_id: orgId, plan_id: plan.id, stripe_session_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
+    })
+    return NextResponse.json({ success: true, checkout_url: "/billing?upgraded=true" })
+  }
+
+  try {
+    let stripeCustomerId: string
+    const { data: existingCustomer } = await admin
+      .from("stripe_customers")
+      .select("stripe_customer_id")
+      .eq("organization_id", orgId)
+      .single()
+
+    if (existingCustomer) {
+      stripeCustomerId = existingCustomer.stripe_customer_id
+    } else {
+      const customer = await stripeCreateCustomer(user.email!, profile?.name || user.email || orgId)
+      stripeCustomerId = customer.id
+      await admin.from("stripe_customers").insert({
+        organization_id: orgId, stripe_customer_id: stripeCustomerId,
+      })
+    }
+
+    const { data: sub } = await admin.from("subscriptions").select("stripe_subscription_id").eq("organization_id", orgId).single()
+    if (sub?.stripe_subscription_id) {
+      try { await stripeCancelSubscription(sub.stripe_subscription_id) } catch {}
+    }
+
+    const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+
+    const priceMap: Record<string, string | null> = {}
+    const priceId = priceMap[plan.id] || null
+
+    if (!priceId) {
+      return NextResponse.json({
+        error: "Stripe não configurado para este plano. Configure os Price IDs no admin.",
+        redirect: "/admin?tab=stripe",
+      }, { status: 400 })
+    }
+
+    const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl)
+
+    await admin.from("subscriptions").update({ payment_provider: "stripe" }).eq("organization_id", orgId)
+
+    if (session.subscription) {
+      const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id
+      await admin.from("subscriptions").update({ stripe_subscription_id: subId }).eq("organization_id", orgId)
+    }
+
+    await admin.from("stripe_checkouts").insert({
+      organization_id: orgId, plan_id: plan.id,
+      stripe_session_id: session.id, checkout_url: session.url || null, status: "pending",
+    })
+
+    return NextResponse.json({ success: true, checkout_url: session.url })
+  } catch (err: any) {
+    console.error("[billing] Stripe error:", err?.message || err)
+    return NextResponse.json({ error: `Erro ao processar pagamento no Stripe: ${err?.message || "Falha na comunicação"}` }, { status: 502 })
+  }
+}
+
+async function handleStripeFirstPayment(
+  admin: ReturnType<typeof createAdminClient>,
+  request: Request,
+  orgId: string,
+  user: any,
+  profile: any,
+  plan: any,
+) {
+  try {
+    let stripeCustomerId: string
+    const { data: existingCustomer } = await admin
+      .from("stripe_customers")
+      .select("stripe_customer_id")
+      .eq("organization_id", orgId)
+      .single()
+
+    if (existingCustomer) {
+      stripeCustomerId = existingCustomer.stripe_customer_id
+    } else {
+      const customer = await stripeCreateCustomer(user.email!, profile?.name || user.email || orgId)
+      stripeCustomerId = customer.id
+      await admin.from("stripe_customers").insert({
+        organization_id: orgId, stripe_customer_id: stripeCustomerId,
+      })
+    }
+
+    const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+
+    const priceMap: Record<string, string | null> = {}
+    const priceId = priceMap[plan.id] || null
+
+    if (!priceId) {
+      return NextResponse.json({
+        error: "Stripe não configurado para este plano. Configure os Price IDs no admin.",
+        redirect: "/admin?tab=stripe",
+      }, { status: 400 })
+    }
+
+    const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl)
+
+    await admin.from("subscriptions").update({ payment_provider: "stripe" }).eq("organization_id", orgId)
+
+    if (session.subscription) {
+      const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id
+      await admin.from("subscriptions").update({ stripe_subscription_id: subId }).eq("organization_id", orgId)
+    }
+
+    await admin.from("stripe_checkouts").insert({
+      organization_id: orgId, plan_id: plan.id,
+      stripe_session_id: session.id, checkout_url: session.url || null, status: "pending",
+    })
+
+    return NextResponse.json({ success: true, checkout_url: session.url })
+  } catch (err: any) {
+    console.error("[billing] Stripe error:", err?.message || err)
+    return NextResponse.json({ error: `Erro ao processar pagamento no Stripe: ${err?.message || "Falha na comunicação"}` }, { status: 502 })
+  }
 }

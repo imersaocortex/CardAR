@@ -23,17 +23,21 @@ export async function GET() {
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
 
-  // Fetch payments
-  const { data: payments } = await admin
-    .from("asaas_payments")
-    .select("*, organizations(name)")
-    .order("created_at", { ascending: false })
-    .limit(500)
+  // Fetch payments from both gateways
+  const [asaasResult, stripeResult] = await Promise.all([
+    admin.from("asaas_payments").select("*, organizations(name)").order("created_at", { ascending: false }).limit(500),
+    admin.from("stripe_payments").select("*, organizations!inner(name)").order("created_at", { ascending: false }).limit(500),
+  ])
 
-  const paymentList = (payments || []) as any[]
+  const asaasPayments = ((asaasResult.data || []) as any[]).map((p: any) => ({ ...p, _gateway: "asaas" }))
+  const stripePayments = ((stripeResult.data || []) as any[]).map((p: any) => ({ ...p, _gateway: "stripe" }))
+
+  const paymentList = [...asaasPayments, ...stripePayments].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
 
   const confirmedPayments = paymentList.filter(
-    (p: any) => p.status === "CONFIRMED" || p.status === "RECEIVED",
+    (p: any) => p.status === "CONFIRMED" || p.status === "RECEIVED" || p.status === "paid",
   )
   const thisMonthPayments = confirmedPayments.filter(
     (p: any) => p.paid_date && p.paid_date >= thisMonthStart,
@@ -50,7 +54,6 @@ export async function GET() {
     ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
     : 0
 
-  // Fetch subscriptions separately to avoid embedding issues
   const { data: allSubs } = await admin
     .from("subscriptions")
     .select("id, organization_id, status, plan_id")
@@ -58,7 +61,6 @@ export async function GET() {
 
   const subList = (allSubs || []) as any[]
 
-  // Filter to only include orgs that have at least one member (remove orphans)
   const subOrgIds = [...new Set(subList.map((s: any) => s.organization_id))]
   const { data: validOrgs } = await admin
     .from("organization_members")
@@ -67,7 +69,6 @@ export async function GET() {
   const validOrgIds = new Set((validOrgs || []).map((m: any) => m.organization_id))
   const filteredSubs = subList.filter((s: any) => validOrgIds.has(s.organization_id))
 
-  // Fetch plans
   const { data: allPlans } = await admin
     .from("plans")
     .select("id, name, price")
@@ -78,7 +79,6 @@ export async function GET() {
     planMap[p.id] = p
   }
 
-  // Get org names
   const orgIds = [...new Set(filteredSubs.map((s: any) => s.organization_id))]
   let orgMap: Record<string, string> = {}
   if (orgIds.length > 0) {
@@ -105,11 +105,10 @@ export async function GET() {
     statusCounts[p.status] = (statusCounts[p.status] || 0) + 1
   }
 
-  const pendingCount = paymentList.filter((p: any) => p.status === "PENDING").length
-  const overduePayments = paymentList.filter((p: any) => p.status === "OVERDUE")
+  const pendingCount = paymentList.filter((p: any) => p.status === "PENDING" || p.status === "open").length
+  const overduePayments = paymentList.filter((p: any) => p.status === "OVERDUE" || p.status === "failed")
   const overdueAmount = overduePayments.reduce((s: number, p: any) => s + p.value, 0)
 
-  // Top orgs by project count
   const { data: topOrgs } = await admin
     .from("projects")
     .select("organization_id")
@@ -128,7 +127,6 @@ export async function GET() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5)
 
-  // Build subscription list with org names
   const subscriptionsWithOrgs = activeSubs.map((s: any) => ({
     ...s,
     organizations: { name: orgMap[s.organization_id] || "Unknown" },

@@ -25,6 +25,7 @@ import { PlansTab } from "./tabs/plans-tab"
 import { FinancesTab } from "./tabs/finances-tab"
 import { CustomersTab } from "./tabs/customers-tab"
 import { AsaasTab } from "./tabs/asaas-tab"
+import { StripeTab } from "./tabs/stripe-tab"
 import { AnalyticsTab } from "./tabs/analytics-tab"
 import { EvolutionTab } from "./tabs/evolution-tab"
 
@@ -35,6 +36,7 @@ const TABS = [
   { id: "finances", label: "Financeiro", icon: DollarSign, adminOnly: false },
   { id: "customers", label: "Clientes", icon: Users, adminOnly: false },
   { id: "asaas", label: "ASAAS", icon: Settings, adminOnly: true },
+  { id: "stripe", label: "Stripe", icon: Settings, adminOnly: true },
   { id: "evolution", label: "Evolution API", icon: MessageSquare, adminOnly: true },
   { id: "analytics", label: "Estatísticas", icon: BarChart3, adminOnly: false },
 ]
@@ -179,6 +181,9 @@ export default function AdminSettingsPage() {
             {activeTab === "customers" && <CustomersTab />}
             {activeTab === "asaas" && canAccessAsaas && (
               <AsaasTab settings={settings} onSaved={loadData} />
+            )}
+            {activeTab === "stripe" && canAccessAsaas && (
+              <StripeTab settings={settings} onSaved={loadData} />
             )}
             {activeTab === "evolution" && canAccessAsaas && (
               <EvolutionTab settings={settings} onSaved={loadData} />

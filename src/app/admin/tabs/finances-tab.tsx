@@ -153,6 +153,9 @@ export function FinancesTab() {
     CONFIRMED: "success",
     PENDING: "warning",
     OVERDUE: "destructive",
+    paid: "success",
+    open: "warning",
+    failed: "destructive",
   }
 
   const statusLabel: Record<string, string> = {
@@ -162,6 +165,9 @@ export function FinancesTab() {
     OVERDUE: "Vencido",
     REFUNDED: "Reembolsado",
     CANCELLED: "Cancelado",
+    paid: "Pago",
+    open: "Aberto",
+    failed: "Falhou",
   }
 
   return (
@@ -334,55 +340,65 @@ export function FinancesTab() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Organização</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">ID ASAAS</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Valor</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Vencimento</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Pagamento</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Ações</th>
-                </tr>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Gateway</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Organização</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">ID</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Valor</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Vencimento</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Pagamento</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Ações</th>
+                  </tr>
               </thead>
               <tbody>
                 {data.payments.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={8} className="text-center py-8 text-muted-foreground">
                       Nenhum pagamento encontrado
                     </td>
                   </tr>
                 )}
-                {data.payments.map((payment: any) => (
-                  <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="py-3 px-4 font-medium">{payment.organizations?.name || "-"}</td>
-                    <td className="py-3 px-4 font-mono text-xs">{payment.asaas_payment_id?.slice(0, 16)}</td>
-                    <td className="py-3 px-4 font-medium">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="py-3 px-4 text-muted-foreground">
-                      {new Date(payment.due_date).toLocaleDateString("pt-BR")}
-                    </td>
-                    <td className="py-3 px-4 text-muted-foreground">
-                      {payment.paid_date
-                        ? new Date(payment.paid_date).toLocaleDateString("pt-BR")
-                        : "-"}
-                    </td>
-                    <td className="py-3 px-4">
-                      <Badge variant={statusVariant[payment.status] || "secondary"}>
-                        {statusLabel[payment.status] || payment.status}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeletePayment(payment.id)}
-                        disabled={deletingId === payment.id}
-                        className="text-muted-foreground hover:text-destructive h-8 w-8"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {data.payments.map((payment: any) => {
+                  const gateway = payment._gateway || "asaas"
+                  const idField = gateway === "stripe" ? payment.stripe_payment_intent_id : payment.asaas_payment_id
+                  return (
+                    <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                      <td className="py-3 px-4">
+                        <Badge variant={gateway === "stripe" ? "secondary" : "outline"} className="text-[10px]">
+                          {gateway === "stripe" ? "Stripe" : "ASAAS"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 font-medium">{payment.organizations?.name || "-"}</td>
+                      <td className="py-3 px-4 font-mono text-xs">{idField?.slice(0, 16)}</td>
+                      <td className="py-3 px-4 font-medium">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="py-3 px-4 text-muted-foreground">
+                        {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground">
+                        {payment.paid_date
+                          ? new Date(payment.paid_date).toLocaleDateString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant={statusVariant[payment.status] || "secondary"}>
+                          {statusLabel[payment.status] || payment.status}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeletePayment(payment.id)}
+                          disabled={deletingId === payment.id}
+                          className="text-muted-foreground hover:text-destructive h-8 w-8"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

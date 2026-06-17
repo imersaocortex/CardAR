@@ -1,0 +1,436 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
+import {
+  Settings, Key, Globe, Save, CheckCircle2, XCircle, HelpCircle,
+  Bug, Rocket, ShieldAlert, ExternalLink, RefreshCw,
+} from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
+
+interface StripeTabProps {
+  settings: any
+  onSaved: () => void
+}
+
+type Environment = "debug" | "production"
+
+const ENVIRONMENTS: { id: Environment; label: string; description: string; icon: typeof Bug; color: string; bg: string; border: string }[] = [
+  {
+    id: "debug",
+    label: "Teste (Sandbox)",
+    description: "Modo de teste com chaves publishable_key/secrect_key do Stripe.",
+    icon: Bug,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+  },
+  {
+    id: "production",
+    label: "Produção",
+    description: "Ambiente real do Stripe. Cobranças reais serão processadas.",
+    icon: Rocket,
+    color: "text-emerald-500",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+  },
+]
+
+export function StripeTab({ settings, onSaved }: StripeTabProps) {
+  const { toast } = useToast()
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<"idle" | "success" | "error">("idle")
+  const [environment, setEnvironment] = useState<Environment>("debug")
+  const [keys, setKeys] = useState({
+    debug: { secret_key: "", webhook_secret: "", configured: false },
+    production: { secret_key: "", webhook_secret: "", configured: false },
+  })
+
+  const normalizeEnv = (env: string): Environment => {
+    if (env === "production") return "production"
+    return "debug"
+  }
+
+  useEffect(() => {
+    if (settings?.stripe) {
+      const stripe = settings.stripe as Record<string, any>
+
+      setEnvironment(normalizeEnv(stripe.environment))
+
+      setKeys({
+        debug: {
+          secret_key: stripe.debug_secret_key || "",
+          webhook_secret: stripe.debug_webhook_secret || "",
+          configured: stripe.debug_secret_key_configured ?? false,
+        },
+        production: {
+          secret_key: stripe.production_secret_key || "",
+          webhook_secret: stripe.production_webhook_secret || "",
+          configured: stripe.production_secret_key_configured ?? false,
+        },
+      })
+    }
+  }, [settings])
+
+  const currentKey = keys[environment]
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const body: any = {
+        stripe: {
+          environment,
+          debug_secret_key: keys.debug.secret_key || undefined,
+          debug_secret_key_configured: !!keys.debug.secret_key,
+          debug_webhook_secret: keys.debug.webhook_secret || undefined,
+          production_secret_key: keys.production.secret_key || undefined,
+          production_secret_key_configured: !!keys.production.secret_key,
+          production_webhook_secret: keys.production.webhook_secret || undefined,
+        },
+      }
+
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || "Erro ao salvar")
+      }
+
+      toast({ title: "Configuração Stripe salva!" })
+      onSaved()
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const testConnection = async () => {
+    setTesting(true)
+    setTestResult("idle")
+    try {
+      const apiKey = keys[environment].secret_key || undefined
+
+      const res = await fetch("/api/stripe/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: apiKey,
+          environment,
+        }),
+      })
+
+      if (res.ok) {
+        setTestResult("success")
+        toast({ title: `Conexão com Stripe (${ENVIRONMENTS.find(e => e.id === environment)?.label}) estabelecida!` })
+      } else {
+        const err = await res.json()
+        setTestResult("error")
+        toast({ title: "Falha na conexão", description: err.error || "Erro desconhecido", variant: "destructive" })
+      }
+    } catch (err: any) {
+      setTestResult("error")
+      toast({ title: "Erro", description: err.message, variant: "destructive" })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const activeEnv = ENVIRONMENTS.find(e => e.id === environment) || ENVIRONMENTS[0]
+
+  return (
+    <div className="space-y-6">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="glass border-border/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-primary" />
+              API Stripe
+            </CardTitle>
+            <CardDescription>
+              Configure a integração com o Stripe para processamento de pagamentos — com suporte a múltiplos ambientes
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                AMBIENTE
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {ENVIRONMENTS.map((env) => {
+                  const Icon = env.icon
+                  const isActive = environment === env.id
+                  const isConfigured = keys[env.id].configured
+
+                  return (
+                    <button
+                      key={env.id}
+                      type="button"
+                      onClick={() => setEnvironment(env.id)}
+                      className={cn(
+                        "relative text-left p-4 rounded-xl border-2 transition-all",
+                        isActive
+                          ? `${env.border} ${env.bg} shadow-sm`
+                          : "border-border hover:border-muted-foreground/30 bg-muted/5",
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                          isActive ? env.bg : "bg-muted/30",
+                        )}>
+                          <Icon className={cn("h-5 w-5", isActive ? env.color : "text-muted-foreground")} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "font-semibold",
+                              isActive ? "text-foreground" : "text-muted-foreground",
+                            )}>
+                              {env.label}
+                            </span>
+                            {isActive && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                Ativo
+                              </span>
+                            )}
+                            {isConfigured && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500">
+                                Configurado
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{env.description}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Key className="h-4 w-4" />
+                CREDENCIAIS — {activeEnv.label.toUpperCase()}
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="stripe-secret-key">Secret Key</Label>
+                  <Input
+                    id="stripe-secret-key"
+                    type="password"
+                    value={currentKey.secret_key}
+                    onChange={(e) => setKeys((prev) => ({
+                      ...prev,
+                      [environment]: { ...prev[environment], secret_key: e.target.value },
+                    }))}
+                    placeholder={currentKey.configured ? "••••••••" : "sk_..."}
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Deixe em branco para manter a chave existente
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="stripe-webhook-secret">Webhook Secret (whsec_...)</Label>
+                  <Input
+                    id="stripe-webhook-secret"
+                    type="password"
+                    value={currentKey.webhook_secret}
+                    onChange={(e) => setKeys((prev) => ({
+                      ...prev,
+                      [environment]: { ...prev[environment], webhook_secret: e.target.value },
+                    }))}
+                    placeholder={currentKey.configured ? "••••••••" : "whsec_..."}
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                <Label className="text-xs text-muted-foreground">URL do Webhook ({activeEnv.label})</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono px-3 py-2 rounded-lg bg-background border border-border truncate">
+                    {`${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/stripe`}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/stripe`,
+                      )
+                      toast({ title: "URL copiada!" })
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Configure esta URL no painel do Stripe &gt; Developers &gt; Webhooks
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                <Label className="text-xs text-muted-foreground">Price IDs dos Planos</Label>
+                <p className="text-xs text-muted-foreground">
+                  Crie Products e Prices no Stripe Dashboard para cada plano. O ID do Price (price_xxx)
+                  precisa ser adicionado em breve no formulário de planos. Esta funcionalidade será estendida.
+                </p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Button onClick={testConnection} disabled={testing} variant="outline" className="gap-2">
+                  {testing ? (
+                    <>Testando...</>
+                  ) : (
+                    <>
+                      <HelpCircle className="h-4 w-4" />
+                      Testar Conexão ({activeEnv.label})
+                    </>
+                  )}
+                </Button>
+                {testResult === "success" && (
+                  <span className="flex items-center gap-1 text-sm text-emerald-500">
+                    <CheckCircle2 className="h-4 w-4" /> Conectado
+                  </span>
+                )}
+                {testResult === "error" && (
+                  <span className="flex items-center gap-1 text-sm text-destructive">
+                    <XCircle className="h-4 w-4" /> Falha
+                  </span>
+                )}
+              </div>
+
+              <Button onClick={handleSave} disabled={saving} variant="gradient" className="gap-2">
+                <Save className="h-4 w-4" />
+                {saving ? "Salvando..." : `Salvar Configuração (${activeEnv.label})`}
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-600">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              <span>
+                {environment === "production"
+                  ? "Você está configurando o ambiente de Produção. Cobranças reais serão processadas."
+                  : "Ambiente de Teste — nenhuma cobrança real será processada. Use para testes."}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="glass border-border/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-primary" />
+              Sincronização Manual
+            </CardTitle>
+            <CardDescription>
+              Sincronize pagamentos do Stripe manualmente para uma organização específica
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SyncSection />
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
+  )
+}
+
+function SyncSection() {
+  const { toast } = useToast()
+  const [syncing, setSyncing] = useState(false)
+  const [orgId, setOrgId] = useState("")
+  const [result, setResult] = useState<any>(null)
+
+  const handleSync = async () => {
+    if (!orgId.trim()) {
+      toast({ title: "Informe o ID da organização", variant: "destructive" })
+      return
+    }
+    setSyncing(true)
+    setResult(null)
+    try {
+      const res = await fetch("/api/stripe/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: orgId.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setResult(data)
+        toast({ title: "Sincronização concluída!", description: `${data.synced} pagamentos processados` })
+      } else {
+        toast({ title: "Erro na sincronização", description: data.error, variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Erro ao sincronizar", variant: "destructive" })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-end gap-3">
+        <div className="flex-1 space-y-2">
+          <Label htmlFor="sync-org-id">ID da Organização</Label>
+          <Input
+            id="sync-org-id"
+            value={orgId}
+            onChange={(e) => setOrgId(e.target.value)}
+            placeholder="uuid da organização..."
+            className="font-mono text-xs"
+          />
+        </div>
+        <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
+          <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+          {syncing ? "Sincronizando..." : "Sincronizar"}
+        </Button>
+      </div>
+
+      {result && (
+        <div className="p-3 rounded-lg bg-muted/20 border border-border text-xs font-mono max-h-48 overflow-y-auto">
+          <p className="text-muted-foreground mb-1">
+            {result.synced} pagamento(s) encontrado(s):
+          </p>
+          {result.results?.map((r: any, i: number) => (
+            <p key={i} className={r.action === "created" ? "text-emerald-500" : "text-muted-foreground"}>
+              {r.payment_id} — {r.status} ({r.action === "created" ? "criado" : "já existente"})
+            </p>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Use quando pagamentos não aparecerem automaticamente após o checkout Stripe.
+        Necessita da chave de API Stripe configurada.
+      </p>
+    </div>
+  )
+}

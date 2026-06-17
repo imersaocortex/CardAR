@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Check, Crown, ArrowRight, CreditCard, ExternalLink, Sparkles, AlertTriangle, CheckCircle2 } from "lucide-react"
+import { Check, Crown, ArrowRight, CreditCard, ExternalLink, Sparkles, AlertTriangle, CheckCircle2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { AppShell } from "@/components/layout/app-shell"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
+import { GatewaySelector } from "@/components/billing/gateway-selector"
 
 interface Plan {
   id: string
@@ -28,6 +29,7 @@ interface Subscription {
   plan_id: string
   status: string
   trial_ends_at: string | null
+  payment_provider?: string
   plans: Plan
 }
 
@@ -47,6 +49,10 @@ export default function BillingPage() {
   const [upgrading, setUpgrading] = useState<string | null>(null)
   const [trialDaysLeft, setTrialDaysLeft] = useState(0)
   const [upgraded, setUpgraded] = useState(false)
+  const [showGatewaySelector, setShowGatewaySelector] = useState(false)
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null)
+  const [gatewaySettings, setGatewaySettings] = useState<{ asaas: { configured: boolean }; stripe: { configured: boolean } } | null>(null)
+  const [isFirstPayment, setIsFirstPayment] = useState(false)
 
   useEffect(() => {
     if (window.location.search.includes("upgraded=true")) {
@@ -60,13 +66,20 @@ export default function BillingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "checkout_success" }),
       }).then((r) => r.json()).then((data) => {
-        if (data.success) {
-          setUpgraded(true)
-        }
+        if (data.success) setUpgraded(true)
       }).catch(() => {})
     }
     loadData()
+    loadGatewaySettings()
   }, [])
+
+  async function loadGatewaySettings() {
+    try {
+      const res = await fetch("/api/billing/settings")
+      const data = await res.json()
+      setGatewaySettings(data)
+    } catch {}
+  }
 
   async function loadData() {
     const supabase = createClient()
@@ -112,10 +125,24 @@ export default function BillingPage() {
           .eq("organization_id", orgId)
           .order("due_date", { ascending: false })
 
-        setPayments(payData || [])
+        const { data: stripePayData } = await supabase
+          .from("stripe_payments")
+          .select("*")
+          .eq("organization_id", orgId)
+          .order("due_date", { ascending: false })
+
+        const allPayments = [
+          ...(payData || []).map((p: any) => ({ ...p, _gateway: "asaas" })),
+          ...(stripePayData || []).map((p: any) => ({ ...p, _gateway: "stripe" })),
+        ].sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
+
+        setPayments(allPayments)
+
+        const provider = subData?.payment_provider || "asaas"
+        const checkoutTable = provider === "stripe" ? "stripe_checkouts" : "asaas_checkouts"
 
         const { data: checkoutData } = await supabase
-          .from("asaas_checkouts")
+          .from(checkoutTable as any)
           .select("*")
           .eq("organization_id", orgId)
           .order("created_at", { ascending: false })
@@ -137,13 +164,51 @@ export default function BillingPage() {
     setLoading(false)
   }
 
-  const handleFirstPayment = async () => {
+  const handleUpgradeClick = async (planId: string) => {
+    const asaasConfigured = gatewaySettings?.asaas?.configured
+    const stripeConfigured = gatewaySettings?.stripe?.configured
+
+    if (asaasConfigured && stripeConfigured) {
+      setPendingPlanId(planId)
+      setIsFirstPayment(false)
+      setShowGatewaySelector(true)
+      return
+    }
+
+    await doUpgrade(planId, "asaas")
+  }
+
+  const handleFirstPaymentClick = async () => {
+    const asaasConfigured = gatewaySettings?.asaas?.configured
+    const stripeConfigured = gatewaySettings?.stripe?.configured
+
+    if (asaasConfigured && stripeConfigured) {
+      setPendingPlanId(null)
+      setIsFirstPayment(true)
+      setShowGatewaySelector(true)
+      return
+    }
+
+    await doFirstPayment("asaas")
+  }
+
+  const handleGatewaySelect = async (gateway: "asaas" | "stripe") => {
+    setShowGatewaySelector(false)
+
+    if (isFirstPayment) {
+      await doFirstPayment(gateway)
+    } else if (pendingPlanId) {
+      await doUpgrade(pendingPlanId, gateway)
+    }
+  }
+
+  const doFirstPayment = async (provider: string) => {
     setUpgrading("first_payment")
     try {
       const res = await fetch("/api/billing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "first_payment" }),
+        body: JSON.stringify({ action: "first_payment", payment_provider: provider }),
       })
       const data = await res.json()
       if (data.error) {
@@ -166,13 +231,13 @@ export default function BillingPage() {
     setUpgrading(null)
   }
 
-  const handleUpgrade = async (planId: string) => {
+  const doUpgrade = async (planId: string, provider: string) => {
     setUpgrading(planId)
     try {
       const res = await fetch("/api/billing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "upgrade", plan_id: planId }),
+        body: JSON.stringify({ action: "upgrade", plan_id: planId, payment_provider: provider }),
       })
 
       const data = await res.json()
@@ -214,12 +279,26 @@ export default function BillingPage() {
     }
   }
 
-  const statusVariant: Record<string, "success" | "warning" | "destructive"> = {
+  const statusVariant: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
     RECEIVED: "success",
     CONFIRMED: "success",
     PENDING: "warning",
     OVERDUE: "destructive",
     CANCELLED: "destructive",
+    paid: "success",
+    open: "warning",
+    failed: "destructive",
+  }
+
+  const statusLabel: Record<string, string> = {
+    RECEIVED: "Recebido",
+    CONFIRMED: "Confirmado",
+    PENDING: "Pendente",
+    OVERDUE: "Vencido",
+    CANCELLED: "Cancelado",
+    paid: "Pago",
+    open: "Aberto",
+    failed: "Falhou",
   }
 
   if (loading) {
@@ -235,9 +314,17 @@ export default function BillingPage() {
   const isTrialing = subscription?.status === "trialing"
   const isPending = subscription?.status === "pending"
   const isCanceled = subscription?.status === "canceled" || subscription?.status === "none"
+  const provider = subscription?.payment_provider || "asaas"
 
   return (
     <AppShell>
+      <GatewaySelector
+        open={showGatewaySelector}
+        onOpenChange={setShowGatewaySelector}
+        onSelect={handleGatewaySelect}
+        loading={upgrading !== null}
+      />
+
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold">Faturamento</h1>
@@ -253,7 +340,13 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Trial / Status Banner */}
+        {subscription?.payment_provider && (
+          <div className="mb-6 p-3 rounded-xl bg-muted/30 border border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
+            <Zap className="h-3.5 w-3.5" />
+            Pagamentos processados via <strong className="text-foreground capitalize">{provider === "stripe" ? "Stripe" : "ASAAS"}</strong>
+          </div>
+        )}
+
         {isTrialing && (
           <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3">
             <Sparkles className="h-5 w-5 text-amber-400 shrink-0" />
@@ -274,7 +367,7 @@ export default function BillingPage() {
             <Button
               variant="gradient"
               size="sm"
-              onClick={handleFirstPayment}
+              onClick={handleFirstPaymentClick}
               disabled={upgrading === "first_payment"}
             >
               {upgrading === "first_payment" ? "Gerando..." : "Pagar Agora"}
@@ -306,7 +399,6 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Usage info */}
         {usage && (
           <Card className="glass border-border/50 mb-6">
             <CardContent className="p-4">
@@ -332,7 +424,6 @@ export default function BillingPage() {
           </Card>
         )}
 
-        {/* Plan selection */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           {plans.map((plan, i) => {
             const isCurrent = subscription?.plans?.id === plan.id
@@ -406,7 +497,7 @@ export default function BillingPage() {
                   <Button
                     variant="gradient"
                     className="w-full"
-                    onClick={() => handleUpgrade(plan.id)}
+                    onClick={() => handleUpgradeClick(plan.id)}
                     disabled={upgrading === plan.id}
                   >
                     {upgrading === plan.id ? "Processando..." : "Assinar Agora"}
@@ -426,7 +517,6 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Payment History */}
         <Card className="glass border-border/50">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -442,6 +532,7 @@ export default function BillingPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
+                      <th className="text-left py-3 px-2 font-medium text-muted-foreground">Gateway</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">ID</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Valor</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Vencimento</th>
@@ -449,20 +540,28 @@ export default function BillingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {payments.map((payment) => (
-                      <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                        <td className="py-3 px-2 font-mono text-xs">{payment.asaas_payment_id?.slice(0, 12)}...</td>
-                        <td className="py-3 px-2">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-2 text-muted-foreground">
-                          {new Date(payment.due_date).toLocaleDateString("pt-BR")}
-                        </td>
-                        <td className="py-3 px-2">
-                          <Badge variant={statusVariant[payment.status] || "secondary"}>
-                            {payment.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
+                    {payments.map((payment) => {
+                      const idField = payment._gateway === "stripe" ? payment.stripe_payment_intent_id : payment.asaas_payment_id
+                      return (
+                        <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="py-3 px-2">
+                            <Badge variant={payment._gateway === "stripe" ? "secondary" : "outline"} className="text-[10px]">
+                              {payment._gateway === "stripe" ? "Stripe" : "ASAAS"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-2 font-mono text-xs">{idField?.slice(0, 12)}...</td>
+                          <td className="py-3 px-2">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="py-3 px-2 text-muted-foreground">
+                            {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                          </td>
+                          <td className="py-3 px-2">
+                            <Badge variant={statusVariant[payment.status] || "secondary"}>
+                              {statusLabel[payment.status] || payment.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

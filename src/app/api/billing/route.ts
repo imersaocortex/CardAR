@@ -576,7 +576,10 @@ async function handleStripeUpgrade(
 
     const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl)
 
-    await admin.from("subscriptions").update({ payment_provider: "stripe" }).eq("organization_id", orgId)
+    await admin.from("subscriptions").update({
+      payment_provider: "stripe",
+      plan_id: plan.id,
+    }).eq("organization_id", orgId)
 
     if (session.subscription) {
       const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id
@@ -634,7 +637,10 @@ async function handleStripeFirstPayment(
 
     const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl)
 
-    await admin.from("subscriptions").update({ payment_provider: "stripe" }).eq("organization_id", orgId)
+    await admin.from("subscriptions").update({
+      payment_provider: "stripe",
+      plan_id: plan.id,
+    }).eq("organization_id", orgId)
 
     if (session.subscription) {
       const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id

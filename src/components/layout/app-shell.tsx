@@ -100,49 +100,49 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       {showBanner && (
-        <div className="relative z-50 px-4 py-2 bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 border-b border-primary/20">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm">
+        <div className="relative z-50 px-4 py-3 bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/10 border-b border-primary/20">
+          <div className="w-full flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 text-sm leading-relaxed">
               {subStatus === "trialing" && (
-                <>
-                  <Sparkles className="h-4 w-4 text-amber-400" />
+                <span className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
                   <span>
                     Período de teste: <strong>{trialDaysLeft} dias</strong> restantes.
                     Assine um plano para continuar usando todos os recursos.
                   </span>
-                </>
+                </span>
               )}
               {subStatus === "past_due" && (
-                <>
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
                   <span>
                     Sua assinatura está vencida. Seus projetos foram suspensos. Regularize o pagamento para reativar.
                   </span>
-                </>
+                </span>
               )}
               {subStatus === "canceled" && (
-                <>
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
                   <span>
                     Sua assinatura foi cancelada. Escolha um plano para reativar seus projetos.
                   </span>
-                </>
+                </span>
               )}
               {subStatus === "pending" && (
-                <>
-                  <AlertTriangle className="h-4 w-4 text-primary" />
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-primary shrink-0" />
                   <span>
                     Assinatura pendente de pagamento. Efetue o pagamento para liberar a criação de projetos.
                   </span>
-                </>
+                </span>
               )}
               {subStatus === "none" && (
-                <>
-                  <Crown className="h-4 w-4 text-amber-400" />
+                <span className="flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-amber-400 shrink-0" />
                   <span>
                     Você está no plano <strong>Starter</strong>. Assine um plano para criar projetos ilimitados.
                   </span>
-                </>
+                </span>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">

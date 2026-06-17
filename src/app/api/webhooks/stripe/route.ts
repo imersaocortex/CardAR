@@ -7,6 +7,12 @@ import {
   getCheckoutSession,
   listInvoices,
 } from "@/lib/stripe"
+import {
+  sendPaymentSuccessNotification,
+  sendOverdueNotification,
+  sendPlanChangeNotification,
+  sendSubscriptionCanceledNotification,
+} from "@/lib/evolution"
 
 export async function POST(request: Request) {
   const body = await request.text()
@@ -118,33 +124,32 @@ async function handleCheckoutCompleted(
     return
   }
 
-  await admin
-    .from("subscriptions")
-    .update({
-      status: "active",
-      stripe_subscription_id: subscriptionId,
-      payment_provider: "stripe",
-    })
-    .eq("organization_id", orgId)
-
-  const newEnd = new Date()
-  newEnd.setMonth(newEnd.getMonth() + 1)
-  await admin
-    .from("subscriptions")
-    .update({ current_period_end: newEnd.toISOString() })
-    .eq("organization_id", orgId)
-
   const { data: localSub } = await admin
     .from("subscriptions")
     .select("id, plan_id")
     .eq("organization_id", orgId)
     .single()
 
-  if (localSub) {
+  const newEnd = new Date()
+  newEnd.setMonth(newEnd.getMonth() + 1)
+
+  await admin
+    .from("subscriptions")
+    .update({
+      status: "active",
+      stripe_subscription_id: subscriptionId,
+      payment_provider: "stripe",
+      current_period_end: newEnd.toISOString(),
+    })
+    .eq("organization_id", orgId)
+
+  const targetPlanId = localSub?.plan_id || null
+
+  if (targetPlanId) {
     const { data: plan } = await admin
       .from("plans")
       .select("projects_limit, assets_limit_bytes")
-      .eq("id", localSub.plan_id)
+      .eq("id", targetPlanId)
       .single()
 
     if (plan) {
@@ -161,15 +166,39 @@ async function handleCheckoutCompleted(
   await admin.from("stripe_checkouts").insert({
     organization_id: orgId,
     subscription_id: localSub?.id || null,
-    plan_id: localSub?.plan_id || null,
+    plan_id: targetPlanId,
     stripe_session_id: session.id,
     checkout_url: session.url || null,
     status: "completed",
   })
 
+  await admin.from("stripe_payments").insert({
+    organization_id: orgId,
+    subscription_id: localSub?.id || null,
+    stripe_payment_intent_id: session.payment_intent || session.id,
+    status: "paid",
+    value: (session.amount_total || 0) / 100,
+    due_date: new Date().toISOString().split("T")[0],
+    paid_date: new Date().toISOString(),
+    invoice_url: null,
+  })
+
   await admin.rpc("unsuspend_org_projects", {
     p_organization_id: orgId,
   })
+
+  if (targetPlanId) {
+    const { data: plan } = await admin
+      .from("plans")
+      .select("name")
+      .eq("id", targetPlanId)
+      .single()
+
+    if (plan) {
+      sendPaymentSuccessNotification(orgId, plan.name, (session.amount_total || 0) / 100)
+        .catch((e: any) => console.warn("[stripe-webhook] Failed to send payment notification:", e))
+    }
+  }
 }
 
 async function handleInvoicePaid(
@@ -207,6 +236,20 @@ async function handleInvoicePaid(
       await admin.rpc("unsuspend_org_projects", {
         p_organization_id: orgId,
       })
+    }
+  }
+
+  const { data: planForNotify } = await admin
+    .from("subscriptions")
+    .select("plan_id")
+    .eq("organization_id", orgId)
+    .single()
+
+  if (planForNotify?.plan_id) {
+    const { data: p } = await admin.from("plans").select("name").eq("id", planForNotify.plan_id).single()
+    if (p) {
+      sendPaymentSuccessNotification(orgId, p.name, (invoice.amount_paid || 0) / 100)
+        .catch((e: any) => console.warn("[stripe-webhook] Failed to send payment notification:", e))
     }
   }
 
@@ -250,6 +293,20 @@ async function handleInvoicePaymentFailed(
   await admin.rpc("suspend_org_projects", {
     p_organization_id: orgId,
   })
+
+  const { data: planForOverdue } = await admin
+    .from("subscriptions")
+    .select("plan_id")
+    .eq("organization_id", orgId)
+    .single()
+
+  if (planForOverdue?.plan_id) {
+    const { data: p } = await admin.from("plans").select("name").eq("id", planForOverdue.plan_id).single()
+    if (p) {
+      sendOverdueNotification(orgId, p.name, new Date().toISOString())
+        .catch((e: any) => console.warn("[stripe-webhook] Failed to send overdue notification:", e))
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(
@@ -264,7 +321,7 @@ async function handleSubscriptionDeleted(
 
   const { data: starterPlan } = await admin
     .from("plans")
-    .select("id, projects_limit, assets_limit_bytes")
+    .select("id, name, projects_limit, assets_limit_bytes")
     .eq("slug", "starter")
     .single()
 
@@ -295,6 +352,11 @@ async function handleSubscriptionDeleted(
   await admin.rpc("suspend_org_projects", {
     p_organization_id: orgId,
   })
+
+  if (starterPlan) {
+    sendSubscriptionCanceledNotification(orgId, starterPlan.name || starterPlan.id)
+      .catch((e: any) => console.warn("[stripe-webhook] Failed to send cancel notification:", e))
+  }
 }
 
 async function handleSubscriptionUpdated(

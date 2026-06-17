@@ -67,9 +67,11 @@ export default function BillingPage() {
         body: JSON.stringify({ action: "checkout_success" }),
       }).then((r) => r.json()).then((data) => {
         if (data.success) setUpgraded(true)
-      }).catch(() => {})
+        loadData()
+      }).catch(() => { loadData() })
+    } else {
+      loadData()
     }
-    loadData()
     loadGatewaySettings()
   }, [])
 

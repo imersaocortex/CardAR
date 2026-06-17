@@ -705,7 +705,8 @@ async function handleStripeUpgrade(
       try { await stripeCancelSubscription(sub.stripe_subscription_id) } catch {}
     }
 
-    const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+    const baseUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+    const callbackUrl = `${baseUrl}/billing`
 
     const priceId = plan.stripe_price_id || null
 
@@ -766,7 +767,8 @@ async function handleStripeFirstPayment(
       })
     }
 
-    const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+    const baseUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+    const callbackUrl = `${baseUrl}/billing`
 
     const priceId = plan.stripe_price_id || null
 

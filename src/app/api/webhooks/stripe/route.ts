@@ -12,6 +12,16 @@ import {
   sendSubscriptionCanceledNotification,
 } from "@/lib/evolution"
 
+function localDateStr() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split("T")[0]
+}
+
+function localMidnightISO() {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString()
+}
+
 export async function POST(request: Request) {
   const body = await request.text()
   const signature = request.headers.get("stripe-signature") || ""
@@ -281,8 +291,8 @@ async function handleInvoicePaid(
       stripe_payment_intent_id: invoice.payment_intent || invoice.id,
       status: "paid",
       value: (invoice.amount_paid || 0) / 100,
-      due_date: new Date().toISOString().split("T")[0],
-      paid_date: new Date().toISOString(),
+      due_date: localDateStr(),
+      paid_date: localMidnightISO(),
       invoice_url: invoice.hosted_invoice_url || null,
     })
   } catch (e: any) {
@@ -314,7 +324,7 @@ async function handleInvoicePaymentFailed(
       stripe_payment_intent_id: invoice.payment_intent || invoice.id,
       status: "failed",
       value: (invoice.amount_due || 0) / 100,
-      due_date: new Date().toISOString().split("T")[0],
+      due_date: localDateStr(),
       paid_date: null,
       invoice_url: invoice.hosted_invoice_url || null,
     })

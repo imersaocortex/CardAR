@@ -5,6 +5,16 @@ import { ensureAsaasKey, createCustomer as asaasCreateCustomer, updateCustomer a
 import { ensureStripeKey, createCustomer as stripeCreateCustomer, createCheckoutSession as stripeCreateCheckoutSession, cancelSubscription as stripeCancelSubscription, getCheckoutSession as stripeGetCheckoutSession } from "@/lib/stripe"
 import { sendPlanChangeNotification, sendSubscriptionCanceledNotification } from "@/lib/evolution"
 
+function localDateStr() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split("T")[0]
+}
+
+function localMidnightISO() {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString()
+}
+
 export async function GET() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -489,8 +499,8 @@ export async function POST(request: Request) {
                 stripe_payment_intent_id: paymentIntentId,
                 status: "paid",
                 value: (session.amount_total || 0) / 100,
-                due_date: new Date().toISOString().split("T")[0],
-                paid_date: new Date().toISOString(),
+                due_date: localDateStr(),
+                paid_date: localMidnightISO(),
                 invoice_url: null,
               })
             }
@@ -556,7 +566,7 @@ export async function POST(request: Request) {
         await admin.from("asaas_payments").insert({
           organization_id: orgId, subscription_id: localSub?.id || null, asaas_payment_id: foundPayment.id,
           status: foundPayment.status || "PENDING", value: foundPayment.value || 0,
-          due_date: foundPayment.dueDate || new Date().toISOString().split("T")[0],
+          due_date: foundPayment.dueDate || localDateStr(),
           paid_date: foundPayment.paidDate || null, invoice_url: foundPayment.invoiceUrl || null,
         })
       } else if (isPaid) {

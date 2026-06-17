@@ -2,6 +2,16 @@ import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ensureStripeKey, listInvoices } from "@/lib/stripe"
 
+function localDateStr() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split("T")[0]
+}
+
+function localMidnightISO() {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString()
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -62,8 +72,8 @@ export async function POST(request: Request) {
             stripe_payment_intent_id: paymentIntentId,
             status: invoice.status === "paid" ? "paid" : "open",
             value: (invoice.amount_paid || invoice.amount_due || 0) / 100,
-            due_date: new Date().toISOString().split("T")[0],
-            paid_date: invoice.status === "paid" ? new Date().toISOString() : null,
+            due_date: localDateStr(),
+            paid_date: invoice.status === "paid" ? localMidnightISO() : null,
             invoice_url: invoice.hosted_invoice_url || null,
           })
           results.push({ payment_id: paymentIntentId, status: invoice.status, action: "created" })

@@ -406,7 +406,103 @@ export async function POST(request: Request) {
       .single()
 
     if (sub?.payment_provider === "stripe") {
-      return NextResponse.json({ success: true })
+      try {
+        const { data: pendingCheckout } = await admin
+          .from("stripe_checkouts")
+          .select("*")
+          .eq("organization_id", orgId)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (pendingCheckout?.stripe_session_id) {
+          const session = await stripeGetCheckoutSession(pendingCheckout.stripe_session_id)
+          const isPaid = session.payment_status === "paid"
+
+          if (isPaid) {
+            const targetPlanId = pendingCheckout.plan_id
+
+            const { data: currentSub } = await admin
+              .from("subscriptions")
+              .select("current_period_end, status, plan_id")
+              .eq("organization_id", orgId)
+              .single()
+
+            if (targetPlanId) {
+              const { data: plan } = await admin
+                .from("plans")
+                .select("name, projects_limit, assets_limit_bytes")
+                .eq("id", targetPlanId)
+                .single()
+
+              if (plan) {
+                await admin
+                  .from("subscriptions")
+                  .update({ plan_id: targetPlanId, status: "active" })
+                  .eq("organization_id", orgId)
+
+                await admin
+                  .from("usage_limits")
+                  .update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes })
+                  .eq("organization_id", orgId)
+
+                if (session.subscription) {
+                  const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id
+                  await admin
+                    .from("subscriptions")
+                    .update({ stripe_subscription_id: subId })
+                    .eq("organization_id", orgId)
+                }
+
+                const newEnd = new Date()
+                newEnd.setMonth(newEnd.getMonth() + 1)
+                await admin
+                  .from("subscriptions")
+                  .update({ current_period_end: newEnd.toISOString() })
+                  .eq("organization_id", orgId)
+
+                await admin.rpc("unsuspend_org_projects", { p_organization_id: orgId })
+              }
+            }
+
+            const { data: existingPayment } = await admin
+              .from("stripe_payments")
+              .select("id")
+              .eq("stripe_payment_intent_id", session.payment_intent || session.id)
+              .maybeSingle()
+
+            if (!existingPayment) {
+              const { data: localSub } = await admin
+                .from("subscriptions")
+                .select("id")
+                .eq("organization_id", orgId)
+                .single()
+
+              await admin.from("stripe_payments").insert({
+                organization_id: orgId,
+                subscription_id: localSub?.id || null,
+                stripe_payment_intent_id: session.payment_intent || session.id,
+                status: "paid",
+                value: (session.amount_total || 0) / 100,
+                due_date: new Date().toISOString().split("T")[0],
+                paid_date: new Date().toISOString(),
+                invoice_url: null,
+              })
+            }
+
+            await admin
+              .from("stripe_checkouts")
+              .update({ status: "completed" })
+              .eq("id", pendingCheckout.id)
+          }
+        }
+
+        return NextResponse.json({ success: true })
+      } catch (err: any) {
+        console.error("[billing] stripe checkout_success error:", err?.message || err)
+        return NextResponse.json({ success: true })
+      }
     }
 
     // ----- ASAAS checkout_success (existing flow) -----

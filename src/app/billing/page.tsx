@@ -391,11 +391,23 @@ export default function BillingPage() {
         )}
 
         {isCanceled && (
-          <div className="mb-6 p-4 rounded-xl bg-muted border border-border flex items-center gap-3">
-            <Crown className="h-5 w-5 text-muted-foreground shrink-0" />
-            <div className="text-sm text-muted-foreground">
-              Você está no plano <strong>Starter</strong>. Escolha um plano abaixo para desbloquear todos os recursos.
+          <div className="mb-6 p-4 rounded-xl bg-muted border border-border flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <Crown className="h-5 w-5 text-muted-foreground shrink-0" />
+              <div className="text-sm text-muted-foreground">
+                Sua assinatura está <strong>cancelada</strong>. Reative agora e escolha um plano para desbloquear todos os recursos.
+              </div>
             </div>
+            <Button
+              variant="gradient"
+              size="sm"
+              onClick={() => {
+                document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" })
+              }}
+              className="shrink-0"
+            >
+              Reativar Assinatura
+            </Button>
           </div>
         )}
 
@@ -424,7 +436,7 @@ export default function BillingPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div id="planos" className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           {plans.map((plan, i) => {
             const isCurrent = subscription?.plans?.id === plan.id
             const cycleLabel = plan.billing_cycle === "yearly" ? " /ano" : " /mês"

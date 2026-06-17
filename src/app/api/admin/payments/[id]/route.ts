@@ -24,34 +24,46 @@ export async function DELETE(
 
   const { id } = await params
 
-  const { data: payment } = await admin
+  const { data: asaasPayment } = await admin
     .from("asaas_payments")
     .select("asaas_payment_id")
     .eq("id", id)
-    .single()
+    .maybeSingle()
 
-  if (!payment) {
-    return NextResponse.json({ error: "Pagamento não encontrado" }, { status: 404 })
-  }
-
-  // Try to delete from ASAAS as well
-  await ensureAsaasKey(admin)
-  if (process.env.ASAAS_API_KEY && payment.asaas_payment_id) {
-    try {
-      await deletePaymentFromAsaas(payment.asaas_payment_id)
-    } catch {
-      console.warn("[admin] Could not delete from ASAAS, removing locally only")
+  if (asaasPayment) {
+    await ensureAsaasKey(admin)
+    if (process.env.ASAAS_API_KEY && asaasPayment.asaas_payment_id) {
+      try {
+        await deletePaymentFromAsaas(asaasPayment.asaas_payment_id)
+      } catch {
+        console.warn("[admin] Could not delete from ASAAS, removing locally only")
+      }
     }
+
+    const { error } = await admin
+      .from("asaas_payments")
+      .delete()
+      .eq("id", id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
   }
 
-  const { error } = await admin
-    .from("asaas_payments")
-    .delete()
+  const { data: stripePayment } = await admin
+    .from("stripe_payments")
+    .select("id")
     .eq("id", id)
+    .maybeSingle()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (stripePayment) {
+    const { error } = await admin
+      .from("stripe_payments")
+      .delete()
+      .eq("id", id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ error: "Pagamento não encontrado" }, { status: 404 })
 }

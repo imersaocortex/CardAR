@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as any
-        if (session.mode === "subscription" && session.payment_status === "paid") {
+        if (session.mode === "subscription") {
           await handleCheckoutCompleted(admin, session)
         }
         break
@@ -130,20 +130,28 @@ async function handleCheckoutCompleted(
     .eq("organization_id", orgId)
     .single()
 
-  const newEnd = new Date()
-  newEnd.setMonth(newEnd.getMonth() + 1)
+  const targetPlanId = localSub?.plan_id || null
+
+  const isPaid = session.payment_status === "paid"
+  const status = isPaid ? "active" : "pending"
 
   await admin
     .from("subscriptions")
     .update({
-      status: "active",
+      status,
       stripe_subscription_id: subscriptionId,
       payment_provider: "stripe",
-      current_period_end: newEnd.toISOString(),
     })
     .eq("organization_id", orgId)
 
-  const targetPlanId = localSub?.plan_id || null
+  if (isPaid) {
+    const newEnd = new Date()
+    newEnd.setMonth(newEnd.getMonth() + 1)
+    await admin
+      .from("subscriptions")
+      .update({ current_period_end: newEnd.toISOString() })
+      .eq("organization_id", orgId)
+  }
 
   if (targetPlanId) {
     const { data: plan } = await admin
@@ -172,31 +180,22 @@ async function handleCheckoutCompleted(
     status: "completed",
   })
 
-  await admin.from("stripe_payments").insert({
-    organization_id: orgId,
-    subscription_id: localSub?.id || null,
-    stripe_payment_intent_id: session.payment_intent || session.id,
-    status: "paid",
-    value: (session.amount_total || 0) / 100,
-    due_date: new Date().toISOString().split("T")[0],
-    paid_date: new Date().toISOString(),
-    invoice_url: null,
-  })
+  if (isPaid) {
+    await admin.rpc("unsuspend_org_projects", {
+      p_organization_id: orgId,
+    })
 
-  await admin.rpc("unsuspend_org_projects", {
-    p_organization_id: orgId,
-  })
+    if (targetPlanId) {
+      const { data: plan } = await admin
+        .from("plans")
+        .select("name")
+        .eq("id", targetPlanId)
+        .single()
 
-  if (targetPlanId) {
-    const { data: plan } = await admin
-      .from("plans")
-      .select("name")
-      .eq("id", targetPlanId)
-      .single()
-
-    if (plan) {
-      sendPaymentSuccessNotification(orgId, plan.name, (session.amount_total || 0) / 100)
-        .catch((e: any) => console.warn("[stripe-webhook] Failed to send payment notification:", e))
+      if (plan) {
+        sendPaymentSuccessNotification(orgId, plan.name, (session.amount_total || 0) / 100)
+          .catch((e: any) => console.warn("[stripe-webhook] Failed to send payment notification:", e))
+      }
     }
   }
 }
@@ -236,6 +235,30 @@ async function handleInvoicePaid(
       await admin.rpc("unsuspend_org_projects", {
         p_organization_id: orgId,
       })
+
+      const { data: subWithPlan } = await admin
+        .from("subscriptions")
+        .select("plan_id")
+        .eq("organization_id", orgId)
+        .single()
+
+      if (subWithPlan?.plan_id) {
+        const { data: plan } = await admin
+          .from("plans")
+          .select("projects_limit, assets_limit_bytes")
+          .eq("id", subWithPlan.plan_id)
+          .single()
+
+        if (plan) {
+          await admin
+            .from("usage_limits")
+            .update({
+              projects_limit: plan.projects_limit,
+              assets_limit_bytes: plan.assets_limit_bytes,
+            })
+            .eq("organization_id", orgId)
+        }
+      }
     }
   }
 

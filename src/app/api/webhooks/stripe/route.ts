@@ -4,8 +4,6 @@ import {
   ensureStripeKey,
   loadWebhookSecret,
   constructWebhookEvent,
-  getCheckoutSession,
-  listInvoices,
 } from "@/lib/stripe"
 import {
   sendPaymentSuccessNotification,
@@ -276,16 +274,23 @@ async function handleInvoicePaid(
     }
   }
 
-  await admin.from("stripe_payments").insert({
-    organization_id: orgId,
-    subscription_id: localSub?.id || null,
-    stripe_payment_intent_id: invoice.payment_intent || invoice.id,
-    status: "paid",
-    value: (invoice.amount_paid || 0) / 100,
-    due_date: new Date().toISOString().split("T")[0],
-    paid_date: new Date().toISOString(),
-    invoice_url: invoice.hosted_invoice_url || null,
-  })
+  try {
+    await admin.from("stripe_payments").insert({
+      organization_id: orgId,
+      subscription_id: localSub?.id || null,
+      stripe_payment_intent_id: invoice.payment_intent || invoice.id,
+      status: "paid",
+      value: (invoice.amount_paid || 0) / 100,
+      due_date: new Date().toISOString().split("T")[0],
+      paid_date: new Date().toISOString(),
+      invoice_url: invoice.hosted_invoice_url || null,
+    })
+  } catch (e: any) {
+    // If unique violation (already exists), that's fine
+    if (!e?.message?.includes("unique") && !e?.code?.includes("23505")) {
+      console.warn("[stripe-webhook] Failed to insert stripe_payment:", e?.message || e)
+    }
+  }
 }
 
 async function handleInvoicePaymentFailed(
@@ -303,15 +308,21 @@ async function handleInvoicePaymentFailed(
     .update({ status: "past_due" })
     .eq("organization_id", orgId)
 
-  await admin.from("stripe_payments").insert({
-    organization_id: orgId,
-    stripe_payment_intent_id: invoice.payment_intent || invoice.id,
-    status: "failed",
-    value: (invoice.amount_due || 0) / 100,
-    due_date: new Date().toISOString().split("T")[0],
-    paid_date: null,
-    invoice_url: invoice.hosted_invoice_url || null,
-  })
+  try {
+    await admin.from("stripe_payments").insert({
+      organization_id: orgId,
+      stripe_payment_intent_id: invoice.payment_intent || invoice.id,
+      status: "failed",
+      value: (invoice.amount_due || 0) / 100,
+      due_date: new Date().toISOString().split("T")[0],
+      paid_date: null,
+      invoice_url: invoice.hosted_invoice_url || null,
+    })
+  } catch (e: any) {
+    if (!e?.message?.includes("unique") && !e?.code?.includes("23505")) {
+      console.warn("[stripe-webhook] Failed to insert failed payment:", e?.message || e)
+    }
+  }
 
   await admin.rpc("suspend_org_projects", {
     p_organization_id: orgId,

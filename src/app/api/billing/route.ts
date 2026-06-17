@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { ensureAsaasKey, createCustomer as asaasCreateCustomer, updateCustomer as asaasUpdateCustomer, createCheckout as asaasCreateCheckout, cancelSubscription as asaasCancelSubscription, getNextDueDate, getTodayDate, getPayments as asaasGetPayments, getPaymentsByCustomer as asaasGetPaymentsByCustomer, getSubscriptionsByCustomer as asaasGetSubscriptionsByCustomer } from "@/lib/asaas"
-import { ensureStripeKey, createCustomer as stripeCreateCustomer, createCheckoutSession as stripeCreateCheckoutSession, cancelSubscription as stripeCancelSubscription, getCheckoutSession as stripeGetCheckoutSession, listInvoices as stripeListInvoices } from "@/lib/stripe"
+import { ensureStripeKey, createCustomer as stripeCreateCustomer, createCheckoutSession as stripeCreateCheckoutSession, cancelSubscription as stripeCancelSubscription, getCheckoutSession as stripeGetCheckoutSession } from "@/lib/stripe"
 import { sendPlanChangeNotification, sendSubscriptionCanceledNotification } from "@/lib/evolution"
 
 export async function GET() {
@@ -500,48 +500,6 @@ export async function POST(request: Request) {
               .update({ status: "completed" })
               .eq("id", pendingCheckout.id)
           }
-        }
-
-        // Sync invoices from Stripe to populate stripe_payments (catch missing invoice_url / renewals)
-        try {
-          const { data: stripeCustomer } = await admin
-            .from("stripe_customers")
-            .select("stripe_customer_id")
-            .eq("organization_id", orgId)
-            .single()
-
-          if (stripeCustomer) {
-            const stripeInvoices = await stripeListInvoices(stripeCustomer.stripe_customer_id)
-            const { data: localSub } = await admin
-              .from("subscriptions")
-              .select("id")
-              .eq("organization_id", orgId)
-              .single()
-
-            for (const inv of stripeInvoices) {
-              const piId = inv.payment_intent || inv.id
-              const { data: existing } = await admin
-                .from("stripe_payments")
-                .select("id")
-                .eq("stripe_payment_intent_id", piId)
-                .maybeSingle()
-
-              if (!existing && inv.status === "paid") {
-                await admin.from("stripe_payments").insert({
-                  organization_id: orgId,
-                  subscription_id: localSub?.id || null,
-                  stripe_payment_intent_id: piId,
-                  status: "paid",
-                  value: (inv.amount_paid || 0) / 100,
-                  due_date: new Date(inv.created * 1000).toISOString().split("T")[0],
-                  paid_date: new Date(inv.status_transitions?.paid_at || inv.created * 1000).toISOString(),
-                  invoice_url: inv.hosted_invoice_url || null,
-                })
-              }
-            }
-          }
-        } catch (e) {
-          console.warn("[billing] Failed to sync Stripe invoices:", e)
         }
 
         return NextResponse.json({ success: true })

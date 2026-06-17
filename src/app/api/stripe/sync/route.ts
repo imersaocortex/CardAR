@@ -55,17 +55,24 @@ export async function POST(request: Request) {
         .single()
 
       if (!existing) {
-        await admin.from("stripe_payments").insert({
-          organization_id,
-          subscription_id: localSub?.id || null,
-          stripe_payment_intent_id: paymentIntentId,
-          status: invoice.status === "paid" ? "paid" : "open",
-          value: (invoice.amount_paid || invoice.amount_due || 0) / 100,
-          due_date: new Date().toISOString().split("T")[0],
-          paid_date: invoice.status === "paid" ? new Date().toISOString() : null,
-          invoice_url: invoice.hosted_invoice_url || null,
-        })
-        results.push({ payment_id: paymentIntentId, status: invoice.status, action: "created" })
+        try {
+          await admin.from("stripe_payments").insert({
+            organization_id,
+            subscription_id: localSub?.id || null,
+            stripe_payment_intent_id: paymentIntentId,
+            status: invoice.status === "paid" ? "paid" : "open",
+            value: (invoice.amount_paid || invoice.amount_due || 0) / 100,
+            due_date: new Date().toISOString().split("T")[0],
+            paid_date: invoice.status === "paid" ? new Date().toISOString() : null,
+            invoice_url: invoice.hosted_invoice_url || null,
+          })
+          results.push({ payment_id: paymentIntentId, status: invoice.status, action: "created" })
+        } catch (e: any) {
+          if (!e?.message?.includes("unique") && !e?.code?.includes("23505")) {
+            throw e
+          }
+          results.push({ payment_id: paymentIntentId, status: invoice.status, action: "already_exists" })
+        }
       } else {
         results.push({ payment_id: paymentIntentId, status: invoice.status, action: "already_exists" })
       }

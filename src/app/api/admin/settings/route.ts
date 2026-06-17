@@ -45,6 +45,11 @@ export async function GET() {
         debug_api_key_configured: false,
         production_api_key_configured: false,
       },
+      stripe: {
+        environment: "debug",
+        debug_secret_key_configured: false,
+        production_secret_key_configured: false,
+      },
       general: {
         allow_signups: true,
         maintenance_mode: false,
@@ -89,7 +94,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: parsed.error.issues }, { status: 400 })
   }
 
-  const { branding, asaas, general, evolution } = parsed.data
+  const { branding, asaas, general, evolution, stripe } = parsed.data
 
   const updateData: Record<string, any> = {}
   if (branding) updateData.branding = branding
@@ -131,6 +136,28 @@ export async function PUT(request: Request) {
     }
 
     updateData.asaas = merged
+  }
+
+  if (stripe) {
+    const current = await admin.from("system_settings").select("stripe").eq("id", 1).single()
+    const currentStripe = (current.data?.stripe as Record<string, any>) || {}
+
+    const merged: Record<string, any> = { ...currentStripe }
+
+    for (const [k, v] of Object.entries(stripe)) {
+      if (v !== undefined) {
+        merged[k] = v
+      }
+    }
+
+    if (merged.environment) {
+      const env = merged.environment
+      if (merged[`${env}_secret_key`]) {
+        merged[`${env}_secret_key_configured`] = true
+      }
+    }
+
+    updateData.stripe = merged
   }
 
   const { data, error } = await admin

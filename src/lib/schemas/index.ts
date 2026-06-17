@@ -95,6 +95,9 @@ export const systemSettingsSchema = z.object({
     api_key: z.string().optional(),
     instance_name: z.string().optional(),
   }).passthrough().optional(),
+  stripe: z.object({
+    environment: z.enum(["debug", "production"]).optional(),
+  }).passthrough().optional(),
 })
 
 export const createPlanSchema = z.object({

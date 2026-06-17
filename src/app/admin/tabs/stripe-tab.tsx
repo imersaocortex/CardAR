@@ -82,6 +82,16 @@ export function StripeTab({ settings, onSaved }: StripeTabProps) {
   const currentKey = keys[environment]
 
   const handleSave = async () => {
+    const currentKey = keys[environment]
+    if (currentKey.secret_key && currentKey.secret_key.startsWith("pk_")) {
+      toast({
+        title: "Chave inválida",
+        description: "Você digitou uma chave publishable (pk_...). O campo Secret Key deve receber a chave secreta (sk_...).",
+        variant: "destructive",
+      })
+      return
+    }
+
     setSaving(true)
     try {
       const body: any = {
@@ -117,11 +127,19 @@ export function StripeTab({ settings, onSaved }: StripeTabProps) {
   }
 
   const testConnection = async () => {
+    const apiKey = keys[environment].secret_key
+    if (apiKey && apiKey.startsWith("pk_")) {
+      toast({
+        title: "Chave inválida",
+        description: "Você digitou uma chave publishable (pk_...). Use a chave secreta (sk_...).",
+        variant: "destructive",
+      })
+      return
+    }
+
     setTesting(true)
     setTestResult("idle")
     try {
-      const apiKey = keys[environment].secret_key || undefined
-
       const res = await fetch("/api/stripe/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

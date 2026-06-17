@@ -111,6 +111,7 @@ export const createPlanSchema = z.object({
   has_watermark: z.boolean().default(true),
   allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
   highlight: z.boolean().default(false),
+  stripe_price_id: z.string().nullable().optional(),
 })
 
 export const updatePlanSchema = createPlanSchema.partial()

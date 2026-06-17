@@ -76,6 +76,7 @@ export async function POST(request: Request) {
     trial_days: parsed.data.trial_days,
     has_watermark: parsed.data.has_watermark,
     allowed_media_types: parsed.data.allowed_media_types,
+    stripe_price_id: parsed.data.stripe_price_id || null,
   }
 
   // highlight column may not exist yet if migration hasn't been run

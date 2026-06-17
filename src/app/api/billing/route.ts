@@ -565,13 +565,12 @@ async function handleStripeUpgrade(
 
     const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
 
-    const priceMap: Record<string, string | null> = {}
-    const priceId = priceMap[plan.id] || null
+    const priceId = plan.stripe_price_id || null
 
     if (!priceId) {
       return NextResponse.json({
-        error: "Stripe não configurado para este plano. Configure os Price IDs no admin.",
-        redirect: "/admin?tab=stripe",
+        error: "Stripe não configurado para este plano. Configure o Stripe Price ID no admin de planos.",
+        redirect: "/admin?tab=plans",
       }, { status: 400 })
     }
 
@@ -624,13 +623,12 @@ async function handleStripeFirstPayment(
 
     const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
 
-    const priceMap: Record<string, string | null> = {}
-    const priceId = priceMap[plan.id] || null
+    const priceId = plan.stripe_price_id || null
 
     if (!priceId) {
       return NextResponse.json({
-        error: "Stripe não configurado para este plano. Configure os Price IDs no admin.",
-        redirect: "/admin?tab=stripe",
+        error: "Stripe não configurado para este plano. Configure o Stripe Price ID no admin de planos.",
+        redirect: "/admin?tab=plans",
       }, { status: 400 })
     }
 

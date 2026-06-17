@@ -60,7 +60,7 @@ export async function getSubscription(subscriptionId: string): Promise<Stripe.Su
 export async function getCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
   const stripe = getStripe()
   return stripe.checkout.sessions.retrieve(sessionId, {
-    expand: ["subscription", "line_items"],
+    expand: ["subscription", "line_items", "invoice"],
   })
 }
 

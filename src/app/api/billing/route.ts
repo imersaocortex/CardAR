@@ -469,7 +469,7 @@ export async function POST(request: Request) {
               }
             }
 
-            const paymentIntentId = session.payment_intent || session.id
+            const paymentIntentId = (session.invoice as any)?.payment_intent || (session.invoice as any)?.id || session.payment_intent || session.id
             const { data: existingPayment } = await admin
               .from("stripe_payments")
               .select("id")

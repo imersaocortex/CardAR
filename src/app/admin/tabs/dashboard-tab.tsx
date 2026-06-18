@@ -4,6 +4,7 @@ import { motion } from "framer-motion"
 import { Users, FolderKanban, Activity, UserCircle, CreditCard, Eye, FileText } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { formatDate } from "@/lib/format"
 
 interface DashboardTabProps {
   data: any
@@ -93,7 +94,7 @@ export function DashboardTab({ data }: DashboardTabProps) {
                     <td className="py-3 px-4 font-mono text-xs">{payment.asaas_payment_id?.slice(0, 16)}</td>
                     <td className="py-3 px-4">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="py-3 px-4 text-muted-foreground">
-                      {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                      {formatDate(payment.due_date)}
                     </td>
                     <td className="py-3 px-4">
                       <Badge variant={statusVariant[payment.status] || "secondary"}>{payment.status}</Badge>

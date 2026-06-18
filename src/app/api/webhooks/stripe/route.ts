@@ -18,8 +18,7 @@ function localDateStr() {
 }
 
 function localMidnightISO() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString()
+  return new Date().toISOString()
 }
 
 export async function POST(request: Request) {

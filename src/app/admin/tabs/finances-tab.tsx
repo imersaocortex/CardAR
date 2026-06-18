@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { formatDate } from "@/lib/format"
 
 interface FinanceData {
   summary: {
@@ -373,12 +374,10 @@ export function FinancesTab() {
                       <td className="py-3 px-4 font-mono text-xs">{idField?.slice(0, 16)}</td>
                       <td className="py-3 px-4 font-medium">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="py-3 px-4 text-muted-foreground">
-                        {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                        {formatDate(payment.due_date)}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">
-                        {payment.paid_date
-                          ? new Date(payment.paid_date).toLocaleDateString("pt-BR")
-                          : "-"}
+                        {formatDate(payment.paid_date)}
                       </td>
                       <td className="py-3 px-4">
                         <Badge variant={statusVariant[payment.status] || "secondary"}>

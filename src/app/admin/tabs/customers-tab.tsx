@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { formatDate } from "@/lib/format"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -568,7 +569,7 @@ export function CustomersTab() {
                                 <td className="py-2 px-2 font-mono">{payment.asaas_payment_id?.slice(0, 12)}...</td>
                                 <td className="py-2 px-2">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 <td className="py-2 px-2 text-muted-foreground">
-                                  {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                                  {formatDate(payment.due_date)}
                                 </td>
                                 <td className="py-2 px-2">
                                   <Badge variant={statusVariant[payment.status] || "secondary"}>

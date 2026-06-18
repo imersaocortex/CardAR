@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
 import { GatewaySelector } from "@/components/billing/gateway-selector"
+import { formatDate } from "@/lib/format"
 
 interface Plan {
   id: string
@@ -566,7 +567,7 @@ export default function BillingPage() {
                           <td className="py-3 px-2 font-mono text-xs">{idField?.slice(0, 12)}...</td>
                           <td className="py-3 px-2">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td className="py-3 px-2 text-muted-foreground">
-                            {new Date(payment.due_date).toLocaleDateString("pt-BR")}
+                            {formatDate(payment.due_date)}
                           </td>
                           <td className="py-3 px-2">
                             <Badge variant={statusVariant[payment.status] || "secondary"}>

@@ -223,6 +223,12 @@ async function handleInvoicePaid(
   const orgId = await resolveOrgByCustomer(admin, customerId)
   if (!orgId) return
 
+  // Skip $0 invoices (trial period - no actual payment) — check BEFORE any subscription changes
+  if ((invoice.amount_paid || 0) === 0) {
+    console.log("[stripe-webhook] Skipping $0 invoice (trial) - no payment recorded:", invoice.id)
+    return
+  }
+
   const { data: localSub } = await admin
     .from("subscriptions")
     .select("id, current_period_end, status")
@@ -279,12 +285,6 @@ async function handleInvoicePaid(
     .select("plan_id")
     .eq("organization_id", orgId)
     .single()
-
-  // Skip $0 invoices (trial period - no actual payment)
-  if ((invoice.amount_paid || 0) === 0) {
-    console.log("[stripe-webhook] Skipping $0 invoice (trial) - no payment recorded:", invoice.id)
-    return
-  }
 
   if (planForNotify?.plan_id) {
     const { data: p } = await admin.from("plans").select("name").eq("id", planForNotify.plan_id).single()

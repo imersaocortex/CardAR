@@ -658,12 +658,13 @@ export async function POST(request: Request) {
                 invoice_url: null,
               })
             }
-
-            await admin
-              .from("stripe_checkouts")
-              .update({ status: "completed" })
-              .eq("id", pendingCheckout.id)
           }
+
+          // Always mark the pending checkout as completed (even for trial)
+          await admin
+            .from("stripe_checkouts")
+            .update({ status: "completed" })
+            .eq("id", pendingCheckout.id)
         }
 
         return NextResponse.json({ success: true })

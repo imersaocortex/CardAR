@@ -27,6 +27,37 @@ This version has breaking changes — APIs, conventions, and file structure may 
 6. **Renewal**: ASAAS subscription auto-charges → webhook extends `current_period_end`
 7. **Cancel**: `/api/billing` POST cancel → subscription → `canceled`, reverted to Starter
 
+### Stripe Trial Flow (Debugging Notes)
+
+1. **Upgrade** (`handleStripeUpgrade`, `billing/route.ts:790`):
+   - Creates Stripe Checkout Session with `trial_period_days`
+   - Sets `status: "trialing"`, `trial_ends_at`, updates `usage_limits`
+   - Inserts `stripe_checkouts` with `status: "pending"`
+   - Does NOT set `current_period_end` (set later by webhook or checkout_success)
+
+2. **Webhook `checkout.session.completed`** (`handleCheckoutCompleted`, `webhooks/stripe/route.ts:121`):
+   - Detects trial via `payment_status !== "paid"` + `mode === "subscription"`
+   - Sets `status: "trialing"`, sets `stripe_subscription_id`
+   - Updates `usage_limits`, unsuspends projects
+   - Inserts a NEW `stripe_checkouts` record with `status: "completed"` (does NOT update the pending one)
+
+3. **Webhook `invoice.paid`** (`handleInvoicePaid`, `webhooks/stripe/route.ts:215`):
+   - Stripe fires this for $0 trial invoices
+   - **CRITICAL**: `$0 check must come BEFORE` the subscription update block
+   - When `amount_paid === 0`, return early (no subscription changes, no payment record)
+
+4. **Frontend `checkout_success`** (`billing/route.ts:565`):
+   - Finds "pending" `stripe_checkouts` record (created by upgrade)
+   - `isPaid = session.payment_status === "paid"` → false for trial
+   - Skips paid flow (subscription update, payment insert)
+   - **Must mark checkout as "completed" even for trial** (outside `if (isPaid)`)
+
+### Known Timezone Issue
+- `due_date` stored as `YYYY-MM-DD` (via `localDateStr()`) without timezone
+- Admin UI renders as `new Date(payment.due_date).toLocaleDateString("pt-BR")`
+- `new Date("YYYY-MM-DD")` = midnight UTC → in negative UTC offsets, shows previous day
+- `paid_date` uses `localMidnightISO()` (full ISO with UTC offset) — no issue
+
 ### Key Files
 - `src/lib/asaas/index.ts` — ASAAS API client (createCustomer, updateCustomer, createSubscription, createCheckout, cancelSubscription)
 - `src/app/api/billing/route.ts` — Billing API (GET subscription/payments/checkout, POST upgrade/cancel)

@@ -9,6 +9,7 @@ export const signupSchema = z.object({
   name: z.string().min(2, "Mínimo 2 caracteres"),
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),
+  phone: z.string().min(10, "Mínimo 10 dígitos").max(20, "Máximo 20 caracteres"),
 })
 
 export const createProjectSchema = z.object({

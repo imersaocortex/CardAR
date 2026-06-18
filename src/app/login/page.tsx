@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { Zap, Eye, EyeOff, MailCheck } from "lucide-react"
+import { Zap, Eye, EyeOff, MailCheck, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
+  const [whatsapp, setWhatsapp] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [signupSuccess, setSignupSuccess] = useState(false)
@@ -53,13 +54,30 @@ export default function LoginPage() {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: { data: { name, phone: whatsapp } },
     })
 
     if (signUpError) {
       setError(signUpError.message)
       setLoading(false)
       return
+    }
+
+    // Send welcome WhatsApp notification
+    if (data.session) {
+      const { data: membership } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", data.session.user.id)
+        .single()
+
+      if (membership) {
+        fetch("/api/notifications/welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organizationId: membership.organization_id, userName: name }),
+        }).catch(() => {})
+      }
     }
 
     // Email confirmation required — session is null
@@ -185,6 +203,21 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reg-whatsapp">WhatsApp</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="reg-whatsapp"
+                      type="tel"
+                      className="pl-10"
+                      placeholder="(11) 99999-9999"
+                      value={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reg-password">Senha</Label>

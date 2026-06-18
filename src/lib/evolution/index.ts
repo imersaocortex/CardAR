@@ -278,6 +278,24 @@ export async function sendSubscriptionCanceledNotification(
   return sendMessage(config, phone, text)
 }
 
+export async function sendWelcomeNotification(
+  organizationId: string,
+  userName: string,
+): Promise<boolean> {
+  const config = await getEvolutionConfig()
+  if (!config) return false
+
+  const phone = await getOrgPhone(organizationId)
+  if (!phone) return false
+
+  const text = `🎉 *Bem-vindo à ${config.site_name}!*\n\n` +
+    `Olá ${userName}! Sua conta foi criada com sucesso.\n\n` +
+    `Agora você pode criar projetos de Realidade Aumentada e compartilhar com seus clientes.\n\n` +
+    `Comece agora mesmo acessando o painel! 🚀`
+
+  return sendMessage(config, phone, text)
+}
+
 export async function sendCustomMessage(
   organizationId: string,
   text: string,

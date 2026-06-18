@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { ensureAsaasKey, createCustomer as asaasCreateCustomer, updateCustomer as asaasUpdateCustomer, createCheckout as asaasCreateCheckout, cancelSubscription as asaasCancelSubscription, getNextDueDate, getTodayDate, getPayments as asaasGetPayments, getPaymentsByCustomer as asaasGetPaymentsByCustomer, getSubscriptionsByCustomer as asaasGetSubscriptionsByCustomer } from "@/lib/asaas"
+import { ensureAsaasKey, createCustomer as asaasCreateCustomer, updateCustomer as asaasUpdateCustomer, getCustomer as asaasGetCustomer, createCheckout as asaasCreateCheckout, cancelSubscription as asaasCancelSubscription, getNextDueDate, getTodayDate, getPayments as asaasGetPayments, getPaymentsByCustomer as asaasGetPaymentsByCustomer, getSubscriptionsByCustomer as asaasGetSubscriptionsByCustomer } from "@/lib/asaas"
 import { ensureStripeKey, createCustomer as stripeCreateCustomer, createCheckoutSession as stripeCreateCheckoutSession, cancelSubscription as stripeCancelSubscription, getCheckoutSession as stripeGetCheckoutSession } from "@/lib/stripe"
 import { sendPlanChangeNotification, sendSubscriptionCanceledNotification } from "@/lib/evolution"
 
@@ -134,23 +134,50 @@ export async function POST(request: Request) {
           .single()
 
         if (existingCustomer) {
-          asaasCustomerId = existingCustomer.asaas_customer_id
-          if (profile?.cpf_cnpj || profile?.phone) {
-            try {
-              await asaasUpdateCustomer(asaasCustomerId, {
-                name: profile?.name || user.email || orgId,
-                email: user.email!,
-                cpfCnpj: profile?.cpf_cnpj || undefined,
-                phone: profile?.phone || undefined,
-                address: profile?.address || undefined,
-                addressNumber: profile?.address_number || undefined,
-                complement: profile?.address_complement || undefined,
-                province: profile?.address_neighborhood || undefined,
-                city: profile?.address_city || undefined,
-                state: profile?.address_state || undefined,
-                postalCode: profile?.address_zipcode || undefined,
-              })
-            } catch {}
+          // Verify the customer still exists in ASAAS (sandbox resets/expunges data periodically)
+          try {
+            await asaasGetCustomer(existingCustomer.asaas_customer_id)
+            asaasCustomerId = existingCustomer.asaas_customer_id
+          } catch {
+            // Customer no longer exists in ASAAS — create a new one
+            console.log("[billing] ASAAS customer", existingCustomer.asaas_customer_id, "not found, creating new")
+            await admin.from("asaas_customers").delete().eq("organization_id", orgId)
+            asaasCustomerId = await asaasCreateCustomer(
+              orgId,
+              profile?.name || user.email || orgId,
+              user.email!,
+              profile?.cpf_cnpj || undefined,
+              profile?.phone || undefined,
+              profile?.address || undefined,
+              profile?.address_number || undefined,
+              profile?.address_complement || undefined,
+              profile?.address_neighborhood || undefined,
+              profile?.address_city || undefined,
+              profile?.address_state || undefined,
+              profile?.address_zipcode || undefined,
+            )
+            await admin.from("asaas_customers").insert({
+              organization_id: orgId,
+              asaas_customer_id: asaasCustomerId,
+            })
+          }
+          // Always sync latest profile data to ASAAS
+          try {
+            await asaasUpdateCustomer(asaasCustomerId, {
+              name: profile?.name || user.email || orgId,
+              email: user.email!,
+              cpfCnpj: profile?.cpf_cnpj || undefined,
+              phone: profile?.phone || undefined,
+              address: profile?.address || undefined,
+              addressNumber: profile?.address_number || undefined,
+              complement: profile?.address_complement || undefined,
+              province: profile?.address_neighborhood || undefined,
+              city: profile?.address_city || undefined,
+              state: profile?.address_state || undefined,
+              postalCode: profile?.address_zipcode || undefined,
+            })
+          } catch (e) {
+            console.warn("[billing] Failed to update ASAAS customer:", e)
           }
         } else {
           asaasCustomerId = await asaasCreateCustomer(
@@ -371,18 +398,35 @@ export async function POST(request: Request) {
         .single()
 
       if (existingCustomer) {
-        asaasCustomerId = existingCustomer.asaas_customer_id
-        if (profile?.cpf_cnpj || profile?.phone) {
-          try {
-            await asaasUpdateCustomer(asaasCustomerId, {
-              name: profile?.name || user.email || orgId, email: user.email!,
-              cpfCnpj: profile?.cpf_cnpj || undefined, phone: profile?.phone || undefined,
-              address: profile?.address || undefined, addressNumber: profile?.address_number || undefined,
-              complement: profile?.address_complement || undefined, province: profile?.address_neighborhood || undefined,
-              city: profile?.address_city || undefined, state: profile?.address_state || undefined,
-              postalCode: profile?.address_zipcode || undefined,
-            })
-          } catch {}
+        // Verify the customer still exists in ASAAS (sandbox resets/expunges data periodically)
+        try {
+          await asaasGetCustomer(existingCustomer.asaas_customer_id)
+          asaasCustomerId = existingCustomer.asaas_customer_id
+        } catch {
+          console.log("[billing] ASAAS customer", existingCustomer.asaas_customer_id, "not found, creating new")
+          await admin.from("asaas_customers").delete().eq("organization_id", orgId)
+          asaasCustomerId = await asaasCreateCustomer(
+            orgId, profile?.name || user.email || orgId, user.email!,
+            profile?.cpf_cnpj || undefined, profile?.phone || undefined,
+            profile?.address || undefined, profile?.address_number || undefined,
+            profile?.address_complement || undefined, profile?.address_neighborhood || undefined,
+            profile?.address_city || undefined, profile?.address_state || undefined,
+            profile?.address_zipcode || undefined,
+          )
+          await admin.from("asaas_customers").insert({ organization_id: orgId, asaas_customer_id: asaasCustomerId })
+        }
+        // Always sync latest profile data to ASAAS
+        try {
+          await asaasUpdateCustomer(asaasCustomerId, {
+            name: profile?.name || user.email || orgId, email: user.email!,
+            cpfCnpj: profile?.cpf_cnpj || undefined, phone: profile?.phone || undefined,
+            address: profile?.address || undefined, addressNumber: profile?.address_number || undefined,
+            complement: profile?.address_complement || undefined, province: profile?.address_neighborhood || undefined,
+            city: profile?.address_city || undefined, state: profile?.address_state || undefined,
+            postalCode: profile?.address_zipcode || undefined,
+          })
+        } catch (e) {
+          console.warn("[billing] Failed to update ASAAS customer:", e)
         }
       } else {
         asaasCustomerId = await asaasCreateCustomer(

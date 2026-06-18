@@ -586,6 +586,7 @@ export async function POST(request: Request) {
         if (pendingCheckout?.stripe_session_id) {
           const session = await stripeGetCheckoutSession(pendingCheckout.stripe_session_id)
           const isPaid = session.payment_status === "paid"
+          console.log("[billing] stripe checkout_success:", { session_id: session.id, payment_status: session.payment_status, amount_total: session.amount_total, isPaid })
 
           const targetPlanId = pendingCheckout.plan_id
 
@@ -641,22 +642,30 @@ export async function POST(request: Request) {
               .maybeSingle()
 
             if (!existingPayment) {
-              const { data: localSub } = await admin
-                .from("subscriptions")
-                .select("id")
-                .eq("organization_id", orgId)
-                .single()
+              const paymentValue = (session.amount_total || 0) / 100
 
-              await admin.from("stripe_payments").insert({
-                organization_id: orgId,
-                subscription_id: localSub?.id || null,
-                stripe_payment_intent_id: paymentIntentId,
-                status: "paid",
-                value: (session.amount_total || 0) / 100,
-                due_date: localDateStr(),
-                paid_date: localMidnightISO(),
-                invoice_url: null,
-              })
+              // Guard: skip $0 payments (trial)
+              if (paymentValue <= 0) {
+                console.log("[billing] checkout_success: Guard prevented $0 stripe_payment insert for session:", session.id)
+                // Skip insert, continue to mark checkout completed
+              } else {
+                const { data: localSub } = await admin
+                  .from("subscriptions")
+                  .select("id")
+                  .eq("organization_id", orgId)
+                  .single()
+
+                await admin.from("stripe_payments").insert({
+                  organization_id: orgId,
+                  subscription_id: localSub?.id || null,
+                  stripe_payment_intent_id: paymentIntentId,
+                  status: "paid",
+                  value: paymentValue,
+                  due_date: localDateStr(),
+                  paid_date: localMidnightISO(),
+                  invoice_url: null,
+                })
+              }
             }
           }
 

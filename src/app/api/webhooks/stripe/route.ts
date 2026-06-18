@@ -225,7 +225,7 @@ async function handleInvoicePaid(
 
   // Skip $0 invoices (trial period - no actual payment) — check BEFORE any subscription changes
   if ((invoice.amount_paid || 0) === 0) {
-    console.log("[stripe-webhook] Skipping $0 invoice (trial) - no payment recorded:", invoice.id)
+    console.log("[stripe-webhook] handleInvoicePaid: Skipping $0 invoice (trial) - no payment recorded:", invoice.id)
     return
   }
 
@@ -294,13 +294,20 @@ async function handleInvoicePaid(
     }
   }
 
+  const paymentValue = (invoice.amount_paid || 0) / 100
+  if (paymentValue <= 0) {
+    console.log("[stripe-webhook] handleInvoicePaid: Guard prevented $0 payment insert for invoice:", invoice.id, "amount_paid:", invoice.amount_paid)
+    return
+  }
+
   try {
+    console.log("[stripe-webhook] handleInvoicePaid: Inserting stripe_payment:", { invoice: invoice.id, value: paymentValue })
     await admin.from("stripe_payments").insert({
       organization_id: orgId,
       subscription_id: localSub?.id || null,
       stripe_payment_intent_id: invoice.payment_intent || invoice.id,
       status: "paid",
-      value: (invoice.amount_paid || 0) / 100,
+      value: paymentValue,
       due_date: localDateStr(),
       paid_date: localMidnightISO(),
       invoice_url: invoice.hosted_invoice_url || null,

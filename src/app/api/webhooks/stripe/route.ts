@@ -7,9 +7,8 @@ import {
 } from "@/lib/stripe"
 import {
   sendPaymentSuccessNotification,
+  sendTrialActivatedNotification,
   sendOverdueNotification,
-  sendPlanChangeNotification,
-  sendSubscriptionCanceledNotification,
 } from "@/lib/evolution"
 
 function localDateStr() {
@@ -133,7 +132,7 @@ async function handleCheckoutCompleted(
 
   const { data: localSub } = await admin
     .from("subscriptions")
-    .select("id, plan_id")
+    .select("id, plan_id, trial_ends_at")
     .eq("organization_id", orgId)
     .single()
 
@@ -204,8 +203,13 @@ async function handleCheckoutCompleted(
         .single()
 
       if (plan) {
-        sendPaymentSuccessNotification(orgId, plan.name, (session.amount_total || 0) / 100)
-          .catch((e: any) => console.warn("[stripe-webhook] Failed to send payment notification:", e))
+        if (isTrialing) {
+          // Send trial-specific notification with charge date
+          const chargeDate = localSub?.trial_ends_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          sendTrialActivatedNotification(orgId, plan.name, chargeDate)
+            .catch((e: any) => console.warn("[stripe-webhook] Failed to send trial notification:", e))
+        }
+        // isPaid notifications are handled by handleInvoicePaid (avoids duplicates)
       }
     }
   }
@@ -412,11 +416,6 @@ async function handleSubscriptionDeleted(
   await admin.rpc("suspend_org_projects", {
     p_organization_id: orgId,
   })
-
-  if (starterPlan) {
-    sendSubscriptionCanceledNotification(orgId, starterPlan.name || starterPlan.id)
-      .catch((e: any) => console.warn("[stripe-webhook] Failed to send cancel notification:", e))
-  }
 }
 
 async function handleSubscriptionUpdated(

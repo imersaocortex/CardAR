@@ -162,6 +162,26 @@ export async function sendPaymentSuccessNotification(
   return sendMessage(config, phone, text)
 }
 
+export async function sendTrialActivatedNotification(
+  organizationId: string,
+  planName: string,
+  chargeDate: string,
+): Promise<boolean> {
+  const config = await getEvolutionConfig()
+  if (!config) return false
+
+  const phone = await getOrgPhone(organizationId)
+  if (!phone) return false
+
+  const formattedDate = new Date(chargeDate).toLocaleDateString("pt-BR")
+  const text = `✅ *Período de Teste Ativado - ${config.site_name}*\n\n` +
+    `Olá! Seu período de teste do plano *${planName}* foi ativado com sucesso!\n\n` +
+    `📅 *Seu cartão será cobrado automaticamente em:* ${formattedDate}\n\n` +
+    `Até lá, aproveite todos os recursos do plano gratuitamente! 🚀`
+
+  return sendMessage(config, phone, text)
+}
+
 export async function sendOverdueNotification(
   organizationId: string,
   planName: string,

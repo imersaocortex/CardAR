@@ -279,9 +279,24 @@ export async function POST(request: Request) {
           }).eq("organization_id", orgId)
         }
 
+        // Save ASAAS subscription ID (fallback: look up by customer if checkout doesn't return it)
         const asaasSubId = checkout.subscription || null
         if (asaasSubId) {
           await admin.from("subscriptions").update({ asaas_subscription_id: asaasSubId }).eq("organization_id", orgId)
+        } else {
+          try {
+            const subs = await asaasGetSubscriptionsByCustomer(asaasCustomerId)
+            if (subs.length > 0) {
+              const latest = subs.sort((a: any, b: any) =>
+                new Date(b.nextDueDate).getTime() - new Date(a.nextDueDate).getTime()
+              )[0]
+              if (latest?.id) {
+                await admin.from("subscriptions").update({ asaas_subscription_id: latest.id }).eq("organization_id", orgId)
+              }
+            }
+          } catch (e) {
+            console.warn("[billing] Failed to look up ASAAS subscription:", e)
+          }
         }
 
         await admin.from("asaas_checkouts").insert({
@@ -466,8 +481,24 @@ export async function POST(request: Request) {
         }).eq("organization_id", orgId)
       }
 
-      if (checkout.subscription) {
-        await admin.from("subscriptions").update({ asaas_subscription_id: checkout.subscription }).eq("organization_id", orgId)
+      // Save ASAAS subscription ID (fallback: look up by customer if checkout doesn't return it)
+      const asaasSubId = checkout.subscription || null
+      if (asaasSubId) {
+        await admin.from("subscriptions").update({ asaas_subscription_id: asaasSubId }).eq("organization_id", orgId)
+      } else {
+        try {
+          const subs = await asaasGetSubscriptionsByCustomer(asaasCustomerId)
+          if (subs.length > 0) {
+            const latest = subs.sort((a: any, b: any) =>
+              new Date(b.nextDueDate).getTime() - new Date(a.nextDueDate).getTime()
+            )[0]
+            if (latest?.id) {
+              await admin.from("subscriptions").update({ asaas_subscription_id: latest.id }).eq("organization_id", orgId)
+            }
+          }
+        } catch (e) {
+          console.warn("[billing] Failed to look up ASAAS subscription:", e)
+        }
       }
 
       await admin.from("asaas_checkouts").insert({

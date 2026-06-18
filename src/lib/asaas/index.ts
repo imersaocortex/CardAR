@@ -147,7 +147,12 @@ export async function createCheckout(
   cycle: string,
   planName: string,
   callbackUrl: string,
+  trialDays?: number,
 ): Promise<AsaasCheckout> {
+  const actualDueDate = trialDays && trialDays > 0
+    ? getDateAfterDays(trialDays)
+    : dueDate
+
   const checkout = await asaasFetch<AsaasCheckout>("/checkouts", {
     method: "POST",
     body: JSON.stringify({
@@ -166,7 +171,7 @@ export async function createCheckout(
       },
       subscription: {
         cycle,
-        nextDueDate: dueDate,
+        nextDueDate: actualDueDate,
         description: planName,
       },
       customer: customerId,
@@ -248,6 +253,12 @@ export function getNextDueDate(): string {
 
 export function getTodayDate(): string {
   return new Date().toISOString().split("T")[0]
+}
+
+export function getDateAfterDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split("T")[0]
 }
 
 export async function ensureAsaasKey(admin: any) {

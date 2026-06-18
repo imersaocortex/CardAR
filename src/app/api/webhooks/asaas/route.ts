@@ -217,7 +217,7 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
         .update(updates)
         .eq("organization_id", sub.organization_id)
 
-      if (currentSub.status === "pending") {
+      if (currentSub.status === "pending" || currentSub.status === "trialing") {
         const { data: plan } = await admin
           .from("plans")
           .select("projects_limit, assets_limit_bytes")
@@ -314,6 +314,19 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
   const newStatus = statusMap[subscription.status] || subscription.status.toLowerCase()
 
   const sub = await resolveSubscription(admin, subscription.id, subscription.customer)
+  if (!sub) return
+
+  // Don't overwrite 'trialing' with 'active' — trial is handled locally
+  const { data: currentLocal } = await admin
+    .from("subscriptions")
+    .select("status")
+    .eq("organization_id", sub.organization_id)
+    .single()
+
+  if (currentLocal?.status === "trialing" && newStatus === "active") {
+    console.log("[webhook] Subscription is in trial locally, keeping trialing status")
+    return
+  }
 
   const { error: updateErr } = await admin
     .from("subscriptions")
@@ -324,16 +337,14 @@ async function handleSubscriptionEvent(admin: ReturnType<typeof createAdminClien
     console.error("[webhook] Failed to update subscription status:", updateErr)
   }
 
-  if (sub) {
-    if (newStatus === "past_due" || newStatus === "canceled") {
-      await admin.rpc("suspend_org_projects", {
-        p_organization_id: sub.organization_id,
-      })
-    } else if (newStatus === "active") {
-      await admin.rpc("unsuspend_org_projects", {
-        p_organization_id: sub.organization_id,
-      })
-    }
+  if (newStatus === "past_due" || newStatus === "canceled") {
+    await admin.rpc("suspend_org_projects", {
+      p_organization_id: sub.organization_id,
+    })
+  } else if (newStatus === "active") {
+    await admin.rpc("unsuspend_org_projects", {
+      p_organization_id: sub.organization_id,
+    })
   }
 }
 

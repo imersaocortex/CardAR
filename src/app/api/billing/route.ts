@@ -211,8 +211,29 @@ export async function POST(request: Request) {
           console.warn("[billing] Failed to list ASAAS subscriptions for customer:", e)
         }
 
+        const hasTrial = plan.trial_days > 0
         const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
         const billingType = "CREDIT_CARD"
+
+        if (hasTrial) {
+          const trialEnd = new Date()
+          trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+          await admin.from("subscriptions").update({
+            status: "trialing",
+            trial_ends_at: trialEnd.toISOString(),
+            payment_provider: "asaas",
+            plan_id: plan.id,
+          }).eq("organization_id", orgId)
+          await admin.from("usage_limits").update({
+            projects_limit: plan.projects_limit,
+            assets_limit_bytes: plan.assets_limit_bytes,
+          }).eq("organization_id", orgId)
+        } else {
+          await admin.from("subscriptions").update({
+            payment_provider: "asaas",
+            plan_id: plan.id,
+          }).eq("organization_id", orgId)
+        }
 
         const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
         const checkout = await asaasCreateCheckout(
@@ -223,11 +244,12 @@ export async function POST(request: Request) {
           asaasCycle,
           `AR Business Studio - ${plan.name}`,
           callbackUrl,
+          hasTrial ? plan.trial_days : undefined,
         )
 
         const asaasSubId = checkout.subscription || null
         if (asaasSubId) {
-          await admin.from("subscriptions").update({ asaas_subscription_id: asaasSubId, payment_provider: "asaas" }).eq("organization_id", orgId)
+          await admin.from("subscriptions").update({ asaas_subscription_id: asaasSubId }).eq("organization_id", orgId)
         }
 
         await admin.from("asaas_checkouts").insert({
@@ -245,7 +267,18 @@ export async function POST(request: Request) {
       }
     } else {
       // No ASAAS — sandbox mode
-      await admin.from("subscriptions").update({ plan_id: plan.id, status: "active", trial_ends_at: null, payment_provider: "asaas" }).eq("organization_id", orgId)
+      const hasTrial = plan.trial_days > 0
+      const subUpdates: Record<string, any> = { plan_id: plan.id, payment_provider: "asaas" }
+      if (hasTrial) {
+        const trialEnd = new Date()
+        trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+        subUpdates.status = "trialing"
+        subUpdates.trial_ends_at = trialEnd.toISOString()
+      } else {
+        subUpdates.status = "active"
+        subUpdates.trial_ends_at = null
+      }
+      await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
       await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
       await admin.from("asaas_checkouts").insert({
         organization_id: orgId, plan_id: plan.id, asaas_checkout_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
@@ -278,8 +311,18 @@ export async function POST(request: Request) {
 
     if (payment_provider === "stripe") {
       if (!process.env.STRIPE_SECRET_KEY) {
-        // No Stripe — activate immediately (sandbox)
-        await admin.from("subscriptions").update({ status: "active", payment_provider: "stripe" }).eq("organization_id", orgId)
+        // No Stripe — sandbox
+        const hasTrial = plan.trial_days > 0
+        const subUpdates: Record<string, any> = { payment_provider: "stripe" }
+        if (hasTrial) {
+          const trialEnd = new Date()
+          trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+          subUpdates.status = "trialing"
+          subUpdates.trial_ends_at = trialEnd.toISOString()
+        } else {
+          subUpdates.status = "active"
+        }
+        await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
         await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
         await admin.from("stripe_checkouts").insert({
           organization_id: orgId, plan_id: plan.id, stripe_session_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
@@ -296,7 +339,17 @@ export async function POST(request: Request) {
     }
 
     if (!process.env.ASAAS_API_KEY) {
-      await admin.from("subscriptions").update({ status: "active", payment_provider: "asaas" }).eq("organization_id", orgId)
+      const hasTrial = plan.trial_days > 0
+      const subUpdates: Record<string, any> = { payment_provider: "asaas" }
+      if (hasTrial) {
+        const trialEnd = new Date()
+        trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+        subUpdates.status = "trialing"
+        subUpdates.trial_ends_at = trialEnd.toISOString()
+      } else {
+        subUpdates.status = "active"
+      }
+      await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
       await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
       await admin.from("asaas_checkouts").insert({
         organization_id: orgId, plan_id: plan.id, asaas_checkout_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
@@ -338,13 +391,33 @@ export async function POST(request: Request) {
         await admin.from("asaas_customers").insert({ organization_id: orgId, asaas_customer_id: asaasCustomerId })
       }
 
+      const hasTrial = plan.trial_days > 0
       const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
       const billingType = "CREDIT_CARD"
+
+      if (hasTrial) {
+        const trialEnd = new Date()
+        trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+        await admin.from("subscriptions").update({
+          status: "trialing",
+          trial_ends_at: trialEnd.toISOString(),
+          payment_provider: "asaas",
+        }).eq("organization_id", orgId)
+        await admin.from("usage_limits").update({
+          projects_limit: plan.projects_limit,
+          assets_limit_bytes: plan.assets_limit_bytes,
+        }).eq("organization_id", orgId)
+      } else {
+        await admin.from("subscriptions").update({
+          payment_provider: "asaas",
+        }).eq("organization_id", orgId)
+      }
+
       const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
-      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl)
+      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl, hasTrial ? plan.trial_days : undefined)
 
       if (checkout.subscription) {
-        await admin.from("subscriptions").update({ asaas_subscription_id: checkout.subscription, payment_provider: "asaas" }).eq("organization_id", orgId)
+        await admin.from("subscriptions").update({ asaas_subscription_id: checkout.subscription }).eq("organization_id", orgId)
       }
 
       await admin.from("asaas_checkouts").insert({
@@ -642,7 +715,18 @@ async function handleStripeUpgrade(
   plan: any,
 ) {
   if (!process.env.STRIPE_SECRET_KEY) {
-    await admin.from("subscriptions").update({ plan_id: plan.id, status: "active", trial_ends_at: null, payment_provider: "stripe" }).eq("organization_id", orgId)
+    const hasTrial = plan.trial_days > 0
+    const subUpdates: Record<string, any> = { plan_id: plan.id, payment_provider: "stripe" }
+    if (hasTrial) {
+      const trialEnd = new Date()
+      trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+      subUpdates.status = "trialing"
+      subUpdates.trial_ends_at = trialEnd.toISOString()
+    } else {
+      subUpdates.status = "active"
+      subUpdates.trial_ends_at = null
+    }
+    await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
     await admin.from("usage_limits").update({ projects_limit: plan.projects_limit, assets_limit_bytes: plan.assets_limit_bytes }).eq("organization_id", orgId)
     await admin.from("stripe_checkouts").insert({
       organization_id: orgId, plan_id: plan.id, stripe_session_id: "sandbox", checkout_url: "/billing?upgraded=true", status: "pending",
@@ -685,12 +769,27 @@ async function handleStripeUpgrade(
       }, { status: 400 })
     }
 
-    const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl)
+    const hasTrial = plan.trial_days > 0
 
-    await admin.from("subscriptions").update({
+    const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl, hasTrial ? plan.trial_days : undefined)
+
+    const subUpdates: Record<string, any> = {
       payment_provider: "stripe",
       plan_id: plan.id,
-    }).eq("organization_id", orgId)
+    }
+
+    if (hasTrial) {
+      const trialEnd = new Date()
+      trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+      subUpdates.status = "trialing"
+      subUpdates.trial_ends_at = trialEnd.toISOString()
+      await admin.from("usage_limits").update({
+        projects_limit: plan.projects_limit,
+        assets_limit_bytes: plan.assets_limit_bytes,
+      }).eq("organization_id", orgId)
+    }
+
+    await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
 
     if (session.subscription) {
       const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id
@@ -747,12 +846,27 @@ async function handleStripeFirstPayment(
       }, { status: 400 })
     }
 
-    const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl)
+    const hasTrial = plan.trial_days > 0
 
-    await admin.from("subscriptions").update({
+    const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl, hasTrial ? plan.trial_days : undefined)
+
+    const subUpdates: Record<string, any> = {
       payment_provider: "stripe",
       plan_id: plan.id,
-    }).eq("organization_id", orgId)
+    }
+
+    if (hasTrial) {
+      const trialEnd = new Date()
+      trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
+      subUpdates.status = "trialing"
+      subUpdates.trial_ends_at = trialEnd.toISOString()
+      await admin.from("usage_limits").update({
+        projects_limit: plan.projects_limit,
+        assets_limit_bytes: plan.assets_limit_bytes,
+      }).eq("organization_id", orgId)
+    }
+
+    await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
 
     if (session.subscription) {
       const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id

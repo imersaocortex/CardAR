@@ -141,7 +141,9 @@ async function handleCheckoutCompleted(
   const targetPlanId = localSub?.plan_id || null
 
   const isPaid = session.payment_status === "paid"
-  const status = isPaid ? "active" : "pending"
+  // If payment_status is "unpaid" with mode "subscription", Stripe is in trial
+  const isTrialing = !isPaid && session.mode === "subscription"
+  const status = isPaid ? "active" : isTrialing ? "trialing" : "pending"
 
   await admin
     .from("subscriptions")
@@ -161,6 +163,8 @@ async function handleCheckoutCompleted(
       .eq("organization_id", orgId)
   }
 
+  // Activate limits for trial users too (limits were already set during upgrade,
+  // but on first payment flow they may not have been)
   if (targetPlanId) {
     const { data: plan } = await admin
       .from("plans")
@@ -188,7 +192,7 @@ async function handleCheckoutCompleted(
     status: "completed",
   })
 
-  if (isPaid) {
+  if (isPaid || isTrialing) {
     await admin.rpc("unsuspend_org_projects", {
       p_organization_id: orgId,
     })

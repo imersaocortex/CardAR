@@ -32,9 +32,10 @@ export async function createCheckoutSession(
   priceId: string,
   successUrl: string,
   cancelUrl: string,
+  trialDays?: number,
 ): Promise<Stripe.Checkout.Session> {
   const stripe = getStripe()
-  const session = await stripe.checkout.sessions.create({
+  const sessionData: Stripe.Checkout.SessionCreateParams = {
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
@@ -43,7 +44,11 @@ export async function createCheckoutSession(
     subscription_data: {
       metadata: {},
     },
-  })
+  }
+  if (trialDays && trialDays > 0) {
+    sessionData.subscription_data!.trial_period_days = trialDays
+  }
+  const session = await stripe.checkout.sessions.create(sessionData)
   return session
 }
 

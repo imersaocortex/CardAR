@@ -119,7 +119,11 @@ export async function POST(request: Request) {
       return handleStripeUpgrade(admin, request, orgId, user, profile, plan)
     }
 
-    // ----- ASAAS UPGRADE (existing flow) -----
+    // ----- ASAAS UPGRADE -----
+    if (!profile?.cpf_cnpj) {
+      return NextResponse.json({ error: "Complete seu CPF/CNPJ no perfil antes de assinar", redirect: "/profile" }, { status: 400 })
+    }
+
     if (process.env.ASAAS_API_KEY) {
       try {
         let asaasCustomerId: string

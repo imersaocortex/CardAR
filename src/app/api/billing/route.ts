@@ -215,6 +215,19 @@ export async function POST(request: Request) {
         const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
         const billingType = "CREDIT_CARD"
 
+        const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+        const checkout = await asaasCreateCheckout(
+          asaasCustomerId,
+          billingType,
+          plan.price,
+          getTodayDate(),
+          asaasCycle,
+          `AR Business Studio - ${plan.name}`,
+          callbackUrl,
+          hasTrial ? plan.trial_days : undefined,
+        )
+
+        // Only update subscription status AFTER checkout is created successfully
         if (hasTrial) {
           const trialEnd = new Date()
           trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
@@ -234,18 +247,6 @@ export async function POST(request: Request) {
             plan_id: plan.id,
           }).eq("organization_id", orgId)
         }
-
-        const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
-        const checkout = await asaasCreateCheckout(
-          asaasCustomerId,
-          billingType,
-          plan.price,
-          getTodayDate(),
-          asaasCycle,
-          `AR Business Studio - ${plan.name}`,
-          callbackUrl,
-          hasTrial ? plan.trial_days : undefined,
-        )
 
         const asaasSubId = checkout.subscription || null
         if (asaasSubId) {
@@ -395,6 +396,10 @@ export async function POST(request: Request) {
       const asaasCycle = plan.billing_cycle === "yearly" ? "YEARLY" : "MONTHLY"
       const billingType = "CREDIT_CARD"
 
+      const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
+      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl, hasTrial ? plan.trial_days : undefined)
+
+      // Only update subscription status AFTER checkout is created successfully
       if (hasTrial) {
         const trialEnd = new Date()
         trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
@@ -412,9 +417,6 @@ export async function POST(request: Request) {
           payment_provider: "asaas",
         }).eq("organization_id", orgId)
       }
-
-      const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
-      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl, hasTrial ? plan.trial_days : undefined)
 
       if (checkout.subscription) {
         await admin.from("subscriptions").update({ asaas_subscription_id: checkout.subscription }).eq("organization_id", orgId)

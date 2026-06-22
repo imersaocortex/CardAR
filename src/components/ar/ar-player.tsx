@@ -39,6 +39,8 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
   const [noDetectionWarning, setNoDetectionWarning] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [initStep, setInitStep] = useState("")
+  const [needsVideoInteraction, setNeedsVideoInteraction] = useState(false)
+  const videoElementsRef = useRef<HTMLVideoElement[]>([])
 
   const step = useCallback((msg: string) => {
     console.log("[AR]", msg)
@@ -202,10 +204,12 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
           v.loop = true
           v.muted = true
           v.playsInline = true
-          v.autoplay = true
           v.preload = "auto"
           v.src = obj.assetUrl
           v.load()
+
+          videoElementsRef.current.push(v)
+          mesh.userData.video = v
 
           v.addEventListener("canplay", () => {
             const texture = new THREE.VideoTexture(v)
@@ -260,8 +264,6 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
             }
 
             mesh.userData.videoTexture = texture
-            mesh.userData.video = v
-            v.play().catch(() => {})
           })
         }
       }
@@ -660,6 +662,21 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
               setNoDetectionWarning(false)
               anchorGroup.traverse((child: any) => {
                 if (child._audio) child._audio.play().catch(() => {})
+                if (child.userData?.video) {
+                  const video = child.userData.video as HTMLVideoElement
+                  const tryMuted = video.play()
+                  if (tryMuted !== undefined) {
+                    tryMuted.then(() => {
+                      video.muted = false
+                      return video.play()
+                    }).then(() => {
+                    }).catch(() => {
+                      video.muted = true
+                      video.play().catch(() => {})
+                      setNeedsVideoInteraction(true)
+                    })
+                  }
+                }
               })
             }
             const mr = new THREE.Matrix4().fromArray(data.worldMatrix)
@@ -825,6 +842,8 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
         sceneRef.current = null
         cameraRef.current = null
         startingRef.current = false
+        videoElementsRef.current = []
+        setNeedsVideoInteraction(false)
       }
 
       cleanupRef.current = fullCleanup
@@ -907,6 +926,14 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
     }
   }, [])
 
+  const handleVideoUnmute = useCallback(() => {
+    for (const v of videoElementsRef.current) {
+      v.muted = false
+      v.play().catch(() => {})
+    }
+    setNeedsVideoInteraction(false)
+  }, [])
+
   const handleRetry = useCallback(() => {
     setFallback(null)
     setStartError(null)
@@ -968,6 +995,23 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
           <div className="px-3 py-1 rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
             <span className="text-[10px] text-white/50 font-medium">{siteName}</span>
           </div>
+        </div>
+      )}
+
+      {needsVideoInteraction && arState === "detected" && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
+          <button
+            onClick={handleVideoUnmute}
+            className="flex flex-col items-center gap-3 px-8 py-5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 active:bg-white/25 transition-all"
+          >
+            <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
+              <svg className="w-7 h-7 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+            <span className="text-white/90 text-sm font-medium">Tocar áudio do vídeo</span>
+            <span className="text-white/50 text-[10px]">Toque para ativar o som</span>
+          </button>
         </div>
       )}
 

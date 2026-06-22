@@ -57,13 +57,19 @@ export async function POST(request: Request) {
 
   const ext = file.name.split(".").pop()?.toLowerCase() || ""
 
-  // Detect type by MIME or file extension (browsers often send application/octet-stream for .glb)
-  const mimeType = file.type
-  const isGLB = ext === "glb" || mimeType === "model/gltf-binary"
-  const isGLTF = ext === "gltf" || mimeType === "model/gltf+json"
-  const is3D = isGLB || isGLTF || mimeType.startsWith("model/")
-  const isVideo = mimeType.startsWith("video/") || ["mp4", "webm", "mov"].includes(ext)
-  const isImage = mimeType.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+  // Map known 3D extensions to proper MIME types (browsers often send application/octet-stream)
+  const extMimeMap: Record<string, string> = {
+    glb: "model/gltf-binary",
+    gltf: "model/gltf+json",
+  }
+
+  const detectedMime = extMimeMap[ext] || file.type
+
+  const isGLB = ext === "glb" || file.type === "model/gltf-binary"
+  const isGLTF = ext === "gltf" || file.type === "model/gltf+json"
+  const is3D = isGLB || isGLTF || file.type.startsWith("model/")
+  const isVideo = file.type.startsWith("video/") || ["mp4", "webm", "mov"].includes(ext)
+  const isImage = file.type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
 
   if (!is3D && !isVideo && !isImage) {
     return NextResponse.json({ error: "Tipo de arquivo não suportado. Use .glb, .gltf, .mp4, .png, .jpg" }, { status: 400 })
@@ -82,7 +88,7 @@ export async function POST(request: Request) {
   }
 
   // Check against allowed types (also accept application/octet-stream for .glb/.gltf)
-  const typeOk = allowedTypes.includes(mimeType) || (is3D && allowedTypes.some(t => t.startsWith("model/")))
+  const typeOk = allowedTypes.includes(detectedMime) || (is3D && allowedTypes.some(t => t.startsWith("model/")))
   if (!typeOk) {
     return NextResponse.json({ error: "Seu plano não permite este tipo de arquivo" }, { status: 403 })
   }
@@ -94,7 +100,7 @@ export async function POST(request: Request) {
 
   const { error: uploadError } = await supabase.storage
     .from(bucket)
-    .upload(storagePath, file, { contentType: file.type })
+    .upload(storagePath, file, { contentType: detectedMime })
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 400 })
 
@@ -115,7 +121,7 @@ export async function POST(request: Request) {
       organization_id: orgId,
       name: name || file.name,
       category,
-      mime_type: file.type,
+      mime_type: detectedMime,
       size_bytes: file.size,
       storage_path: storagePath,
       public_url: publicUrl,

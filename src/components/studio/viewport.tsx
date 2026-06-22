@@ -1,7 +1,7 @@
 "use client"
 
-import { Suspense, useMemo, useState, useCallback, useEffect, Component } from "react"
-import { Canvas } from "@react-three/fiber"
+import { Suspense, useMemo, useRef, useEffect, Component } from "react"
+import { Canvas, useFrame } from "@react-three/fiber"
 import { OrbitControls, Grid, Environment, ContactShadows, Text, Edges, useVideoTexture, useTexture, useGLTF, useAnimations } from "@react-three/drei"
 import { useStudioStore, projectTypeDimensions } from "@/store"
 import { StudioElement } from "@/types"
@@ -217,7 +217,7 @@ function Model3D({ element }: { element: StudioElement }) {
 }
 
 function LoadedModel3D({ element }: { element: StudioElement }) {
-  const isAnimado = element.type === "modelo-3d-animado"
+  const groupRef = useRef<THREE.Group>(null)
   const { scene, animations } = useGLTF(element.assetUrl!)
   const { actions } = useAnimations(animations, scene)
   const { updateElement } = useStudioStore()
@@ -231,13 +231,33 @@ function LoadedModel3D({ element }: { element: StudioElement }) {
   }, [hasAnimations, element.id, element.hasEmbeddedAnimations, updateElement])
 
   useEffect(() => {
-    if (isAnimado && actions && Object.keys(actions).length > 0) {
+    if (element.animationType === "embedded" && actions && Object.keys(actions).length > 0) {
       const action = actions[Object.keys(actions)[0]]
       if (action) { action.reset(); action.play() }
     }
-  }, [actions, isAnimado])
+    return () => {
+      if (actions) {
+        Object.values(actions).forEach((a) => a?.stop())
+      }
+    }
+  }, [actions, element.animationType])
 
-  return <primitive object={scene} />
+  useFrame((state, delta) => {
+    if (!groupRef.current) return
+
+    if (element.animationType === "float") {
+      groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.05
+    }
+    if (element.animationType === "rotate") {
+      groupRef.current.rotation.y += delta * 0.5
+    }
+    if (element.animationType === "pulse") {
+      const s = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.05
+      groupRef.current.scale.set(s, s, s)
+    }
+  })
+
+  return <primitive ref={groupRef} object={scene} />
 }
 
 function VideoPlane({ element }: { element: StudioElement }) {

@@ -152,12 +152,15 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
       )
 
       if (isModel) {
+        ;(group as any).userData.animationType = obj.animationType
+        ;(group as any).userData.assetUrl = obj.assetUrl
+        ;(group as any).userData._baseY = group.position.y
+        ;(group as any).userData._baseScale = group.scale.x
+
         const placeholder = new THREE.Mesh(
           new THREE.BoxGeometry(0.8, 0.8, 0.8),
           new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.3, metalness: 0.2, transparent: true, opacity: obj.opacity }),
         )
-        placeholder.userData.animationType = obj.animationType
-        placeholder.userData.assetUrl = obj.assetUrl
         group.add(placeholder)
 
         if (obj.assetUrl) {
@@ -169,7 +172,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
               const model = gltf.scene
               group.remove(placeholder)
               group.add(model)
-              if (gltf.animations?.length && obj.animationType !== "none") {
+              if (gltf.animations?.length && obj.animationType === "embedded") {
                 const mixer = new THREE.AnimationMixer(model)
                 const action = mixer.clipAction(gltf.animations[0])
                 action.play()
@@ -780,12 +783,17 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
             if (child._mixer) {
               child._mixer.update(0.016)
             }
-            if (child.userData?.animationType === "float" && child.parent) {
-              child.parent.position.y += Math.sin(Date.now() / 1000 * 4) * 0.0001
+            if (child.userData?.animationType === "float") {
+              if (child.userData._baseY === undefined) child.userData._baseY = child.position.y
+              child.position.y = child.userData._baseY + Math.sin(Date.now() / 1000 * 4) * 0.02
             }
-            if (child.userData?.animationType === "pulse" && child.parent) {
-              const s = 1 + Math.sin(Date.now() / 300) * 0.05
-              child.parent.scale.set(s, s, s)
+            if (child.userData?.animationType === "rotate") {
+              child.rotation.y += 0.01
+            }
+            if (child.userData?.animationType === "pulse") {
+              if (child.userData._baseScale === undefined) child.userData._baseScale = child.scale.x
+              const s = child.userData._baseScale * (1 + Math.sin(Date.now() / 300) * 0.05)
+              child.scale.set(s, s, s)
             }
           })
         }

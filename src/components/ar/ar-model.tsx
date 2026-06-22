@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useState } from "react"
+import { useRef, useEffect } from "react"
 import { useFrame } from "@react-three/fiber"
 import { useGLTF, useAnimations } from "@react-three/drei"
 import * as THREE from "three"
@@ -11,49 +11,44 @@ interface ArModelProps {
 }
 
 export function ArModel({ object }: ArModelProps) {
-  const meshRef = useRef<THREE.Group>(null)
-  const [error, setError] = useState(false)
+  const groupRef = useRef<THREE.Group>(null)
   const assetUrl = object.assetUrl || "/placeholder.glb"
 
-  let gltf: THREE.Object3D | undefined
-  let animations: THREE.AnimationClip[] = []
-
-  try {
-    const result = useGLTF(assetUrl, true)
-    gltf = result.scene
-    animations = result.animations || []
-  } catch {
-    setError(true)
-  }
-
+  const { scene, animations } = useGLTF(assetUrl, true)
+  const gltf = scene
   const { actions } = useAnimations(animations, gltf ? { current: gltf } : undefined)
 
   useEffect(() => {
-    if (actions && Object.keys(actions).length > 0) {
+    if (object.animationType === "embedded" && actions && Object.keys(actions).length > 0) {
       const action = actions[Object.keys(actions)[0]]
       if (action) {
         action.reset()
         action.play()
       }
     }
-  }, [actions])
+    return () => {
+      if (actions) {
+        Object.values(actions).forEach((a) => a?.stop())
+      }
+    }
+  }, [actions, object.animationType])
 
   useFrame((state, delta) => {
-    if (!meshRef.current) return
+    if (!groupRef.current) return
 
     if (object.animationType === "float") {
-      meshRef.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.05
+      groupRef.current.position.y += Math.sin(state.clock.elapsedTime * 4) * 0.0005
     }
     if (object.animationType === "rotate") {
-      meshRef.current.rotation.y += delta * 0.5
+      groupRef.current.rotation.y += delta * 0.5
     }
     if (object.animationType === "pulse") {
-      const scale = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.05
-      meshRef.current.scale.set(scale, scale, scale)
+      const s = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.05
+      groupRef.current.scale.set(s, s, s)
     }
   })
 
-  if (error || !gltf) {
+  if (!gltf) {
     return (
       <mesh position={[0, 0.05, 0]}>
         <boxGeometry args={[0.1, 0.1, 0.1]} />
@@ -64,7 +59,7 @@ export function ArModel({ object }: ArModelProps) {
 
   return (
     <primitive
-      ref={meshRef}
+      ref={groupRef}
       object={gltf}
       position={object.position}
       rotation={[object.rotation[0], object.rotation[1], object.rotation[2]]}

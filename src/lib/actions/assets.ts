@@ -37,6 +37,13 @@ export async function uploadAsset(formData: FormData) {
   if (!file) return { error: "Arquivo não enviado" }
 
   const ext = file.name.split(".").pop()?.toLowerCase() || ""
+
+  const extMimeMap: Record<string, string> = {
+    glb: "model/gltf-binary",
+    gltf: "model/gltf+json",
+  }
+  const detectedMime = extMimeMap[ext] || file.type
+
   const isGLB = ext === "glb" || file.type === "model/gltf-binary"
   const isGLTF = ext === "gltf" || file.type === "model/gltf+json"
   const is3D = isGLB || isGLTF || file.type.startsWith("model/")
@@ -57,7 +64,7 @@ export async function uploadAsset(formData: FormData) {
   const { error: uploadError } = await supabase.storage
     .from(bucket)
     .upload(storagePath, file, {
-      contentType: file.type,
+      contentType: detectedMime,
       upsert: false,
     })
 

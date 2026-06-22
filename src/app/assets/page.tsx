@@ -94,6 +94,13 @@ export default function AssetsPage() {
 
     const rawExt = file.name.split(".").pop() || ""
     const ext = rawExt.toLowerCase()
+
+    const extMimeMap: Record<string, string> = {
+      glb: "model/gltf-binary",
+      gltf: "model/gltf+json",
+    }
+    const detectedMime = extMimeMap[ext] || file.type
+
     const isGLB = ext === "glb" || file.type === "model/gltf-binary"
     const isGLTF = ext === "gltf" || file.type === "model/gltf+json"
     const is3D = isGLB || isGLTF || file.type.startsWith("model/")
@@ -112,7 +119,7 @@ export default function AssetsPage() {
 
     const { error: uploadError } = await supabase.storage
       .from(bucket)
-      .upload(storagePath, file, { contentType: file.type })
+      .upload(storagePath, file, { contentType: detectedMime })
 
     if (uploadError) {
       toast({ title: uploadError.message, variant: "destructive" })

@@ -47,7 +47,7 @@ export function StudioPreview({ markerImageUrl, markerTargetUrl }: StudioPreview
             action: el.action || null,
             assetUrl: el.assetUrl || null,
             assetThumbnail: el.assetThumbnail || null,
-            showCaption: el.showCaption || null,
+            showCaption: el.showCaption ?? null,
             chromaKeyColor: el.chromaKeyColor || null,
             chromaKeyTolerance: el.chromaKeyTolerance ?? null,
             chromaKeySmoothness: el.chromaKeySmoothness ?? null,

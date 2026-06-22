@@ -41,6 +41,8 @@ export default function StudioPage() {
   const [markerPreview, setMarkerPreview] = useState<string | null>(null)
   const [uploadingMarker, setUploadingMarker] = useState(false)
   const [subSuspended, setSubSuspended] = useState(false)
+  const [projectName, setProjectName] = useState("Projeto")
+  const [renaming, setRenaming] = useState(false)
 
   useEffect(() => {
     const pid = params.id as string
@@ -56,6 +58,7 @@ export default function StudioPage() {
         .single()
 
       if (project) {
+        setProjectName(project.name || "Projeto")
         setProjectType(mapProjectType(project.type) as any)
         setProjectSlug(project.slug)
 
@@ -301,7 +304,35 @@ export default function StudioPage() {
           </Button>
           <Separator orientation="vertical" className="h-6" />
           <div>
-            <h1 className="text-sm font-medium">Projeto</h1>
+            <div className="flex items-center gap-2">
+              {renaming ? (
+                <Input
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  onBlur={async () => {
+                    setRenaming(false)
+                    if (projectName.trim()) {
+                      const supabase = createClient()
+                      await supabase.from("projects").update({ name: projectName.trim() }).eq("id", params.id)
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+                    if (e.key === "Escape") { setProjectName(projectName); setRenaming(false) }
+                  }}
+                  className="h-7 text-sm font-medium px-1 py-0 w-48"
+                  autoFocus
+                />
+              ) : (
+                <h1
+                  className="text-sm font-medium cursor-pointer hover:text-primary transition-colors"
+                  onClick={() => setRenaming(true)}
+                  title="Clique para renomear"
+                >
+                  {projectName}
+                </h1>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {elements.length} elementos • {isSaved ? "Salvo" : "Não salvo"}
             </p>

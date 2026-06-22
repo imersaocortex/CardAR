@@ -323,10 +323,14 @@ function ChromaKeyPlane({ element }: { element: StudioElement }) {
 
 function ImagePlane({ element }: { element: StudioElement }) {
   const texture = useTexture(element.assetUrl || "")
+  const img = texture.image as HTMLImageElement | null
+  const aspect = img ? img.width / img.height : 1
+  const w = 1.5
+  const h = w / aspect
   return (
     <mesh>
-      <planeGeometry args={[1.5, 1.5]} />
-      <meshBasicMaterial map={texture} side={2} opacity={element.opacity} transparent={element.opacity < 1} />
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={texture} side={2} opacity={element.opacity} transparent depthWrite={false} />
     </mesh>
   )
 }

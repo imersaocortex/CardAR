@@ -41,6 +41,14 @@ export async function uploadAsset(formData: FormData) {
   const extMimeMap: Record<string, string> = {
     glb: "model/gltf-binary",
     gltf: "model/gltf+json",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
   }
   const detectedMime = extMimeMap[ext] || file.type
 

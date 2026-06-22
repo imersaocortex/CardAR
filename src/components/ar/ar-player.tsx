@@ -269,8 +269,10 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
       }
 
       if (isImage) {
+        const imgW = 1.5
+        const imgH = 1.5
         const placeholder = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.5, 1.5),
+          new THREE.PlaneGeometry(imgW, imgH),
           new THREE.MeshBasicMaterial({ color: 0xec4899, transparent: true, opacity: obj.opacity, side: THREE.DoubleSide }),
         )
         group.add(placeholder)
@@ -278,16 +280,20 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
         if (obj.assetUrl) {
           const textureLoader = new THREE.TextureLoader()
           textureLoader.load(obj.assetUrl, (texture) => {
+            const aspect = texture.image ? texture.image.width / texture.image.height : 1
+            const w = 1.5
+            const h = w / aspect
+            group.remove(placeholder)
             const imgMesh = new THREE.Mesh(
-              new THREE.PlaneGeometry(1.5, 1.5),
+              new THREE.PlaneGeometry(w, h),
               new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
+                depthWrite: false,
                 opacity: obj.opacity,
                 side: THREE.DoubleSide,
               }),
             )
-            group.remove(placeholder)
             group.add(imgMesh)
           })
         }

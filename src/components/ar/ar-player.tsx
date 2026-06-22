@@ -693,6 +693,10 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Busin
               setShowOverlay(true)
               anchorGroup.traverse((child: any) => {
                 if (child._audio) child._audio.pause()
+                if (child.userData?.video) {
+                  const video = child.userData.video as HTMLVideoElement
+                  video.pause()
+                }
               })
             }
           }

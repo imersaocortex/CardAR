@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
     .maybeSingle()
 
   const branding = (data?.branding as Record<string, any>) || {}
-  const siteName = branding.site_name || "AR Business Studio"
+  const siteName = branding.site_name || "CortexAR"
   const metaTitle = branding.meta_title || `${siteName} - Realidade Aumentada para Negócios`
   const metaDescription = branding.meta_description || "Crie experiências de realidade aumentada para cartões de visita, panfletos e materiais impressos."
   const ogImageUrl = branding.og_image_url || null

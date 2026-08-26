@@ -74,7 +74,7 @@ export const mockLayers: Layer[] = [
 ]
 
 export const faqItems = [
-  { q: "O que é AR Business Studio?", a: "É uma plataforma SaaS que permite criar experiências de realidade aumentada para materiais impressos como cartões de visita, panfletos e posts. Sem precisar de programação." },
+  { q: "O que é CortexAR?", a: "É uma plataforma SaaS que permite criar experiências de realidade aumentada para materiais impressos como cartões de visita, panfletos e posts. Sem precisar de programação." },
   { q: "Como funciona o marcador de imagem?", a: "Você faz upload de uma imagem (como seu cartão de visita). Nosso sistema gera um marcador que, quando escaneado pelo celular, dispara a experiência AR." },
   { q: "Preciso de aplicativo para visualizar?", a: "Não! A experiência roda direto no navegador do celular via WebAR. Basta apontar a câmera para o marcador." },
   { q: "Quais formatos de mídia são suportados?", a: "Modelos 3D (GLB/GLTF), vídeos MP4, vídeos com chromakey, imagens PNG/JPG e botões interativos (WhatsApp, site, Instagram, ligação, e-mail)." },

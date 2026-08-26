@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Fix Profiles RLS Recursion
+-- CortexAR — Fix Profiles RLS Recursion
 -- Drop all existing policies and recreate cleanly
 -- ============================================================
 

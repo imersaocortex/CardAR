@@ -134,7 +134,7 @@ export async function createSubscription(
       value,
       nextDueDate: getNextDueDate(),
       cycle,
-      description: description || "AR Business Studio",
+      description: description || "CortexAR",
     }),
   })
 }

@@ -252,7 +252,7 @@ export async function POST(request: Request) {
           plan.price,
           getTodayDate(),
           asaasCycle,
-          `AR Business Studio - ${plan.name}`,
+          `CortexAR - ${plan.name}`,
           callbackUrl,
           hasTrial ? plan.trial_days : undefined,
         )
@@ -456,7 +456,7 @@ export async function POST(request: Request) {
       const billingType = "CREDIT_CARD"
 
       const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
-      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl, hasTrial ? plan.trial_days : undefined)
+      const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `CortexAR - ${plan.name}`, callbackUrl, hasTrial ? plan.trial_days : undefined)
 
       // For trial plans, activate trial immediately (free access before payment)
       if (hasTrial) {

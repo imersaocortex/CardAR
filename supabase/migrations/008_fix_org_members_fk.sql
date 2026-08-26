@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Add FK from organization_members.user_id to profiles.id
+-- CortexAR — Add FK from organization_members.user_id to profiles.id
 -- Fixes Supabase schema cache relationship for nested selects
 -- ============================================================
 

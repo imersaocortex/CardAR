@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Stripe RLS Policies & Unique Constraint
+-- CortexAR — Stripe RLS Policies & Unique Constraint
 -- 1. Unique constraint on stripe_payments.stripe_payment_intent_id
 -- 2. RLS policies for stripe_customers, stripe_checkouts, stripe_payments
 -- ============================================================

@@ -34,7 +34,7 @@ export function AppSidebar() {
       .catch(() => {})
   }, [])
 
-  const siteName = branding?.site_name || "AR Business Studio"
+  const siteName = branding?.site_name || "CortexAR"
   const logoUrl = branding?.logo_url
 
   useEffect(() => {

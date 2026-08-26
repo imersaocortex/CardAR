@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Save phone from signup form
+-- CortexAR — Save phone from signup form
 -- ============================================================
 
 -- Update handle_new_user to save phone from user_metadata

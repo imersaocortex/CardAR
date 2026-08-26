@@ -4,7 +4,7 @@
 create table if not exists public.system_settings (
   id integer primary key default 1 constraint system_settings_single_row check (id = 1),
   branding jsonb not null default '{
-    "site_name": "AR Business Studio",
+    "site_name": "CortexAR",
     "logo_url": null,
     "favicon_url": null,
     "primary_color": "#6366f1",

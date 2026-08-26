@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Complete Schema Migration
+-- CortexAR — Complete Schema Migration
 -- ============================================================
 
 -- 0. EXTENSIONS

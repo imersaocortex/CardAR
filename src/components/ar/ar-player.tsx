@@ -15,7 +15,7 @@ interface ArPlayerProps {
   onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
 }
 
-export function ArPlayer({ experience, hasWatermark = true, siteName = "AR Business Studio", onStateChange, onInteraction }: ArPlayerProps) {
+export function ArPlayer({ experience, hasWatermark = true, siteName = "CortexAR", onStateChange, onInteraction }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)

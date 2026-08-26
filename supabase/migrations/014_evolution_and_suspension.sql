@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Evolution API & Project Suspension
+-- CortexAR — Evolution API & Project Suspension
 -- 1. Add suspended status to projects
 -- 2. Functions to suspend/unsuspend org projects
 -- 3. Evolution settings in system_settings

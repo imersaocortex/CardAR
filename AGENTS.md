@@ -4,10 +4,10 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## Project: AR Business Studio
+## Project: CortexAR
 
 ### Critical Rules (never forget)
-- **Watermark**: AR experience watermark must always use `siteName` from API (system branding config), never hardcode "AR Business Studio"
+- **Watermark**: AR experience watermark must always use `siteName` from API (system branding config), never hardcode "CortexAR"
 - **City/Country encoding**: Always `safeDecode()` URL-encoded city/country values from Vercel geo headers before storing/displaying
 
 ### Architecture

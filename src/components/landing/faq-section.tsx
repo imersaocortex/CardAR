@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 export function FaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
-  const [siteName, setSiteName] = useState("AR Business Studio")
+  const [siteName, setSiteName] = useState("CortexAR")
 
   useEffect(() => {
     fetch("/api/public/settings")

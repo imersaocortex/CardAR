@@ -55,7 +55,7 @@ async function getEvolutionConfig(): Promise<EvolutionConfig | null> {
       return null
     }
 
-    const site_name = branding?.site_name || "AR Business Studio"
+    const site_name = branding?.site_name || "CortexAR"
     console.log("[Evolution] Config carregada:", { server_url: config.server_url, instance_name: config.instance_name, enabled: config.enabled, site_name })
 
     return {

@@ -18,7 +18,7 @@ const comparisons = [
 ]
 
 export function ComparisonSection() {
-  const [siteName, setSiteName] = useState("AR Business Studio")
+  const [siteName, setSiteName] = useState("CortexAR")
 
   useEffect(() => {
     fetch("/api/public/settings")

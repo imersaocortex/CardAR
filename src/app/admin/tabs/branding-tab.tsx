@@ -169,7 +169,7 @@ export function BrandingTab({ settings, onSaved }: BrandingTabProps) {
                     id="site_name"
                     value={branding.site_name}
                     onChange={(e) => setBranding((p) => ({ ...p, site_name: e.target.value }))}
-                    placeholder="AR Business Studio"
+                    placeholder="CortexAR"
                   />
                 </div>
                 <div className="space-y-2">
@@ -178,7 +178,7 @@ export function BrandingTab({ settings, onSaved }: BrandingTabProps) {
                     id="footer_text"
                     value={branding.footer_text}
                     onChange={(e) => setBranding((p) => ({ ...p, footer_text: e.target.value }))}
-                    placeholder="© 2026 AR Business Studio"
+                    placeholder="© 2026 CortexAR"
                   />
                 </div>
               </div>
@@ -199,7 +199,7 @@ export function BrandingTab({ settings, onSaved }: BrandingTabProps) {
                     id="meta_title"
                     value={branding.meta_title}
                     onChange={(e) => setBranding((p) => ({ ...p, meta_title: e.target.value }))}
-                    placeholder="AR Business Studio - Realidade Aumentada para Negócios"
+                    placeholder="CortexAR - Realidade Aumentada para Negócios"
                   />
                   <p className="text-xs text-muted-foreground">Usado como título em compartilhamentos (WhatsApp, redes sociais)</p>
                 </div>

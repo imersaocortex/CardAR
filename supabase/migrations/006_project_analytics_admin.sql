@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Project Analytics & Admin Subscription Control
+-- CortexAR — Project Analytics & Admin Subscription Control
 -- ============================================================
 
 -- 1. Project analytics table for tracking interactions

@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Profiles & Subscriptions Enhancement
+-- CortexAR — Profiles & Subscriptions Enhancement
 -- ============================================================
 
 -- 1. Add profile fields for billing/ASAAS

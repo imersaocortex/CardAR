@@ -142,7 +142,7 @@ export function HeroSection() {
   const imageRef = useRef<HTMLDivElement>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [isHovering, setIsHovering] = useState(false)
-  const [siteName, setSiteName] = useState("AR Business Studio")
+  const [siteName, setSiteName] = useState("CortexAR")
 
   useEffect(() => {
     fetch("/api/public/settings")

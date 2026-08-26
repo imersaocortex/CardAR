@@ -125,7 +125,7 @@ export default function AdminSettingsPage() {
           <div>
             <h1 className="text-2xl font-bold">Configurações do Sistema</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Gerencie todos os aspectos da plataforma AR Business Studio
+              Gerencie todos os aspectos da plataforma CortexAR
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={logout} className="gap-2">

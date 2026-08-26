@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Stripe Payment Gateway
+-- CortexAR — Stripe Payment Gateway
 -- 1. payment_provider + stripe_subscription_id on subscriptions
 -- 2. stripe_customers table
 -- 3. stripe_checkouts table

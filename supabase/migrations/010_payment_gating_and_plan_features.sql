@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Payment Gating & Plan Features
+-- CortexAR — Payment Gating & Plan Features
 -- 1. New users get 'pending' subscription (must pay first)
 -- 2. Plan feature columns for enforcement
 -- 3. Updated handle_new_user trigger

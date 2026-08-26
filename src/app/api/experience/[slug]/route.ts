@@ -50,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       .select("branding")
       .eq("id", 1)
       .maybeSingle()
-    const siteName = (settings?.branding as any)?.site_name || "AR Business Studio"
+    const siteName = (settings?.branding as any)?.site_name || "CortexAR"
 
     await admin.rpc("increment_project_views", { p_project_id: project.id })
 

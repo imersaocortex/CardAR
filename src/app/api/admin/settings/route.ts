@@ -29,7 +29,7 @@ export async function GET() {
     data = {
       id: 1,
       branding: {
-        site_name: "AR Business Studio",
+        site_name: "CortexAR",
         logo_url: null,
         favicon_url: null,
         primary_color: "#6366f1",

@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — WebAR Module Migration
+-- CortexAR — WebAR Module Migration
 -- ============================================================
 
 -- 1. Add target_url to project_markers (compiled .mind file)

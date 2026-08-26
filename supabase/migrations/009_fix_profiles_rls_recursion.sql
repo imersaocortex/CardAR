@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Fix profiles RLS recursion
+-- CortexAR — Fix profiles RLS recursion
 -- Replace raw subquery with SECURITY DEFINER helper function
 -- ============================================================
 

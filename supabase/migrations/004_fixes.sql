@@ -1,5 +1,5 @@
 -- ============================================================
--- AR Business Studio — Fixes Migration
+-- CortexAR — Fixes Migration
 -- ============================================================
 
 -- 1. Public read for markers bucket (anon users need to load marker images & .mind files)

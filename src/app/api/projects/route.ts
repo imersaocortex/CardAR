@@ -71,36 +71,47 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient()
 
-  // Check subscription status
-  const { data: sub } = await admin
-    .from("subscriptions")
-    .select("status, trial_ends_at")
-    .eq("organization_id", orgId)
+  // Check if user is a platform admin (super_admin or admin) — unlimited access
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
     .single()
 
-  if (sub) {
-    const trialExpired = sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
-    if (sub.status === "past_due") {
-      return NextResponse.json({ error: "Assinatura vencida. Regularize o pagamento para criar projetos." }, { status: 403 })
-    }
-    if (sub.status === "canceled") {
-      return NextResponse.json({ error: "Assinatura cancelada. Escolha um plano para criar projetos." }, { status: 403 })
-    }
-    if (sub.status === "pending") {
-      return NextResponse.json({ error: "Assinatura pendente de pagamento. Acesse a página de cobrança para pagar." }, { status: 403 })
-    }
-    if (sub.status === "trialing" && trialExpired) {
-      return NextResponse.json({ error: "Período de teste expirado. Assine um plano para continuar." }, { status: 403 })
-    }
-  }
+  const isPlatformAdmin = profile?.role === "super_admin" || profile?.role === "admin"
 
-  // Check limit
-  const { data: limitOk } = await admin.rpc("check_project_limit", {
-    p_organization_id: orgId,
-  })
+  if (!isPlatformAdmin) {
+    // Check subscription status
+    const { data: sub } = await admin
+      .from("subscriptions")
+      .select("status, trial_ends_at")
+      .eq("organization_id", orgId)
+      .single()
 
-  if (limitOk === false) {
-    return NextResponse.json({ error: "Limite de projetos atingido" }, { status: 403 })
+    if (sub) {
+      const trialExpired = sub.trial_ends_at && new Date(sub.trial_ends_at) < new Date()
+      if (sub.status === "past_due") {
+        return NextResponse.json({ error: "Assinatura vencida. Regularize o pagamento para criar projetos." }, { status: 403 })
+      }
+      if (sub.status === "canceled") {
+        return NextResponse.json({ error: "Assinatura cancelada. Escolha um plano para criar projetos." }, { status: 403 })
+      }
+      if (sub.status === "pending") {
+        return NextResponse.json({ error: "Assinatura pendente de pagamento. Acesse a página de cobrança para pagar." }, { status: 403 })
+      }
+      if (sub.status === "trialing" && trialExpired) {
+        return NextResponse.json({ error: "Período de teste expirado. Assine um plano para continuar." }, { status: 403 })
+      }
+    }
+
+    // Check limit
+    const { data: limitOk } = await admin.rpc("check_project_limit", {
+      p_organization_id: orgId,
+    })
+
+    if (limitOk === false) {
+      return NextResponse.json({ error: "Limite de projetos atingido" }, { status: 403 })
+    }
   }
 
   const slug = generateSlug()

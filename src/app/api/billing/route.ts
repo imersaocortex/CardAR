@@ -257,7 +257,7 @@ export async function POST(request: Request) {
           hasTrial ? plan.trial_days : undefined,
         )
 
-        // Only update subscription status AFTER checkout is created successfully
+        // For trial plans, activate trial immediately (free access before payment)
         if (hasTrial) {
           const trialEnd = new Date()
           trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
@@ -271,12 +271,9 @@ export async function POST(request: Request) {
             projects_limit: plan.projects_limit,
             assets_limit_bytes: plan.assets_limit_bytes,
           }).eq("organization_id", orgId)
-        } else {
-          await admin.from("subscriptions").update({
-            payment_provider: "asaas",
-            plan_id: plan.id,
-          }).eq("organization_id", orgId)
         }
+        // For non-trial plans: don't update subscription or usage_limits here.
+        // checkout_success or webhook will activate after payment confirmation.
 
         // Save ASAAS subscription ID (fallback: look up by customer if checkout doesn't return it)
         const asaasSubId = checkout.subscription || null
@@ -461,7 +458,7 @@ export async function POST(request: Request) {
       const callbackUrl = request.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || ""
       const checkout = await asaasCreateCheckout(asaasCustomerId, billingType, plan.price, getTodayDate(), asaasCycle, `AR Business Studio - ${plan.name}`, callbackUrl, hasTrial ? plan.trial_days : undefined)
 
-      // Only update subscription status AFTER checkout is created successfully
+      // For trial plans, activate trial immediately (free access before payment)
       if (hasTrial) {
         const trialEnd = new Date()
         trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
@@ -474,11 +471,9 @@ export async function POST(request: Request) {
           projects_limit: plan.projects_limit,
           assets_limit_bytes: plan.assets_limit_bytes,
         }).eq("organization_id", orgId)
-      } else {
-        await admin.from("subscriptions").update({
-          payment_provider: "asaas",
-        }).eq("organization_id", orgId)
       }
+      // For non-trial plans: don't update subscription or usage_limits here.
+      // checkout_success or webhook will activate after payment confirmation.
 
       // Save ASAAS subscription ID (fallback: look up by customer if checkout doesn't return it)
       const asaasSubId = checkout.subscription || null
@@ -863,23 +858,23 @@ async function handleStripeUpgrade(
 
     const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl, hasTrial ? plan.trial_days : undefined)
 
-    const subUpdates: Record<string, any> = {
-      payment_provider: "stripe",
-      plan_id: plan.id,
-    }
-
+    // For trial plans, activate trial immediately (free access before payment)
     if (hasTrial) {
       const trialEnd = new Date()
       trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
-      subUpdates.status = "trialing"
-      subUpdates.trial_ends_at = trialEnd.toISOString()
+      await admin.from("subscriptions").update({
+        status: "trialing",
+        trial_ends_at: trialEnd.toISOString(),
+        payment_provider: "stripe",
+        plan_id: plan.id,
+      }).eq("organization_id", orgId)
       await admin.from("usage_limits").update({
         projects_limit: plan.projects_limit,
         assets_limit_bytes: plan.assets_limit_bytes,
       }).eq("organization_id", orgId)
     }
-
-    await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
+    // For non-trial plans: don't update subscription or usage_limits here.
+    // checkout_success or webhook will activate after payment confirmation.
 
     if (session.subscription) {
       const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id
@@ -940,23 +935,23 @@ async function handleStripeFirstPayment(
 
     const session = await stripeCreateCheckoutSession(stripeCustomerId, priceId, callbackUrl, callbackUrl, hasTrial ? plan.trial_days : undefined)
 
-    const subUpdates: Record<string, any> = {
-      payment_provider: "stripe",
-      plan_id: plan.id,
-    }
-
+    // For trial plans, activate trial immediately (free access before payment)
     if (hasTrial) {
       const trialEnd = new Date()
       trialEnd.setDate(trialEnd.getDate() + plan.trial_days)
-      subUpdates.status = "trialing"
-      subUpdates.trial_ends_at = trialEnd.toISOString()
+      await admin.from("subscriptions").update({
+        status: "trialing",
+        trial_ends_at: trialEnd.toISOString(),
+        payment_provider: "stripe",
+        plan_id: plan.id,
+      }).eq("organization_id", orgId)
       await admin.from("usage_limits").update({
         projects_limit: plan.projects_limit,
         assets_limit_bytes: plan.assets_limit_bytes,
       }).eq("organization_id", orgId)
     }
-
-    await admin.from("subscriptions").update(subUpdates).eq("organization_id", orgId)
+    // For non-trial plans: don't update subscription or usage_limits here.
+    // checkout_success or webhook will activate after payment confirmation.
 
     if (session.subscription) {
       const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id

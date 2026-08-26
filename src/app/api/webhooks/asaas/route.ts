@@ -217,11 +217,24 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
         .update(updates)
         .eq("organization_id", sub.organization_id)
 
-      if (currentSub.status === "pending" || currentSub.status === "trialing") {
+      // Check for pending checkout to get the target plan_id
+      // (for non-trial upgrades, plan_id is only set on the checkout, not the subscription)
+      const { data: pendingCheckout } = await admin
+        .from("asaas_checkouts")
+        .select("plan_id")
+        .eq("organization_id", sub.organization_id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const targetPlanId = pendingCheckout?.plan_id || currentSub.plan_id
+
+      if (currentSub.status !== "active" || pendingCheckout?.plan_id) {
         const { data: plan } = await admin
           .from("plans")
           .select("projects_limit, assets_limit_bytes")
-          .eq("id", currentSub.plan_id)
+          .eq("id", targetPlanId)
           .single()
 
         if (plan) {
@@ -232,6 +245,23 @@ async function handlePaymentEvent(admin: ReturnType<typeof createAdminClient>, p
               assets_limit_bytes: plan.assets_limit_bytes,
             })
             .eq("organization_id", sub.organization_id)
+        }
+
+        // Update subscription plan_id if it differs from checkout target
+        if (pendingCheckout?.plan_id && currentSub.plan_id !== pendingCheckout.plan_id) {
+          await admin
+            .from("subscriptions")
+            .update({ plan_id: pendingCheckout.plan_id })
+            .eq("organization_id", sub.organization_id)
+        }
+
+        // Mark checkout as completed
+        if (pendingCheckout) {
+          await admin
+            .from("asaas_checkouts")
+            .update({ status: "completed" })
+            .eq("organization_id", sub.organization_id)
+            .eq("status", "pending")
         }
       }
 

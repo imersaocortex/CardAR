@@ -57,6 +57,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setProjectId: (id) => set({ projectId: id }),
 
   loadScene: async (projectId: string) => {
+    // Limpa o estado anterior para não exibir objetos de outro projeto
+    set({ elements: [], layers: [], sceneId: null, projectId })
+
     try {
       const supabase = createClient()
       const { data: scenes } = await supabase
@@ -105,7 +108,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         })
       }
     } catch {
-      // Fall back to empty
+      // Estado já foi limpo acima — mantém vazio
     }
   },
 

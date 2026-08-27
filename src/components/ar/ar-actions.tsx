@@ -1,8 +1,9 @@
 "use client"
 
 import { useRef, useCallback, useState } from "react"
-import { Camera, CameraOff, RotateCcw, Share2, Download } from "lucide-react"
+import { Camera, CameraOff, RotateCcw, Share2, ScanLine } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { QrScanner } from "./qr-scanner"
 
 interface ArActionsProps {
   videoRef: React.RefObject<HTMLVideoElement | null>
@@ -14,6 +15,7 @@ interface ArActionsProps {
 export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetected }: ArActionsProps) {
   const [lastCapture, setLastCapture] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const recordAnimRef = useRef(0)
@@ -171,6 +173,25 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
     }
   }, [])
 
+  const handleQrScan = useCallback((data: string) => {
+    setScannerOpen(false)
+    const value = data.trim()
+
+    // Extract an /experience/:slug URL from the scanned content
+    const expMatch = value.match(/\/experience\/([a-zA-Z0-9_-]+)/)
+    if (expMatch?.[1]) {
+      const slug = expMatch[1]
+      window.location.href = `${window.location.origin}/experience/${slug}`
+      return
+    }
+
+    // If it looks like a full http(s) URL, open it
+    if (/^https?:\/\//i.test(value)) {
+      const win = window.open(value, "_blank", "noopener,noreferrer")
+      if (!win) window.location.href = value
+    }
+  }, [])
+
   return (
     <>
       <div className="flex items-center justify-center gap-2">
@@ -197,6 +218,12 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
             icon={<Share2 className="h-4 w-4" />}
             label="Compartilhar"
             onClick={share}
+          />
+          <div className="w-px h-6 bg-white/10" />
+          <ActionButton
+            icon={<ScanLine className="h-4 w-4" />}
+            label="Scan QR"
+            onClick={() => setScannerOpen(true)}
           />
           {onSwitchCamera && (
             <>
@@ -225,6 +252,13 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
           </motion.div>
         )}
       </AnimatePresence>
+
+      {scannerOpen && (
+        <QrScanner
+          onClose={() => setScannerOpen(false)}
+          onScan={handleQrScan}
+        />
+      )}
     </>
   )
 }

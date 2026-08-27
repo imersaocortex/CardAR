@@ -35,6 +35,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.40.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^1.17.0",
     "mind-ar": "^1.2.5",
     "nanoid": "^5.1.11",

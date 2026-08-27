@@ -88,6 +88,22 @@ export async function POST(request: Request) {
   const { action, plan_id, payment_provider = "asaas" } = body
   const admin = createAdminClient()
 
+  // Only platform super admins can change their own plan
+  if (action === "upgrade" || action === "first_payment" || action === "cancel") {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    if (profile?.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Somente administradores podem alterar o plano da organização." },
+        { status: 403 },
+      )
+    }
+  }
+
   const { data: memberships } = await supabase
     .from("organization_members")
     .select("organization_id")

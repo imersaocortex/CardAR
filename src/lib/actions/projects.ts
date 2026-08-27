@@ -15,6 +15,34 @@ function generateSlug(): string {
   return slug
 }
 
+// Recalcula projects_used a partir da contagem real de projetos da organização,
+// garantindo que nunca fique dessincronizado por race conditions.
+async function syncProjectUsage(admin: ReturnType<typeof createAdminClient>, orgId: string) {
+  try {
+    const { count } = await admin
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+
+    const projectsUsed = count ?? 0
+
+    const { data: usage } = await admin
+      .from("usage_limits")
+      .select("projects_used")
+      .eq("organization_id", orgId)
+      .single()
+
+    if (usage && usage.projects_used !== projectsUsed) {
+      await admin
+        .from("usage_limits")
+        .update({ projects_used: projectsUsed })
+        .eq("organization_id", orgId)
+    }
+  } catch (e) {
+    console.error("[usage] Failed to sync projects_used:", e)
+  }
+}
+
 export async function getProjects() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -133,19 +161,26 @@ export async function createProject(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Increment project usage
-  const { data: usage } = await admin
-    .from("usage_limits")
-    .select("projects_used")
-    .eq("organization_id", orgId)
-    .single()
+  // Garante uma cena padrão para o projeto (evita experiências vazias)
+  try {
+    const { count: sceneCount } = await admin
+      .from("scenes")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", data.id)
 
-  if (usage) {
-    await admin
-      .from("usage_limits")
-      .update({ projects_used: (usage.projects_used || 0) + 1 })
-      .eq("organization_id", orgId)
+    if ((sceneCount ?? 0) === 0) {
+      await admin.from("scenes").insert({
+        project_id: data.id,
+        name: "Cena Principal",
+        background_color: "#000000",
+      })
+    }
+  } catch (e) {
+    console.error("[projects] failed to create default scene:", e)
   }
+
+  // Sync project usage from the real count (atomic-safe)
+  await syncProjectUsage(admin, orgId)
 
   revalidatePath("/projects")
   return { data }
@@ -188,20 +223,9 @@ export async function deleteProject(id: string) {
 
   if (error) return { error: error.message }
 
-  // Decrement project usage
+  // Sync project usage from the real count (atomic-safe)
   const admin = createAdminClient()
-  const { data: usage } = await admin
-    .from("usage_limits")
-    .select("projects_used")
-    .eq("organization_id", project.organization_id)
-    .single()
-
-  if (usage) {
-    await admin
-      .from("usage_limits")
-      .update({ projects_used: Math.max(0, (usage.projects_used || 0) - 1) })
-      .eq("organization_id", project.organization_id)
-  }
+  await syncProjectUsage(admin, project.organization_id)
 
   revalidatePath("/projects")
   return { success: true }

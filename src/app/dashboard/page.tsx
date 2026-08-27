@@ -74,8 +74,7 @@ export default function DashboardPage() {
           .from("projects")
           .select("id, name, type, status, views, created_at, updated_at")
           .eq("organization_id", orgId)
-          .order("updated_at", { ascending: false })
-          .limit(5),
+          .order("updated_at", { ascending: false }),
         supabase
           .from("subscriptions")
           .select("*, plans(*)")
@@ -134,7 +133,9 @@ export default function DashboardPage() {
 
   const filtered = filter === "todos" ? projects : projects.filter((p) => p.type === filter)
   const totalViews = projects.reduce((s, p) => s + p.views, 0)
-  const projectsUsed = usage?.projects_used || 0
+  // Use the real project count (authoritative) instead of usage_limits.projects_used,
+  // which can drift out of sync.
+  const projectsUsed = projects.length || 0
   const projectsLimit = usage?.projects_limit || 0
   const usagePercent = projectsLimit > 0 ? Math.round((projectsUsed / projectsLimit) * 100) : 0
 

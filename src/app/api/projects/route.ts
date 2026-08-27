@@ -130,5 +130,27 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
+  // Sync project usage from the real count (atomic-safe)
+  try {
+    const { count } = await admin
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+    const projectsUsed = count ?? 0
+    const { data: usage } = await admin
+      .from("usage_limits")
+      .select("projects_used")
+      .eq("organization_id", orgId)
+      .single()
+    if (usage && usage.projects_used !== projectsUsed) {
+      await admin
+        .from("usage_limits")
+        .update({ projects_used: projectsUsed })
+        .eq("organization_id", orgId)
+    }
+  } catch (e) {
+    console.error("[usage] Failed to sync projects_used:", e)
+  }
+
   return NextResponse.json(data)
 }

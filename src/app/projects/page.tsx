@@ -143,6 +143,8 @@ export default function ProjectsPage() {
   }
 
   const handleDuplicate = async (project: Project) => {
+    const supabase = createClient()
+
     const formData = new FormData()
     formData.append("name", `${project.name} (cópia)`)
     formData.append("type", project.type)
@@ -151,10 +153,105 @@ export default function ProjectsPage() {
 
     if (result.error) {
       toast({ title: result.error, variant: "destructive" })
-    } else {
-      toast({ title: "Projeto duplicado" })
-      loadProjects()
+      return
     }
+
+    const newProject = result.data
+    if (newProject?.id && project.id !== newProject.id) {
+      try {
+        // Copy scene + objects + buttons
+        const { data: scenes } = await supabase
+          .from("scenes")
+          .select("*, scene_objects(*, scene_buttons(*))")
+          .eq("project_id", project.id)
+          .order("created_at")
+          .limit(1)
+
+        if (scenes?.[0]) {
+          const srcScene = scenes[0]
+          const { data: newScene } = await supabase
+            .from("scenes")
+            .insert({
+              project_id: newProject.id,
+              name: srcScene.name || "Cena Principal",
+              background_color: srcScene.background_color || "#000000",
+              lighting_config: srcScene.lighting_config || {},
+              camera_config: srcScene.camera_config || {},
+            })
+            .select()
+            .single()
+
+          if (newScene && srcScene.scene_objects?.length) {
+            for (const obj of srcScene.scene_objects) {
+              const { data: newObj } = await supabase
+                .from("scene_objects")
+                .insert({
+                  scene_id: newScene.id,
+                  type: obj.type,
+                  name: obj.name,
+                  position_x: obj.position_x,
+                  position_y: obj.position_y,
+                  position_z: obj.position_z,
+                  rotation_x: obj.rotation_x,
+                  rotation_y: obj.rotation_y,
+                  rotation_z: obj.rotation_z,
+                  scale_x: obj.scale_x,
+                  scale_y: obj.scale_y,
+                  scale_z: obj.scale_z,
+                  opacity: obj.opacity,
+                  visible: obj.visible,
+                  layer_order: obj.layer_order,
+                  animation_type: obj.animation_type,
+                  action: obj.action,
+                  asset_url: obj.asset_url,
+                  asset_thumbnail: obj.asset_thumbnail,
+                  show_caption: obj.show_caption,
+                  chroma_key_color: obj.chroma_key_color,
+                  chroma_key_tolerance: obj.chroma_key_tolerance,
+                  chroma_key_smoothness: obj.chroma_key_smoothness,
+                  duration: obj.duration,
+                })
+                .select()
+                .single()
+
+              if (newObj && obj.scene_buttons?.length) {
+                for (const btn of obj.scene_buttons) {
+                  await supabase.from("scene_buttons").insert({
+                    scene_object_id: newObj.id,
+                    label: btn.label,
+                    icon: btn.icon,
+                    action_type: btn.action_type,
+                    action_value: btn.action_value,
+                  })
+                }
+              }
+            }
+          }
+        }
+
+        // Copy marker
+        const { data: marker } = await supabase
+          .from("project_markers")
+          .select("*")
+          .eq("project_id", project.id)
+          .maybeSingle()
+
+        if (marker) {
+          await supabase.from("project_markers").insert({
+            project_id: newProject.id,
+            image_url: marker.image_url,
+            target_url: marker.target_url,
+            width: marker.width,
+            height: marker.height,
+          })
+        }
+      } catch (e) {
+        console.error("[duplicate] failed to copy scene/marker:", e)
+      }
+    }
+
+    toast({ title: "Projeto duplicado" })
+    loadProjects()
   }
 
   const handleStatusChange = async (id: string, status: string) => {

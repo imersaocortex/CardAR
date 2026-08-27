@@ -54,7 +54,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     await admin.rpc("increment_project_views", { p_project_id: project.id })
 
-    const scene = project.scenes?.[0] || null
+    // Prefere a cena com elementos (objects) e, em empate, a mais antiga (created_at)
+    const scenes = Array.isArray(project.scenes) ? project.scenes : []
+    const sortedScenes = [...scenes].sort(
+      (a: any, b: any) =>
+        ((b as any).scene_objects?.length || 0) - ((a as any).scene_objects?.length || 0) ||
+        new Date((a as any).created_at || 0).getTime() - new Date((b as any).created_at || 0).getTime(),
+    )
+    const scene = sortedScenes[0] || null
     const objects = scene?.scene_objects || []
     const marker = project.project_markers
       ? (Array.isArray(project.project_markers) ? project.project_markers[0] : project.project_markers)

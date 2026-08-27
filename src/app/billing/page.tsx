@@ -54,6 +54,7 @@ export default function BillingPage() {
   const [pendingPlanId, setPendingPlanId] = useState<string | null>(null)
   const [gatewaySettings, setGatewaySettings] = useState<{ asaas: { configured: boolean }; stripe: { configured: boolean } } | null>(null)
   const [isFirstPayment, setIsFirstPayment] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   useEffect(() => {
     if (window.location.search.includes("upgraded=true")) {
@@ -97,6 +98,14 @@ export default function BillingPage() {
 
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+
+      setIsSuperAdmin(profile?.role === "super_admin")
+
       const { data: memberships } = await supabase
         .from("organization_members")
         .select("organization_id")
@@ -367,18 +376,19 @@ export default function BillingPage() {
               <strong>Assinatura pendente de pagamento.</strong> Você está no plano <strong>Starter</strong>.
               Efetue o pagamento para liberar a criação de projetos.
             </div>
-            <Button
-              variant="gradient"
-              size="sm"
-              onClick={handleFirstPaymentClick}
-              disabled={upgrading === "first_payment"}
-            >
-              {upgrading === "first_payment" ? "Gerando..." : "Pagar Agora"}
-              <ExternalLink className="h-4 w-4 ml-1" />
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                variant="gradient"
+                size="sm"
+                onClick={handleFirstPaymentClick}
+                disabled={upgrading === "first_payment"}
+              >
+                {upgrading === "first_payment" ? "Gerando..." : "Pagar Agora"}
+                <ExternalLink className="h-4 w-4 ml-1" />
+              </Button>
+            )}
           </div>
         )}
-
         {subscription?.status === "past_due" && (
           <div className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
@@ -401,16 +411,18 @@ export default function BillingPage() {
                 Sua assinatura está <strong>cancelada</strong>. Reative agora e escolha um plano para desbloquear todos os recursos.
               </div>
             </div>
-            <Button
-              variant="gradient"
-              size="sm"
-              onClick={() => {
-                document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="shrink-0"
-            >
-              Reativar Assinatura
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                variant="gradient"
+                size="sm"
+                onClick={() => {
+                  document.getElementById("planos")?.scrollIntoView({ behavior: "smooth" })
+                }}
+                className="shrink-0"
+              >
+                Reativar Assinatura
+              </Button>
+            )}
           </div>
         )}
 
@@ -508,7 +520,7 @@ export default function BillingPage() {
                       </Button>
                     )}
                   </div>
-                ) : (
+                ) : isSuperAdmin ? (
                   <Button
                     variant="gradient"
                     className="w-full"
@@ -518,13 +530,17 @@ export default function BillingPage() {
                     {upgrading === plan.id ? "Processando..." : "Assinar Agora"}
                     {upgrading !== plan.id && <ArrowRight className="h-4 w-4 ml-2" />}
                   </Button>
+                ) : (
+                  <Button variant="outline" className="w-full" disabled>
+                    Alteração restrita a administradores
+                  </Button>
                 )}
               </motion.div>
             )
           })}
         </div>
 
-        {subscription && !isCanceled && (
+        {subscription && !isCanceled && isSuperAdmin && (
           <div className="flex justify-center mb-10">
             <Button variant="outline" size="sm" onClick={handleCancel} className="text-destructive">
               Cancelar Assinatura

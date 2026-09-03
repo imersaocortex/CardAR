@@ -277,6 +277,11 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "CortexAR
         )
         group.add(placeholder)
 
+        if (obj.action) {
+          placeholder.userData.clickable = true
+          placeholder.userData.action = obj.action
+        }
+
         if (obj.assetUrl) {
           const textureLoader = new THREE.TextureLoader()
           textureLoader.load(obj.assetUrl, (texture) => {
@@ -294,6 +299,10 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "CortexAR
                 side: THREE.DoubleSide,
               }),
             )
+            if (obj.action) {
+              imgMesh.userData.clickable = true
+              imgMesh.userData.action = obj.action
+            }
             group.add(imgMesh)
           })
         }

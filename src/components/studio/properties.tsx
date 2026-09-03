@@ -109,6 +109,7 @@ export function StudioProperties() {
 
   const is3D = selectedElement.type === "modelo-3d" || selectedElement.type === "modelo-3d-animado"
   const isButton = selectedElement.type.startsWith("botao-")
+  const isImage = selectedElement.type === "imagem"
   const isChromaKey = selectedElement.type === "video-chromakey"
   const isMedia = is3D || selectedElement.type === "video-mp4" || isChromaKey || selectedElement.type === "imagem" || selectedElement.type === "audio"
 
@@ -376,7 +377,7 @@ export function StudioProperties() {
           </div>
         )}
 
-        {(selectedElement.action !== undefined || isButton) && (
+        {(selectedElement.action !== undefined || isButton || isImage) && (
           <div>
             <Label className="text-xs text-muted-foreground">Ação (URL)</Label>
             <Input

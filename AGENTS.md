@@ -13,6 +13,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ### Arquitetura atual
 - Next.js 16.2.7 App Router com Turbopack, React 19, Tailwind e Shadcn/ui.
+- A Vercel usa Node 24. O `installCommand` evita compilar o `canvas` nativo que acompanha o MindAR, mas executa `patch-package` explicitamente; os arquivos `dist` do MindAR usados em runtime são browser-only.
 - Supabase para autenticação, banco e armazenamento; Zustand para estado de autenticação/editor.
 - Modos AR: marcador MindAR, superfície plana via WebXR hit-test e GPS/bússola com objeto na direção das coordenadas.
 - Faturamento novo: PayPal Subscriptions e Pix Automático Efí. ASAAS e Stripe estão aposentados no código; suas tabelas antigas ficam para auditoria.

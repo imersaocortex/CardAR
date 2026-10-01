@@ -13,6 +13,7 @@ import {
   Zap,
   Settings,
   Shield,
+  Link2,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth-store"
 
@@ -60,6 +61,7 @@ export function AppSidebar() {
     { label: "Assets", href: "/assets", icon: Box },
     { label: "Faturamento", href: "/billing", icon: CreditCard },
     { label: "Perfil", href: "/profile", icon: User },
+    { label: "Indicações", href: "/affiliates", icon: Link2 },
     ...(showAdmin
       ? [
           { label: "Administrador", href: "/admin", icon: Shield },

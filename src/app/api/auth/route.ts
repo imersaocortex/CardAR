@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { loginSchema, signupSchema } from "@/lib/schemas"
+import { cookies } from "next/headers"
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -27,11 +28,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
+    const cookieStore = await cookies()
+    const referral = cookieStore.get("ar_referral")?.value
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
       options: {
-        data: { name: parsed.data.name },
+        data: { name: parsed.data.name, phone: parsed.data.phone, referral_code: referral },
       },
     })
 
@@ -39,7 +42,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({ user: data.user })
+    cookieStore.delete("ar_referral")
+    return NextResponse.json({ user: data.user, session: data.session })
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 })

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { loginSchema, signupSchema } from "@/lib/schemas"
+import { cookies } from "next/headers"
 
 export async function login(formData: FormData) {
   const supabase = await createServerSupabaseClient()
@@ -32,6 +33,7 @@ export async function signup(formData: FormData) {
 
   const raw = {
     name: formData.get("name") as string,
+    phone: formData.get("phone") as string,
     email: formData.get("email") as string,
     password: formData.get("password") as string,
   }
@@ -41,12 +43,15 @@ export async function signup(formData: FormData) {
     return { error: parsed.error.issues[0].message }
   }
 
+  const cookieStore = await cookies()
   const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       data: {
         name: parsed.data.name,
+        phone: parsed.data.phone,
+        referral_code: cookieStore.get("ar_referral")?.value,
       },
     },
   })
@@ -55,6 +60,7 @@ export async function signup(formData: FormData) {
     return { error: error.message }
   }
 
+  cookieStore.delete("ar_referral")
   revalidatePath("/", "layout")
   redirect("/dashboard")
 }

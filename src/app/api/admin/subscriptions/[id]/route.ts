@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { ensureStripeKey, cancelSubscription as stripeCancelSubscription } from "@/lib/stripe"
+import { cancelAgreement, type Agreement } from "@/lib/payments/service"
 
 export async function PUT(
   request: Request,
@@ -44,29 +44,15 @@ export async function PUT(
 
   const oldStatus = subscription.status
 
-  await admin
-    .from("subscriptions")
-    .update({ status })
-    .eq("id", id)
-
-  // Cancel in Stripe if setting to canceled
   if (status === "canceled") {
-    const { data: subDetails } = await admin
-      .from("subscriptions")
-      .select("stripe_subscription_id, payment_provider")
-      .eq("id", id)
-      .single()
-
-    if (subDetails?.payment_provider === "stripe" && subDetails.stripe_subscription_id) {
-      await ensureStripeKey(admin)
-      try {
-        await stripeCancelSubscription(subDetails.stripe_subscription_id)
-      } catch (e) {
-        console.warn("[admin] Failed to cancel Stripe subscription:", e)
-      }
+    const { data: agreement } = await admin.from("billing_agreements").select("*").eq("organization_id", subscription.organization_id).neq("status", "canceled").maybeSingle()
+    if (agreement) {
+      try { await cancelAgreement(agreement as Agreement) }
+      catch { return NextResponse.json({ error: "O provedor não confirmou o cancelamento" }, { status: 409 }) }
     }
   }
-
+  const { error: updateError } = await admin.from("subscriptions").update({ status }).eq("id", id)
+  if (updateError) return NextResponse.json({ error: "Falha ao atualizar assinatura" }, { status: 500 })
   // Log history
   await admin.from("subscription_status_history").insert({
     subscription_id: id,

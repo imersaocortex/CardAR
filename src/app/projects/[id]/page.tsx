@@ -12,6 +12,7 @@ import { StudioProperties } from "@/components/studio/properties"
 import { StudioTimeline } from "@/components/studio/timeline"
 import { StudioLayers } from "@/components/studio/layers"
 import { StudioPreview } from "@/components/studio/preview"
+import { TrackingSettings } from "@/components/studio/tracking-settings"
 import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -43,9 +44,12 @@ export default function StudioPage() {
   const [subSuspended, setSubSuspended] = useState(false)
   const [projectName, setProjectName] = useState("Projeto")
   const [renaming, setRenaming] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [sceneReady, setSceneReady] = useState(false)
 
   useEffect(() => {
     const pid = params.id as string
+    let cancelled = false
     setProjectId(pid)
 
     async function init() {
@@ -85,29 +89,52 @@ export default function StudioPage() {
       }
 
       // Load scene
-      await loadScene(pid)
+      setSceneReady(false)
+      try {
+        await loadScene(pid)
+        if (!cancelled) setSceneReady(true)
+      } catch (error) {
+        toast({ title: "Falha ao carregar", description: error instanceof Error ? error.message : "Recarregue a página.", variant: "destructive" })
+      }
     }
 
     init()
+    return () => { cancelled = true }
   }, [params.id, setProjectType, loadScene, setProjectId])
 
   const dims = projectTypeDimensions[projectType]
 
   const handleSave = useCallback(async () => {
-    await saveScene()
-    setSaved(true)
-    toast({ title: "Projeto salvo", description: "Todas as alterações foram salvas.", variant: "success" })
-  }, [saveScene, setSaved])
+    if (saving || !sceneReady) return
+    setSaving(true)
+    try {
+      await saveScene()
+      toast({ title: "Cena salva", description: "A gravação foi confirmada pelo banco.", variant: "success" })
+    } catch (error) {
+      toast({ title: "Não foi possível salvar", description: error instanceof Error ? error.message : "Tente novamente.", variant: "destructive" })
+    } finally { setSaving(false) }
+  }, [saveScene, saving, sceneReady])
 
   const handlePublish = useCallback(async () => {
+    if (saving || !sceneReady) return
+    setSaving(true)
+    try {
+    await saveScene()
+    if (!useStudioStore.getState().isSaved) throw new Error("A cena mudou durante a gravação. Salve novamente antes de publicar.")
     const supabase = createClient()
-    await supabase
+    const { data, error } = await supabase
       .from("projects")
       .update({ status: "published" })
       .eq("id", params.id)
+      .select("id")
+      .single()
+    if (error || !data) throw new Error("A publicação não foi confirmada. Tente novamente.")
 
     toast({ title: "Projeto publicado!", description: "Sua experiência AR está no ar.", variant: "success" })
-  }, [params.id])
+    } catch (error) {
+      toast({ title: "Não foi possível publicar", description: error instanceof Error ? error.message : "Tente novamente.", variant: "destructive" })
+    } finally { setSaving(false) }
+  }, [params.id, saveScene, saving, sceneReady])
 
   const handlePreview = useCallback(() => {
     setPreviewOpen(true)
@@ -356,7 +383,8 @@ export default function StudioPage() {
 
           <Separator orientation="vertical" className="h-6" />
 
-          <Button variant="outline" size="sm" onClick={handleSave} disabled={subSuspended}>
+          <TrackingSettings projectId={params.id as string} disabled={subSuspended || saving || !sceneReady} />
+          <Button variant="outline" size="sm" onClick={handleSave} disabled={subSuspended || saving || !sceneReady}>
             <Save className="h-4 w-4 mr-1" />
             Salvar
           </Button>
@@ -368,7 +396,7 @@ export default function StudioPage() {
             <QrCode className="h-4 w-4 mr-1" />
             QR Code
           </Button>
-          <Button variant="gradient" size="sm" onClick={handlePublish} disabled={subSuspended}>
+          <Button variant="gradient" size="sm" onClick={handlePublish} disabled={subSuspended || saving || !sceneReady}>
             Publicar
           </Button>
         </div>

@@ -1,0 +1,6 @@
+{
+  "installCommand": "npm ci --ignore-scripts && npm run postinstall",
+  "crons": [
+    { "path": "/api/billing/renewals", "schedule": "0 8 * * *" }
+  ]
+}

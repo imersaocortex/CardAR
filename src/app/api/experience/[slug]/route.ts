@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { selectPrimaryScene } from "@/lib/scenes"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
@@ -56,12 +57,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     // Prefere a cena com elementos (objects) e, em empate, a mais antiga (created_at)
     const scenes = Array.isArray(project.scenes) ? project.scenes : []
-    const sortedScenes = [...scenes].sort(
-      (a: any, b: any) =>
-        ((b as any).scene_objects?.length || 0) - ((a as any).scene_objects?.length || 0) ||
-        new Date((a as any).created_at || 0).getTime() - new Date((b as any).created_at || 0).getTime(),
-    )
-    const scene = sortedScenes[0] || null
+    const scene = selectPrimaryScene<any>(scenes)
     const objects = scene?.scene_objects || []
     const marker = project.project_markers
       ? (Array.isArray(project.project_markers) ? project.project_markers[0] : project.project_markers)
@@ -71,6 +67,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       hasWatermark,
       siteName,
       project: {
+        trackingMode: project.tracking_mode || "marker",
+        latitude: project.latitude,
+        longitude: project.longitude,
+        activationRadius: project.activation_radius ?? 100,
         id: project.id,
         name: project.name,
         type: project.type,

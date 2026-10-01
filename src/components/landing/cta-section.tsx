@@ -20,7 +20,7 @@ export function CtaSection() {
         <div className="mb-6">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-sm text-primary">
             <Sparkles className="h-3.5 w-3.5" />
-            7 dias grátis · Sem compromisso
+            Comece gratuitamente · Sem cartão
           </span>
         </div>
 

@@ -49,7 +49,7 @@ export async function GET(
       .order("created_at", { ascending: false })
       .limit(500),
     admin
-      .from("asaas_payments")
+      .from("billing_payments")
       .select("*")
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false }),

@@ -30,6 +30,10 @@ export interface ArSceneObject {
 }
 
 export interface ArExperienceData {
+  trackingMode?: "marker" | "surface" | "gps"
+  latitude?: number | null
+  longitude?: number | null
+  activationRadius?: number
   id: string
   name: string
   type: string

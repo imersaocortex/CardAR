@@ -74,7 +74,7 @@ export function DashboardTab({ data }: DashboardTabProps) {
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Organização</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">ID ASAAS</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Pagamento</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Valor</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Vencimento</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
@@ -91,7 +91,7 @@ export function DashboardTab({ data }: DashboardTabProps) {
                 {data.payments.slice(0, 10).map((payment: any, i: number) => (
                   <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                     <td className="py-3 px-4 font-medium">{payment.organizations?.name || "-"}</td>
-                    <td className="py-3 px-4 font-mono text-xs">{payment.asaas_payment_id?.slice(0, 16)}</td>
+                    <td className="py-3 px-4 font-mono text-xs">{payment.provider} · {payment.external_id?.slice(0, 16)}</td>
                     <td className="py-3 px-4">R$ {Number(payment.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className="py-3 px-4 text-muted-foreground">
                       {formatDate(payment.due_date)}

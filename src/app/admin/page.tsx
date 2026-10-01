@@ -12,6 +12,7 @@ import {
   Settings,
   BarChart3,
   MessageSquare,
+  HandCoins,
   LogOut,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -24,8 +25,8 @@ import { BrandingTab } from "./tabs/branding-tab"
 import { PlansTab } from "./tabs/plans-tab"
 import { FinancesTab } from "./tabs/finances-tab"
 import { CustomersTab } from "./tabs/customers-tab"
-import { AsaasTab } from "./tabs/asaas-tab"
-import { StripeTab } from "./tabs/stripe-tab"
+import { PaymentsTab } from "./tabs/payments-tab"
+import { AffiliatesTab } from "./tabs/affiliates-tab"
 import { AnalyticsTab } from "./tabs/analytics-tab"
 import { EvolutionTab } from "./tabs/evolution-tab"
 
@@ -35,8 +36,8 @@ const TABS = [
   { id: "plans", label: "Planos", icon: Package, adminOnly: false },
   { id: "finances", label: "Financeiro", icon: DollarSign, adminOnly: false },
   { id: "customers", label: "Clientes", icon: Users, adminOnly: false },
-  { id: "asaas", label: "ASAAS", icon: Settings, adminOnly: true },
-  { id: "stripe", label: "Stripe", icon: Settings, adminOnly: true },
+  { id: "payments", label: "Pagamentos", icon: Settings, adminOnly: true },
+  { id: "affiliates", label: "Afiliados", icon: HandCoins, adminOnly: true },
   { id: "evolution", label: "Evolution API", icon: MessageSquare, adminOnly: true },
   { id: "analytics", label: "Estatísticas", icon: BarChart3, adminOnly: false },
 ]
@@ -116,7 +117,7 @@ export default function AdminSettingsPage() {
 
   if (!data) return null
 
-  const canAccessAsaas = userRole === "super_admin"
+  const canManagePayments = userRole === "super_admin"
 
   return (
     <AppShell>
@@ -125,7 +126,7 @@ export default function AdminSettingsPage() {
           <div>
             <h1 className="text-2xl font-bold">Configurações do Sistema</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Gerencie todos os aspectos da plataforma CortexAR
+              Gerencie todos os aspectos da plataforma {settings?.branding?.site_name || "AR"}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={logout} className="gap-2">
@@ -138,7 +139,7 @@ export default function AdminSettingsPage() {
           <div className="lg:w-56 shrink-0">
             <ScrollArea className="h-full max-h-[calc(100vh-12rem)]">
               <nav className="space-y-1">
-                {TABS.filter((t) => !t.adminOnly || canAccessAsaas).map((tab) => {
+                {TABS.filter((t) => !t.adminOnly || canManagePayments).map((tab) => {
                   const Icon = tab.icon
                   const isActive = activeTab === tab.id
                   return (
@@ -179,13 +180,9 @@ export default function AdminSettingsPage() {
             {activeTab === "plans" && <PlansTab />}
             {activeTab === "finances" && <FinancesTab />}
             {activeTab === "customers" && <CustomersTab />}
-            {activeTab === "asaas" && canAccessAsaas && (
-              <AsaasTab settings={settings} onSaved={loadData} />
-            )}
-            {activeTab === "stripe" && canAccessAsaas && (
-              <StripeTab settings={settings} onSaved={loadData} />
-            )}
-            {activeTab === "evolution" && canAccessAsaas && (
+            {activeTab === "payments" && canManagePayments && <PaymentsTab />}
+            {activeTab === "affiliates" && canManagePayments && <AffiliatesTab />}
+            {activeTab === "evolution" && canManagePayments && (
               <EvolutionTab settings={settings} onSaved={loadData} />
             )}
             {activeTab === "analytics" && <AnalyticsTab />}

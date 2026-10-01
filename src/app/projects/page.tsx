@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, FolderKanban, MoreHorizontal, Copy, Eye, Pause, Play, Trash2, Search, X, Upload, FileImage, AlertTriangle } from "lucide-react"
+import { Plus, FolderKanban, MoreHorizontal, Copy, Eye, Pause, Play, Trash2, Search, X, FileImage, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +26,10 @@ interface Project {
   id: string
   name: string
   type: string
+  tracking_mode: "marker" | "surface" | "gps"
+  latitude: number | null
+  longitude: number | null
+  activation_radius: number
   status: string
   slug: string
   views: number
@@ -40,7 +44,7 @@ export default function ProjectsPage() {
   const [filter, setFilter] = useState<string>("todos")
   const [search, setSearch] = useState("")
   const [showNewModal, setShowNewModal] = useState(false)
-  const [newProject, setNewProject] = useState({ name: "", type: "business_card" })
+  const [newProject, setNewProject] = useState({ name: "", type: "business_card", trackingMode: "marker", latitude: "", longitude: "", activationRadius: "100" })
   const [creating, setCreating] = useState(false)
   const [markerFile, setMarkerFile] = useState<File | null>(null)
   const [markerPreview, setMarkerPreview] = useState<string | null>(null)
@@ -97,6 +101,12 @@ export default function ProjectsPage() {
     const formData = new FormData()
     formData.append("name", newProject.name || "Novo Projeto")
     formData.append("type", newProject.type)
+    formData.append("tracking_mode", newProject.trackingMode)
+    if (newProject.trackingMode === "gps") {
+      formData.append("latitude", newProject.latitude)
+      formData.append("longitude", newProject.longitude)
+      formData.append("activation_radius", newProject.activationRadius)
+    }
 
     const result = await createProject(formData)
 
@@ -108,7 +118,7 @@ export default function ProjectsPage() {
 
     if (result.data) {
       // Upload marker image if provided
-      if (markerFile) {
+      if (newProject.trackingMode === "marker" && markerFile) {
         const ext = markerFile.name.endsWith(".png") ? "png" : "jpg"
         const fileName = `marker_${result.data.id}_${Date.now()}.${ext}`
 
@@ -136,7 +146,7 @@ export default function ProjectsPage() {
     }
 
     setShowNewModal(false)
-    setNewProject({ name: "", type: "business_card" })
+    setNewProject({ name: "", type: "business_card", trackingMode: "marker", latitude: "", longitude: "", activationRadius: "100" })
     setMarkerFile(null)
     setMarkerPreview(null)
     setCreating(false)
@@ -148,6 +158,12 @@ export default function ProjectsPage() {
     const formData = new FormData()
     formData.append("name", `${project.name} (cópia)`)
     formData.append("type", project.type)
+    formData.append("tracking_mode", project.tracking_mode || "marker")
+    if (project.tracking_mode === "gps") {
+      formData.append("latitude", String(project.latitude ?? ""))
+      formData.append("longitude", String(project.longitude ?? ""))
+      formData.append("activation_radius", String(project.activation_radius ?? 100))
+    }
 
     const result = await createProject(formData)
 
@@ -282,6 +298,11 @@ export default function ProjectsPage() {
     flyer_a4: "Panfleto A4",
     square_1x1: "Post 1x1",
   }
+  const trackingLabels: Record<string, string> = {
+    marker: "Imagem / marcador",
+    surface: "Superfície",
+    gps: "GPS",
+  }
 
   if (loading) {
     return (
@@ -314,7 +335,7 @@ export default function ProjectsPage() {
                 Novo Projeto
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Novo Projeto</DialogTitle>
                 <DialogDescription>Crie uma nova experiência de realidade aumentada.</DialogDescription>
@@ -330,7 +351,22 @@ export default function ProjectsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="proj-type">Tipo</Label>
+                  <Label htmlFor="proj-tracking">Modo de realidade aumentada</Label>
+                  <select
+                    id="proj-tracking"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newProject.trackingMode}
+                    onChange={(event) => setNewProject({ ...newProject, trackingMode: event.target.value })}
+                  >
+                    <option value="marker">Imagem / marcador</option>
+                    <option value="surface">Superfície: chão ou mesa</option>
+                    <option value="gps">GPS: direção das coordenadas</option>
+                  </select>
+                  {newProject.trackingMode === "surface" && <p className="text-xs text-muted-foreground">Posicione a cena em uma superfície plana. Requer celular compatível com WebXR AR.</p>}
+                  {newProject.trackingMode === "gps" && <p className="text-xs text-muted-foreground">O objeto aparecerá na direção do ponto configurado. GPS e bússola são necessários.</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="proj-type">Formato do projeto</Label>
                   <Select
                     value={newProject.type}
                     onValueChange={(v) => setNewProject({ ...newProject, type: v })}
@@ -345,7 +381,22 @@ export default function ProjectsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
+                {newProject.trackingMode === "gps" && <div className="space-y-3 rounded-lg border border-border p-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="proj-latitude">Latitude</Label>
+                    <Input id="proj-latitude" type="number" step="any" min="-90" max="90" placeholder="Ex: -23.5505" value={newProject.latitude} onChange={(e) => setNewProject({ ...newProject, latitude: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="proj-longitude">Longitude</Label>
+                    <Input id="proj-longitude" type="number" step="any" min="-180" max="180" placeholder="Ex: -46.6333" value={newProject.longitude} onChange={(e) => setNewProject({ ...newProject, longitude: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="proj-radius">Raio de ativação (metros)</Label>
+                    <Input id="proj-radius" type="number" min="10" max="5000" value={newProject.activationRadius} onChange={(e) => setNewProject({ ...newProject, activationRadius: e.target.value })} />
+                  </div>
+                  <Button variant="outline" type="button" onClick={() => navigator.geolocation?.getCurrentPosition(({ coords }) => setNewProject((current) => ({ ...current, latitude: String(coords.latitude), longitude: String(coords.longitude) })), () => toast({ title: "Não foi possível obter sua localização", variant: "destructive" }), { enableHighAccuracy: true, timeout: 15000 })}>Usar minha localização</Button>
+                </div>}
+                {newProject.trackingMode === "marker" && <div className="space-y-2">
                   <Label>Marcador de Imagem (para tracking AR)</Label>
                   <div
                     onClick={() => markerInputRef.current?.click()}
@@ -391,7 +442,7 @@ export default function ProjectsPage() {
                       Remover imagem
                     </button>
                   )}
-                </div>
+                </div>}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowNewModal(false)}>Cancelar</Button>
@@ -477,6 +528,9 @@ export default function ProjectsPage() {
                       </Badge>
                       <span className="absolute top-3 right-3 text-xs text-muted-foreground bg-card/80 px-2 py-1 rounded-md">
                         {typeLabels[project.type] || project.type}
+                      </span>
+                      <span className="absolute bottom-3 left-3 text-xs text-foreground bg-card/80 px-2 py-1 rounded-md">
+                        {trackingLabels[project.tracking_mode || "marker"] || "Imagem / marcador"}
                       </span>
                     </div>
                     <CardContent className="p-4">

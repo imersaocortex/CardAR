@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createProjectSchema, updateProjectSchema } from "@/lib/schemas"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { z } from "zod"
 
 function generateSlug(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -96,6 +95,10 @@ export async function createProject(formData: FormData) {
   const raw = {
     name: formData.get("name") as string,
     type: formData.get("type") as string,
+    tracking_mode: formData.get("tracking_mode") || "marker",
+    latitude: formData.get("latitude") === null || formData.get("latitude") === "" ? null : Number(formData.get("latitude")),
+    longitude: formData.get("longitude") === null || formData.get("longitude") === "" ? null : Number(formData.get("longitude")),
+    activation_radius: formData.get("activation_radius") === null || formData.get("activation_radius") === "" ? 100 : Number(formData.get("activation_radius")),
   }
 
   const parsed = createProjectSchema.safeParse(raw)
@@ -153,6 +156,10 @@ export async function createProject(formData: FormData) {
       organization_id: orgId,
       name: parsed.data.name,
       type: parsed.data.type,
+      tracking_mode: parsed.data.tracking_mode,
+      latitude: parsed.data.tracking_mode === "gps" ? parsed.data.latitude : null,
+      longitude: parsed.data.tracking_mode === "gps" ? parsed.data.longitude : null,
+      activation_radius: parsed.data.activation_radius,
       slug,
       created_by: user.id,
     })

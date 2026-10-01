@@ -15,6 +15,16 @@ function load(path, mocks = {}) {
 const { geoOffset } = load("src/lib/ar/geo.ts")
 const { getActionUrl } = load("src/lib/ar/actions.ts")
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
+const { createProjectSchema } = load("src/lib/schemas/index.ts")
+
+test("new projects default to marker tracking and accept markerless modes", () => {
+  const base = { name: "Experiência", type: "business_card" }
+  assert.equal(createProjectSchema.parse(base).tracking_mode, "marker")
+  assert.equal(createProjectSchema.parse({ ...base, tracking_mode: "surface" }).tracking_mode, "surface")
+  assert.equal(createProjectSchema.safeParse({ ...base, tracking_mode: "gps" }).success, false)
+  assert.equal(createProjectSchema.parse({ ...base, tracking_mode: "gps", latitude: 0, longitude: 0 }).activation_radius, 100)
+  assert.equal(createProjectSchema.safeParse({ ...base, tracking_mode: "gps", latitude: 91, longitude: 0 }).success, false)
+})
 
 test("GPS preserves geographic directions and meters", () => {
   const north = geoOffset(0, 0, 0.001, 0)

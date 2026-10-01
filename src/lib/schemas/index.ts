@@ -16,7 +16,14 @@ export const createProjectSchema = z.object({
   name: z.string().min(1, "Nome obrigatório").max(100),
   type: z.enum(["business_card", "flyer_a4", "square_1x1"]),
   marker_image: z.string().optional(),
-})
+  tracking_mode: z.enum(["marker", "surface", "gps"]).default("marker"),
+  latitude: z.number().finite().min(-90).max(90).nullable().default(null),
+  longitude: z.number().finite().min(-180).max(180).nullable().default(null),
+  activation_radius: z.number().finite().min(10).max(5000).default(100),
+}).refine(
+  (project) => project.tracking_mode !== "gps" || (project.latitude !== null && project.longitude !== null),
+  { message: "Informe latitude e longitude para o modo GPS", path: ["latitude"] },
+)
 
 export const updateProjectSchema = z.object({
   name: z.string().min(1).max(100).optional(),

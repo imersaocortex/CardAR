@@ -4,6 +4,7 @@ import { create } from "zustand"
 import { StudioElement, Layer, ProjectType } from "@/types"
 import { mockElements, mockLayers } from "@/lib/mock-data"
 import { createClient } from "@/lib/supabase/client"
+import { selectPrimaryScene } from "@/lib/scenes"
 
 export const projectTypeDimensions: Record<ProjectType, { width: number; height: number; label: string }> = {
   cartao: { width: 0.85, height: 0.55, label: "Cartão de Visita (88mm × 48mm)" },
@@ -62,16 +63,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
     try {
       const supabase = createClient()
-      const { data: scenes } = await supabase
+      const { data: scenes, error } = await supabase
         .from("scenes")
         .select("*, scene_objects(*)")
         .eq("project_id", projectId)
         .order("created_at")
-        .limit(1)
+      if (error) throw error
+      if (get().projectId !== projectId) return
 
       if (scenes && scenes.length > 0) {
-        const scene = scenes[0]
-        const objects: StudioElement[] = (scene.scene_objects || []).map((obj: any) => ({
+        const scene = selectPrimaryScene<any>(scenes)!
+        const objects: StudioElement[] = [...(scene.scene_objects || [])].sort((a: any, b: any) => a.layer_order - b.layer_order).map((obj: any) => ({
           id: obj.id,
           type: obj.type as any,
           name: obj.name,
@@ -105,125 +107,43 @@ export const useStudioStore = create<StudioState>((set, get) => ({
           layers,
           sceneId: scene.id,
           projectId,
+          isSaved: true,
         })
       }
-    } catch {
-      // Estado já foi limpo acima — mantém vazio
+    } catch (error) {
+      throw new Error("Não foi possível carregar a cena. Recarregue antes de editar.", { cause: error })
     }
   },
 
   saveScene: async () => {
     const { projectId, sceneId, elements } = get()
-    if (!projectId) return
-
-    const typeMap: Record<string, string> = {
-      business_card: "cartao",
-      flyer_a4: "panfleto",
-      square_1x1: "post",
-    }
-
-    try {
-      const supabase = createClient()
-
-      if (!sceneId) {
-        const { data: scene } = await supabase
-          .from("scenes")
-          .insert({ project_id: projectId, name: "Cena Principal" })
-          .select()
-          .single()
-
-        if (scene) {
-          set({ sceneId: scene.id })
-          // Save scene objects
-          for (const el of elements) {
-            await supabase.from("scene_objects").insert({
-              scene_id: scene.id,
-              type: el.type,
-              name: el.name,
-              position_x: el.position[0],
-              position_y: el.position[1],
-              position_z: el.position[2],
-              rotation_x: el.rotation[0],
-              rotation_y: el.rotation[1],
-              rotation_z: el.rotation[2],
-              scale_x: el.scale[0],
-              scale_y: el.scale[1],
-              scale_z: el.scale[2],
-              opacity: el.opacity,
-              visible: el.visible,
-              layer_order: elements.indexOf(el),
-              animation_type: el.animationType ?? null,
-              action: el.action ?? null,
-              asset_url: el.assetUrl ?? null,
-              asset_thumbnail: el.assetThumbnail ?? null,
-              show_caption: el.showCaption ?? null,
-              chroma_key_color: el.chromaKeyColor ?? null,
-              chroma_key_tolerance: el.chromaKeyTolerance ?? null,
-              chroma_key_smoothness: el.chromaKeySmoothness ?? null,
-              duration: el.duration ?? null,
-            })
-          }
-        }
-      } else {
-        // Update existing scene objects
-        const { data: existing } = await supabase
-          .from("scene_objects")
-          .select("id")
-          .eq("scene_id", sceneId)
-
-        const existingIds = new Set((existing || []).map((e: any) => e.id))
-        const currentIds = new Set(elements.map((e) => e.id))
-
-        // Delete removed objects
-        for (const eid of existingIds) {
-          if (!currentIds.has(eid)) {
-            await supabase.from("scene_objects").delete().eq("id", eid)
-          }
-        }
-
-        // Upsert current objects
-        for (const el of elements) {
-          const payload = {
-            scene_id: sceneId,
-            type: el.type,
-            name: el.name,
-            position_x: el.position[0],
-            position_y: el.position[1],
-            position_z: el.position[2],
-            rotation_x: el.rotation[0],
-            rotation_y: el.rotation[1],
-            rotation_z: el.rotation[2],
-            scale_x: el.scale[0],
-            scale_y: el.scale[1],
-            scale_z: el.scale[2],
-            opacity: el.opacity,
-            visible: el.visible,
-            layer_order: elements.indexOf(el),
-            animation_type: el.animationType ?? null,
-            action: el.action ?? null,
-            asset_url: el.assetUrl ?? null,
-            asset_thumbnail: el.assetThumbnail ?? null,
-            show_caption: el.showCaption ?? null,
-            chroma_key_color: el.chromaKeyColor || null,
-            chroma_key_tolerance: el.chromaKeyTolerance || null,
-            chroma_key_smoothness: el.chromaKeySmoothness || null,
-            duration: el.duration || null,
-          }
-
-          if (existingIds.has(el.id)) {
-            await supabase.from("scene_objects").update(payload).eq("id", el.id)
-          } else {
-            await supabase.from("scene_objects").insert(payload)
-          }
-        }
-      }
-
-      set({ isSaved: true })
-    } catch {
-      // Save failed silently
+    if (!projectId) throw new Error("Projeto não carregado")
+    const supabase = createClient()
+    // The database transaction either persists the entire scene or rolls it back.
+    const { data, error } = await supabase.rpc("save_studio_scene", {
+      p_project_id: projectId,
+      p_scene_id: sceneId,
+      p_objects: elements.map((el, index) => ({
+        id: el.id,
+        type: el.type, name: el.name,
+        position_x: el.position[0], position_y: el.position[1], position_z: el.position[2],
+        rotation_x: el.rotation[0], rotation_y: el.rotation[1], rotation_z: el.rotation[2],
+        scale_x: el.scale[0], scale_y: el.scale[1], scale_z: el.scale[2],
+        opacity: el.opacity, visible: el.visible, layer_order: index,
+        animation_type: el.animationType ?? null, action: el.action ?? null,
+        asset_url: el.assetUrl ?? null, asset_thumbnail: el.assetThumbnail ?? null,
+        show_caption: el.showCaption ?? null,
+        chroma_key_color: el.chromaKeyColor ?? null,
+        chroma_key_tolerance: el.chromaKeyTolerance ?? null,
+        chroma_key_smoothness: el.chromaKeySmoothness ?? null,
+        duration: el.duration ?? null,
+      })),
+    })
+    if (error) throw new Error("Não foi possível salvar a cena. Suas alterações continuam no editor.", { cause: error })
+    if (get().projectId === projectId) {
+      set({ sceneId: data as string, isSaved: get().elements === elements })
     }
   },
-
   setElements: (elements) => set({ elements }),
   setLayers: (layers) => set({ layers }),
   selectElement: (id) => set({ selectedElementId: id }),
@@ -258,9 +178,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         state.selectedElementId === id ? null : state.selectedElementId,
       isSaved: false,
     })),
-  reorderLayers: (layers) => set({ layers, isSaved: false }),
+  reorderLayers: (layers) => set((state) => ({ layers, elements: layers.flatMap((layer) => state.elements.filter((el) => el.id === layer.id)), isSaved: false })),
   toggleLayerVisibility: (id) =>
     set((state) => ({
+      isSaved: false,
       layers: state.layers.map((l) =>
         l.id === id ? { ...l, visible: !l.visible } : l
       ),

@@ -64,7 +64,7 @@ export function PlansTab() {
     has_watermark: true,
     allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
     highlight: false,
-    stripe_price_id: "",
+    paypal_plan_id: "",
   })
 
   const loadPlans = async () => {
@@ -99,7 +99,7 @@ export function PlansTab() {
       has_watermark: true,
       allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
       highlight: false,
-      stripe_price_id: "",
+      paypal_plan_id: "",
     })
     setDialogOpen(true)
   }
@@ -122,7 +122,7 @@ export function PlansTab() {
         ? (plan as any).allowed_media_types.join(", ")
         : "image/png,image/jpeg,model/gltf-binary",
       highlight: (plan as any).highlight === true,
-      stripe_price_id: (plan as any).stripe_price_id || "",
+      paypal_plan_id: (plan as any).paypal_plan_id || "",
     })
     setDialogOpen(true)
   }
@@ -171,7 +171,7 @@ export function PlansTab() {
         has_watermark: form.has_watermark,
         allowed_media_types: form.allowed_media_types.split(",").map((t) => t.trim()).filter(Boolean),
         highlight: form.highlight,
-        stripe_price_id: form.stripe_price_id || null,
+        paypal_plan_id: form.paypal_plan_id || null,
       }
 
       if (editingPlan) {
@@ -492,14 +492,14 @@ export function PlansTab() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="plan-stripe-price">Stripe Price ID</Label>
+              <Label htmlFor="plan-paypal-plan">PayPal Plan ID</Label>
               <Input
-                id="plan-stripe-price"
-                value={form.stripe_price_id}
-                onChange={(e) => setForm((p) => ({ ...p, stripe_price_id: e.target.value }))}
-                placeholder="price_xxxxxxxxxxxxx"
+                id="plan-paypal-plan"
+                value={form.paypal_plan_id}
+                onChange={(e) => setForm((p) => ({ ...p, paypal_plan_id: e.target.value }))}
+                placeholder="P-XXXXXXXXXXXXXXXXXXXXXXXX"
               />
-              <p className="text-xs text-muted-foreground">ID do Price no Stripe Dashboard (deixe vazio se não usar Stripe)</p>
+              <p className="text-xs text-muted-foreground">ID opcional do plano PayPal. Se vazio, o plano será criado automaticamente na contratação.</p>
             </div>
           </div>
 

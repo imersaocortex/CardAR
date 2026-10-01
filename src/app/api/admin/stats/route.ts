@@ -33,7 +33,7 @@ export async function GET() {
     .limit(100)
 
   const { data: payments } = await admin
-    .from("asaas_payments")
+    .from("billing_payments")
     .select("*, organizations(name)")
     .order("created_at", { ascending: false })
     .limit(100)
@@ -76,7 +76,7 @@ export async function GET() {
 
   const { data: systemSettings } = await admin
     .from("system_settings")
-    .select("*")
+    .select("branding, general")
     .eq("id", 1)
     .maybeSingle()
 

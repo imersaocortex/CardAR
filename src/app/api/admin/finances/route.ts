@@ -21,20 +21,11 @@ export async function GET() {
   const now = new Date()
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
 
-  // Fetch payments from both gateways
-  const [asaasResult, stripeResult] = await Promise.all([
-    admin.from("asaas_payments").select("*, organizations(name)").order("created_at", { ascending: false }).limit(500),
-    admin.from("stripe_payments").select("*, organizations!inner(name)").order("created_at", { ascending: false }).limit(500),
-  ])
-
-  const asaasPayments = ((asaasResult.data || []) as any[]).map((p: any) => ({ ...p, _gateway: "asaas" }))
-  const stripePayments = ((stripeResult.data || []) as any[]).map((p: any) => ({ ...p, _gateway: "stripe" }))
-
-  const paymentList = [...asaasPayments, ...stripePayments].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  )
+  // Includes archived transactions from retired gateways.
+  const { data: paymentData, error: paymentError } = await admin.from("billing_payments").select("*, organizations(name)").order("created_at", { ascending: false }).limit(500)
+  if (paymentError) return NextResponse.json({ error: "Não foi possível consultar o histórico financeiro" }, { status: 503 })
+  const paymentList = (paymentData || []).map((payment) => ({ ...payment, _gateway: payment.provider }))
 
   const confirmedPayments = paymentList.filter(
     (p: any) => p.status === "CONFIRMED" || p.status === "RECEIVED" || p.status === "paid",
@@ -43,12 +34,12 @@ export async function GET() {
     (p: any) => p.paid_date && p.paid_date >= thisMonthStart,
   )
   const lastMonthPayments = confirmedPayments.filter(
-    (p: any) => p.paid_date && p.paid_date >= lastMonthStart && p.paid_date <= lastMonthEnd,
+    (p: any) => p.paid_date && p.paid_date >= lastMonthStart && p.paid_date < thisMonthStart,
   )
 
-  const totalRevenue = confirmedPayments.reduce((s: number, p: any) => s + p.value, 0)
-  const thisMonthRevenue = thisMonthPayments.reduce((s: number, p: any) => s + p.value, 0)
-  const lastMonthRevenue = lastMonthPayments.reduce((s: number, p: any) => s + p.value, 0)
+  const totalRevenue = confirmedPayments.reduce((s: number, p: any) => s + Number(p.value), 0)
+  const thisMonthRevenue = thisMonthPayments.reduce((s: number, p: any) => s + Number(p.value), 0)
+  const lastMonthRevenue = lastMonthPayments.reduce((s: number, p: any) => s + Number(p.value), 0)
 
   const revenueChange = lastMonthRevenue > 0
     ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100
@@ -94,7 +85,7 @@ export async function GET() {
   const activeSubs = filteredSubs.filter((s: any) => s.status === "active")
   const mrr = activeSubs.reduce((s: number, sub: any) => {
     const plan = planMap[sub.plan_id]
-    return s + (plan?.price || 0)
+    return s + Number(plan?.price || 0)
   }, 0)
 
   const totalSubs = filteredSubs.length
@@ -107,7 +98,7 @@ export async function GET() {
 
   const pendingCount = paymentList.filter((p: any) => p.status === "PENDING" || p.status === "open").length
   const overduePayments = paymentList.filter((p: any) => p.status === "OVERDUE" || p.status === "failed")
-  const overdueAmount = overduePayments.reduce((s: number, p: any) => s + p.value, 0)
+  const overdueAmount = overduePayments.reduce((s: number, p: any) => s + Number(p.value), 0)
 
   const { data: topOrgs } = await admin
     .from("projects")
@@ -160,9 +151,9 @@ function buildMonthlyRevenue(payments: any[]) {
   for (const p of payments) {
     if (!p.paid_date) continue
     const key = p.paid_date.substring(0, 7)
-    monthly[key] = (monthly[key] || 0) + p.value
+    monthly[key] = (monthly[key] || 0) + Number(p.value)
   }
   return Object.entries(monthly)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, revenue]) => ({ month, revenue: Math.round(revenue / 100) }))
+    .map(([month, revenue]) => ({ month, revenue: Math.round(revenue * 100) / 100 }))
 }

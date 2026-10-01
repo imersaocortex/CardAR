@@ -18,6 +18,7 @@ interface Plan {
   features: string[]
   billing_cycle: string
   trial_days: number
+  highlight?: boolean
 }
 
 export function PlansSection() {
@@ -25,17 +26,19 @@ export function PlansSection() {
   const [loading, setLoading] = useState(true)
   const [isAnnual, setIsAnnual] = useState(false)
   const [hasYearlyPlans, setHasYearlyPlans] = useState(false)
+  const [billingEnabled, setBillingEnabled] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
-    supabase
+    const plansRequest = supabase
       .from("plans")
       .select("*")
       .eq("active", true)
       .order("price")
-      .then(({ data }) => {
+    const availabilityRequest = fetch("/api/billing/settings").then((response) => response.ok ? response.json() : null).catch(() => null)
+    Promise.all([plansRequest, availabilityRequest]).then(([{ data }, availability]) => {
         if (data) {
-          const normalized = data.map((p: any) => ({
+          const normalized = data.map((p) => ({
             ...p,
             billing_cycle: p.billing_cycle || "monthly",
             highlight: p.highlight === true,
@@ -43,8 +46,9 @@ export function PlansSection() {
           setPlans(normalized)
           setHasYearlyPlans(normalized.some((p: Plan) => p.billing_cycle === "yearly"))
         }
+        setBillingEnabled(!!(availability?.paypal?.configured || availability?.efi?.configured))
         setLoading(false)
-      })
+      }).catch(() => setLoading(false))
   }, [])
 
   if (loading) return null
@@ -69,7 +73,7 @@ export function PlansSection() {
             <span className="text-gradient-cyan">transparentes</span>
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto mb-8">
-            Escolha o plano ideal para seu negócio. Cancele quando quiser.
+            {billingEnabled ? "Escolha o plano ideal para seu negócio. Cancele quando quiser." : "Conheça os planos. Novas assinaturas estarão disponíveis em breve."}
           </p>
 
           {hasYearlyPlans && (
@@ -99,7 +103,7 @@ export function PlansSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {filteredPlans.map((plan, i) => {
-            const isHighlighted = (plan as any).highlight === true
+            const isHighlighted = plan.highlight === true
             return (
               <motion.div
                 key={plan.id}
@@ -123,7 +127,7 @@ export function PlansSection() {
                   </div>
                 )}
 
-                {plan.trial_days > 0 && (
+                {billingEnabled && plan.trial_days > 0 && (
                   <div className="mb-4">
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
                       <Sparkles className="h-3 w-3" />
@@ -135,11 +139,11 @@ export function PlansSection() {
                 <div className="mb-6">
                   <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
                   <p className="text-3xl font-bold">
-                    {plan.price === 0
+                    {Number(plan.price) === 0
                       ? "Grátis"
-                      : `R$ ${plan.price.toFixed(2).replace('.', ',')}`
+                      : `R$ ${Number(plan.price).toFixed(2).replace('.', ',')}`
                     }
-                    {plan.price > 0 && (
+                    {Number(plan.price) > 0 && (
                       <span className="text-sm font-normal text-muted-foreground">
                         {plan.billing_cycle === "yearly" ? "/ano" : "/mês"}
                       </span>
@@ -156,16 +160,7 @@ export function PlansSection() {
                   ))}
                 </div>
 
-                <Button
-                  variant={isHighlighted ? "gradient" : "outline"}
-                  className="w-full"
-                  asChild
-                >
-                  <Link href="/login">
-                    Assinar Agora
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+                {billingEnabled || Number(plan.price) === 0 ? <Button variant={isHighlighted ? "gradient" : "outline"} className="w-full" asChild><Link href="/login">{Number(plan.price) === 0 ? "Começar grátis" : "Assinar agora"}<ArrowRight className="h-4 w-4" /></Link></Button> : <Button className="w-full" variant="outline" disabled>Assinaturas em breve</Button>}
               </motion.div>
             )
           })}

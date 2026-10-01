@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import dynamic from "next/dynamic"
+const SurfacePlayer = dynamic(() => import("@/components/ar/surface-player").then((module) => module.SurfacePlayer), { ssr: false })
+const GpsPlayer = dynamic(() => import("@/components/ar/gps-player").then((module) => module.GpsPlayer), { ssr: false })
 import { useParams } from "next/navigation"
 import { Loader2, X } from "lucide-react"
 import { ArPlayer } from "@/components/ar/ar-player"
@@ -82,7 +85,7 @@ export default function ExperiencePage() {
     // Track marker detection
     if (state === "detected" && experience && !trackedRef.current.detected) {
       trackedRef.current.detected = true
-      sendAnalytics(experience.id, "click", { action: "marker_detected" }, sessionIdRef.current)
+      sendAnalytics(experience.id, "click", { action: `${experience.trackingMode || "marker"}_detected` }, sessionIdRef.current)
     }
   }, [experience])
 
@@ -112,6 +115,9 @@ export default function ExperiencePage() {
       </div>
     )
   }
+
+  if (experience.trackingMode === "surface") return <SurfacePlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} />
+  if (experience.trackingMode === "gps") return <GpsPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} />
 
   if (!experience.marker?.targetUrl) {
     return (

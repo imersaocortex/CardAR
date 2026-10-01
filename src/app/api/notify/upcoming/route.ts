@@ -2,7 +2,11 @@ import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendUpcomingPaymentNotification } from "@/lib/evolution"
 
-export async function GET() {
+export async function GET(request: Request) {
+  const secret = process.env.CRON_SECRET
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+  }
   const admin = createAdminClient()
 
   const now = new Date()

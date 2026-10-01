@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/billing/renewals", "schedule": "0 8 * * *" }
+  ]
+}

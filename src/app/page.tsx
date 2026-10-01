@@ -1,4 +1,6 @@
 "use client"
+import { MotionConfig, motion, useReducedMotion, useScroll, useSpring } from "framer-motion"
+import type { ReactNode } from "react"
 
 import { Navbar } from "@/components/layout/navbar"
 import { HeroSection } from "@/components/landing/hero-section"
@@ -13,19 +15,29 @@ import { FooterSection } from "@/components/landing/footer-section"
 import { WhatsAppButton } from "@/components/landing/whatsapp-button"
 
 export default function LandingPage() {
+  const { scrollYProgress } = useScroll()
+  const progress = useSpring(scrollYProgress, { stiffness: 100, damping: 30 })
   return (
-    <div className="min-h-screen bg-background">
+    <MotionConfig reducedMotion="user"><div className="landing-page min-h-screen overflow-x-clip bg-background">
+      <motion.div aria-hidden className="fixed inset-x-0 top-0 z-[60] h-0.5 origin-left bg-gradient-to-r from-violet-400 to-cyan-300" style={{ scaleX: progress }} />
       <Navbar />
+      <main>
       <HeroSection />
-      <ResourcesSection />
-      <HowItWorksSection />
-      <ExamplesSection />
-      <PlansSection />
-      <ComparisonSection />
-      <FaqSection />
-      <CtaSection />
+      <Reveal><ResourcesSection /></Reveal>
+      <Reveal><HowItWorksSection /></Reveal>
+      <Reveal><ExamplesSection /></Reveal>
+      <Reveal><PlansSection /></Reveal>
+      <Reveal><ComparisonSection /></Reveal>
+      <Reveal><FaqSection /></Reveal>
+      <Reveal><CtaSection /></Reveal>
+      </main>
       <FooterSection />
       <WhatsAppButton />
-    </div>
+    </div></MotionConfig>
   )
+}
+
+function Reveal({ children }: { children: ReactNode }) {
+  const reduced = useReducedMotion()
+  return <motion.div initial={reduced ? false : { opacity: 0, y: 32 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.08 }} transition={{ duration: 0.65 }}>{children}</motion.div>
 }

@@ -51,14 +51,17 @@ export default function LoginPage() {
     setError("")
 
     const supabase = createClient()
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name, phone: whatsapp } },
-    })
-
-    if (signUpError) {
-      setError(signUpError.message)
+    let data
+    try {
+      const response = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "signup", email, password, name, phone: whatsapp }) })
+      data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Não foi possível realizar o cadastro")
+      if (data.session) {
+        const { error } = await supabase.auth.setSession(data.session)
+        if (error) throw error
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Não foi possível realizar o cadastro")
       setLoading(false)
       return
     }

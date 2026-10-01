@@ -4,106 +4,37 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## Project: CortexAR
+## Projeto: CortexAR
 
-### Critical Rules (never forget)
-- **Watermark**: AR experience watermark must always use `siteName` from API (system branding config), never hardcode "CortexAR"
-- **City/Country encoding**: Always `safeDecode()` URL-encoded city/country values from Vercel geo headers before storing/displaying
+### Regras críticas
+- O watermark da experiência AR usa sempre `siteName` retornado pela API de identidade visual; nunca fixe "CortexAR" no player.
+- Antes de armazenar ou exibir cidade/país dos headers de geolocalização da Vercel, aplique `safeDecode()`.
+- O banco Supabase configurado no ambiente local é de **produção**. Não execute testes que criem dados/cobranças ali. Migrações são aplicadas manualmente pelo responsável pelo projeto.
 
-### Architecture
-- Next.js 16.2.7 (Turbopack) app router
-- Supabase for auth, DB, storage
-- ASAAS for payment gateway
-- Shadcn/ui + Tailwind for UI
-- Zustand for auth state
+### Arquitetura atual
+- Next.js 16.2.7 App Router com Turbopack, React 19, Tailwind e Shadcn/ui.
+- Supabase para autenticação, banco e armazenamento; Zustand para estado de autenticação/editor.
+- Modos AR: marcador MindAR, superfície plana via WebXR hit-test e GPS/bússola com objeto na direção das coordenadas.
+- Faturamento novo: PayPal Subscriptions e Pix Automático Efí. ASAAS e Stripe estão aposentados no código; suas tabelas antigas ficam para auditoria.
+- Programa de afiliados: código de indicação, comissão de 10% no primeiro pagamento e nas renovações, liberação após 30 dias, saque solicitado pelo afiliado e transferência Pix manual pela administração.
 
-### Subscription & Billing Flow
+### Implantação e pagamentos
+- Leia `README.md` antes de publicar. As migrações `supabase/migrations/020_*.sql` até `024_*.sql` devem ser executadas **em ordem**; `supabase/verify_020_024.sql` faz a conferência somente de leitura.
+- `BILLING_V2_ENABLED` ausente/desligado significa que novas assinaturas estão indisponíveis. É o estado previsto enquanto as contas PayPal/Efí não estiverem configuradas.
+- Para cobranças reais: credenciais, certificado mTLS Efí, webhooks, `APP_URL` HTTPS, `CRON_SECRET`, `BILLING_V2_ENABLED=true` e `BILLING_LIVE_ENABLED=true` são necessários. Valide primeiro em Supabase separado de homologação e sandbox dos provedores.
+- Não publique a versão que aposenta webhooks antigos sobre assinaturas ASAAS/Stripe ainda ativas. Confirme pelo SQL de verificação.
+- Nunca credite acesso ou comissão com base apenas no corpo de um webhook; reconcilie no provedor e use os RPCs idempotentes de liquidação.
+- Nunca exclua o histórico de `billing_payments` ou marque um saque como pago antes de confirmar a transferência e registrar seu comprovante.
 
-1. **Signup**: `handle_new_user` trigger creates org, subscription (trialing/active), usage_limits
-2. **Trial**: Full plan limits for `trial_days` (configurable per plan — starter=0, pro=7, agency=7)
-3. **Trial expired**: `createProject` blocks with error "Período de teste expirado. Assine um plano para continuar."
-4. **Upgrade**: `/api/billing` POST → creates ASAAS customer (with CPF/CNPJ, phone, address from profile) → creates ASAAS subscription + checkout → returns `checkout_url`
-5. **Payment**: User pays on ASAAS checkout → webhook confirms → subscription set to `active`, trial cleared
-6. **Renewal**: ASAAS subscription auto-charges → webhook extends `current_period_end`
-7. **Cancel**: `/api/billing` POST cancel → subscription → `canceled`, reverted to Starter
+### Arquivos principais
+- `src/app/api/billing/route.ts`, `src/lib/payments/` e `src/app/api/webhooks/{paypal,efi}/`: contratação, cobrança, conciliação e cancelamento.
+- `src/app/api/billing/renewals/route.ts` e `vercel.json`: reconciliação agendada.
+- `src/app/experience/[slug]/page.tsx`, `src/components/ar/`: seleção e execução dos modos AR.
+- `src/app/api/projects/[id]/tracking/route.ts`: configuração de marcador/superfície/GPS.
+- `src/app/api/affiliates/`, `src/app/api/admin/affiliate-payouts/`: indicações, comissões e saques.
+- `src/store/index.ts` e `supabase/migrations/020_studio_integrity.sql`: persistência atômica do editor.
 
-### Stripe Trial Flow (Debugging Notes)
-
-1. **Upgrade** (`handleStripeUpgrade`, `billing/route.ts:790`):
-   - Creates Stripe Checkout Session with `trial_period_days`
-   - Sets `status: "trialing"`, `trial_ends_at`, updates `usage_limits`
-   - Inserts `stripe_checkouts` with `status: "pending"`
-   - Does NOT set `current_period_end` (set later by webhook or checkout_success)
-
-2. **Webhook `checkout.session.completed`** (`handleCheckoutCompleted`, `webhooks/stripe/route.ts:121`):
-   - Detects trial via `payment_status !== "paid"` + `mode === "subscription"`
-   - Sets `status: "trialing"`, sets `stripe_subscription_id`
-   - Updates `usage_limits`, unsuspends projects
-   - Inserts a NEW `stripe_checkouts` record with `status: "completed"` (does NOT update the pending one)
-
-3. **Webhook `invoice.paid`** (`handleInvoicePaid`, `webhooks/stripe/route.ts:215`):
-   - Stripe fires this for $0 trial invoices
-   - **CRITICAL**: `$0 check must come BEFORE` the subscription update block
-   - When `amount_paid === 0`, return early (no subscription changes, no payment record)
-
-4. **Frontend `checkout_success`** (`billing/route.ts:565`):
-   - Finds "pending" `stripe_checkouts` record (created by upgrade)
-   - `isPaid = session.payment_status === "paid"` → false for trial
-   - Skips paid flow (subscription update, payment insert)
-   - **Must mark checkout as "completed" even for trial** (outside `if (isPaid)`)
-
-### Known Timezone Issue
-- `due_date` stored as `YYYY-MM-DD` (via `localDateStr()`) without timezone
-- Admin UI renders as `new Date(payment.due_date).toLocaleDateString("pt-BR")`
-- `new Date("YYYY-MM-DD")` = midnight UTC → in negative UTC offsets, shows previous day
-- `paid_date` uses `localMidnightISO()` (full ISO with UTC offset) — no issue
-
-### Key Files
-- `src/lib/asaas/index.ts` — ASAAS API client (createCustomer, updateCustomer, createSubscription, createCheckout, cancelSubscription)
-- `src/app/api/billing/route.ts` — Billing API (GET subscription/payments/checkout, POST upgrade/cancel)
-- `src/app/billing/page.tsx` — Billing UI with plans, trial/status banners, usage, payment history, checkout link
-- `src/app/api/webhooks/asaas/route.ts` — Webhook handler (PAYMENT → extends period + sets active on RECEIVED/CONFIRMED, OVERDUE → past_due; SUBSCRIPTION → maps status)
-- `src/lib/actions/projects.ts` — `createProject` checks sub status (past_due/canceled/trial_expired) + `check_project_limit` RPC
-- `src/components/layout/app-shell.tsx` — Subscription status banner (trialing/past_due/canceled/none)
-
-### DB Functions
-- `check_project_limit(p_organization_id)` — returns `projects_used < projects_limit` from `usage_limits`
-- `handle_new_user()` — trigger: creates profile, org, membership, subscription (with trial), usage_limits
-
-### ASAAS Webhook Events
-- `PAYMENT_RECEIVED` / `PAYMENT_CONFIRMED` → subscription `status=active`, extend `current_period_end` by 1 month
-- `PAYMENT_OVERDUE` → subscription `status=past_due`
-- `SUBSCRIPTION_ACTIVE/CANCELED/EXPIRED` → maps to subscription status
-
-### Admin Subscription Control
-- `admin/customers-tab.tsx` — enhanced with detail panel on row click showing:
-  - Subscription status with manual override buttons (Ativo/Trial/Vencido/Cancelado)
-  - Usage, analytics summary, projects list, payment history
-- `PUT /api/admin/subscriptions/[id]` — changes subscription status, logs to `subscription_status_history`, syncs usage_limits
-- `GET /api/admin/orgs/[orgId]` — full org detail with projects, analytics, payments
-- `subscription_status_history` table — audit trail of all status changes with admin user
-
-### Client Dashboard (Reports & Plan Details)
-- `dashboard/page.tsx` — two tabs: Visão Geral and Relatórios
-- Plan details widget showing plan name, projects used/limit with progress bar, views, status
-- Reports tab with per-project analytics selector
-- Analytics summary: views, clicks, unique sessions, countries
-- Location breakdown by country and city (horizontal bars)
-- Event type breakdown, button click breakdown
-- Views timeline (last 30 days bar chart)
-- PDF export via `window.print()` (browser native)
-
-### Interaction Tracking (Analytics)
-- `project_analytics` table: project_id, session_id, event_type (view/click/button_click), metadata, ip_address, country, city, region, user_agent
-- `POST /api/analytics/log` — logs interaction from public experience (no auth required, uses IP geo via Vercel headers + ip-api.com fallback)
-- `GET /api/analytics/[projectId]` — returns aggregated analytics (summary, countries, cities, timeline, event/button breakdown)
-- `ArPlayer` now accepts `onInteraction` callback prop
-- Experience page sends `view` on load, `click` (marker_detected) on detection, `button_click` on button action
-- Session-based tracking with generated session IDs
-
-### Migration Required
-Run `006_project_analytics_admin.sql` in Supabase SQL Editor for: `project_analytics`, `subscription_status_history` tables + `metadata` column on subscriptions.
-
-### Build
-- `npm run build` — must pass before committing
-- No tests yet (no test framework configured)
+### Validação
+- `npm test`, `npx tsc --noEmit --incremental false` e `npm run build` devem passar antes de publicar.
+- O repositório ainda possui avisos/erros de lint legados fora dos novos fluxos; não os oculte com uma desativação global das regras.
+- Teste AR em dispositivos reais. WebXR hit-test não é disponibilizado por todos os navegadores; o player informa incompatibilidade quando necessário.

@@ -78,11 +78,6 @@ export const systemSettingsSchema = z.object({
     meta_title: z.string().max(200).nullable().optional(),
     meta_description: z.string().max(500).nullable().optional(),
   }).optional(),
-  asaas: z.object({
-    environment: z.enum(["debug", "sandbox", "production"]).optional(),
-    api_key: z.string().optional(),
-    webhook_secret: z.string().optional(),
-  }).passthrough().optional(),
   general: z.object({
     allow_signups: z.boolean().optional(),
     maintenance_mode: z.boolean().optional(),
@@ -95,9 +90,6 @@ export const systemSettingsSchema = z.object({
     server_url: z.string().optional(),
     api_key: z.string().optional(),
     instance_name: z.string().optional(),
-  }).passthrough().optional(),
-  stripe: z.object({
-    environment: z.enum(["debug", "production"]).optional(),
   }).passthrough().optional(),
 })
 
@@ -115,7 +107,7 @@ export const createPlanSchema = z.object({
   has_watermark: z.boolean().default(true),
   allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
   highlight: z.boolean().default(false),
-  stripe_price_id: z.string().nullable().optional(),
+  paypal_plan_id: z.string().nullable().optional(),
 })
 
 export const updatePlanSchema = createPlanSchema.partial()
@@ -131,23 +123,4 @@ export const updateProfileSchema = z.object({
   address_city: z.string().max(100).nullable().optional(),
   address_state: z.string().max(2).nullable().optional(),
   address_zipcode: z.string().max(10).nullable().optional(),
-})
-
-export const asaasWebhookSchema = z.object({
-  event: z.string(),
-  payment: z.object({
-    id: z.string(),
-    status: z.string(),
-    value: z.number(),
-    dueDate: z.string(),
-    paidDate: z.string().nullable().optional(),
-    invoiceUrl: z.string().nullable().optional(),
-    subscription: z.string().nullable().optional(),
-    customer: z.string(),
-  }).optional(),
-  subscription: z.object({
-    id: z.string(),
-    status: z.string(),
-    customer: z.string(),
-  }).optional(),
 })

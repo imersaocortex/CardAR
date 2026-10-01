@@ -142,7 +142,7 @@ export function StudioSidebar() {
     const isVideo = item.type === "video-mp4" || item.type === "video-chromakey"
     const defaultUrl = item.type === "video-chromakey" ? "/chormakey-default.mp4" : "/mp4-default.mp4"
     const newEl: StudioElement = {
-      id: `el_${Date.now()}`,
+      id: crypto.randomUUID(),
       type: item.type,
       name: item.name,
       position: [0, 0, 0],
@@ -164,7 +164,7 @@ export function StudioSidebar() {
       image: "imagem",
     }
     const newEl: StudioElement = {
-      id: `el_${Date.now()}`,
+      id: crypto.randomUUID(),
       type: typeMap[asset.category] || "modelo-3d",
       name: asset.name,
       position: [0, 0, 0],
@@ -181,7 +181,7 @@ export function StudioSidebar() {
 
   const handleAddReadyAsset = (asset: typeof readyAssets[0]) => {
     const newEl: StudioElement = {
-      id: `el_${Date.now()}`,
+      id: crypto.randomUUID(),
       type: asset.type,
       name: asset.name,
       position: [0, 0, 0],
@@ -228,7 +228,7 @@ export function StudioSidebar() {
       }
 
       const newEl: StudioElement = {
-        id: `el_${Date.now()}`,
+        id: crypto.randomUUID(),
         type: typeMap[uploadCategory],
         name: name,
         position: [0, 0, 0],

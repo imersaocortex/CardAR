@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, AlertTriangle, BarChart3, Users, Trash2, RefreshCw } from "lucide-react"
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, AlertTriangle, BarChart3, Users, RefreshCw } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
 import { formatDate } from "@/lib/format"
 
 interface FinanceData {
@@ -30,11 +29,8 @@ interface FinanceData {
 }
 
 export function FinancesTab() {
-  const { toast } = useToast()
   const [data, setData] = useState<FinanceData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [clearingAll, setClearingAll] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -46,45 +42,6 @@ export function FinancesTab() {
       console.error(err)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleDeletePayment = async (paymentId: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta fatura? Esta ação não pode ser desfeita.")) return
-    setDeletingId(paymentId)
-    try {
-      const res = await fetch(`/api/admin/payments/${paymentId}`, { method: "DELETE" })
-      if (res.ok) {
-        toast({ title: "Fatura excluída com sucesso" })
-        load()
-      } else {
-        const err = await res.json()
-        toast({ title: "Erro ao excluir", description: err.error, variant: "destructive" })
-      }
-    } catch {
-      toast({ title: "Erro ao excluir fatura", variant: "destructive" })
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  const handleClearAll = async () => {
-    if (!confirm("Tem certeza que deseja EXCLUIR TODAS as faturas? Esta ação não pode ser desfeita.")) return
-    setClearingAll(true)
-    try {
-      const res = await fetch("/api/admin/payments", { method: "DELETE" })
-      if (res.ok) {
-        const result = await res.json()
-        toast({ title: `${result.deleted} fatura(s) excluída(s) com sucesso` })
-        load()
-      } else {
-        const err = await res.json()
-        toast({ title: "Erro ao excluir", description: err.error, variant: "destructive" })
-      }
-    } catch {
-      toast({ title: "Erro ao excluir todas as faturas", variant: "destructive" })
-    } finally {
-      setClearingAll(false)
     }
   }
 
@@ -155,6 +112,7 @@ export function FinancesTab() {
     PENDING: "warning",
     OVERDUE: "destructive",
     paid: "success",
+    refunded: "secondary",
     open: "warning",
     failed: "destructive",
   }
@@ -167,6 +125,7 @@ export function FinancesTab() {
     REFUNDED: "Reembolsado",
     CANCELLED: "Cancelado",
     paid: "Pago",
+    refunded: "Reembolsado",
     open: "Aberto",
     failed: "Falhou",
   }
@@ -324,16 +283,6 @@ export function FinancesTab() {
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 Atualizar
               </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleClearAll}
-                disabled={clearingAll || data.payments.length === 0}
-                className="gap-1"
-              >
-                <Trash2 className="h-4 w-4" />
-                {clearingAll ? "Excluindo..." : "Excluir Todas"}
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -349,25 +298,24 @@ export function FinancesTab() {
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Vencimento</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Pagamento</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Status</th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Ações</th>
                   </tr>
               </thead>
               <tbody>
                 {data.payments.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
                       Nenhum pagamento encontrado
                     </td>
                   </tr>
                 )}
                 {data.payments.map((payment: any) => {
-                  const gateway = payment._gateway || "asaas"
-                  const idField = gateway === "stripe" ? payment.stripe_payment_intent_id : payment.asaas_payment_id
+                  const gateway = payment._gateway || payment.provider
+                  const idField = payment.external_id
                   return (
                     <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="py-3 px-4">
                         <Badge variant={gateway === "stripe" ? "secondary" : "outline"} className="text-[10px]">
-                          {gateway === "stripe" ? "Stripe" : "ASAAS"}
+                          {({ paypal: "PayPal", efi: "Efí", stripe: "Histórico Stripe", asaas: "Histórico ASAAS" } as Record<string, string>)[gateway] || gateway}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 font-medium">{payment.organizations?.name || "-"}</td>
@@ -383,17 +331,6 @@ export function FinancesTab() {
                         <Badge variant={statusVariant[payment.status] || "secondary"}>
                           {statusLabel[payment.status] || payment.status}
                         </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeletePayment(payment.id)}
-                          disabled={deletingId === payment.id}
-                          className="text-muted-foreground hover:text-destructive h-8 w-8"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </td>
                     </tr>
                   )

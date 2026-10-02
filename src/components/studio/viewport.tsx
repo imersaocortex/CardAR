@@ -6,6 +6,7 @@ import { OrbitControls, Grid, Environment, ContactShadows, Text, Edges, useVideo
 import { useStudioStore, projectTypeDimensions } from "@/store"
 import { StudioElement } from "@/types"
 import * as THREE from "three"
+import { BUTTON_CAPTION_SIZE, BUTTON_CAPTION_Y, BUTTON_PLANE_SIZE, imagePlaneSize, VIDEO_PLANE_SIZE } from "@/lib/ar/object-geometry"
 
 const socialColors: Record<string, string> = {
   "botao-whatsapp": "#25D366",
@@ -266,7 +267,7 @@ function VideoPlane({ element }: { element: StudioElement }) {
 
   return (
     <mesh>
-      <planeGeometry args={[1.5, 0.85]} />
+      <planeGeometry args={VIDEO_PLANE_SIZE} />
       <meshBasicMaterial map={texture} side={2} opacity={element.opacity} transparent={element.opacity < 1} />
     </mesh>
   )
@@ -308,7 +309,7 @@ function ChromaKeyPlane({ element }: { element: StudioElement }) {
 
   return (
     <mesh>
-      <planeGeometry args={[1.5, 0.85]} />
+      <planeGeometry args={VIDEO_PLANE_SIZE} />
       <shaderMaterial
         vertexShader={chromaKeyVert}
         fragmentShader={chromaKeyFrag}
@@ -324,9 +325,7 @@ function ChromaKeyPlane({ element }: { element: StudioElement }) {
 function ImagePlane({ element }: { element: StudioElement }) {
   const texture = useTexture(element.assetUrl || "")
   const img = texture.image as HTMLImageElement | null
-  const aspect = img ? img.width / img.height : 1
-  const w = 1.5
-  const h = w / aspect
+  const [w, h] = imagePlaneSize(img?.width ?? 0, img?.height ?? 0)
   return (
     <mesh>
       <planeGeometry args={[w, h]} />
@@ -357,7 +356,7 @@ function SocialButton({ element }: { element: StudioElement }) {
   return (
     <group>
       <mesh>
-        <planeGeometry args={[0.5, 0.5]} />
+        <planeGeometry args={BUTTON_PLANE_SIZE} />
         <meshBasicMaterial
           map={texture}
           transparent
@@ -367,11 +366,11 @@ function SocialButton({ element }: { element: StudioElement }) {
       </mesh>
       {showCaption && (
         <group>
-          <mesh position={[0, -0.36, 0.02]}>
-            <planeGeometry args={[0.6, 0.15]} />
+          <mesh position={[0, BUTTON_CAPTION_Y, 0.02]}>
+            <planeGeometry args={BUTTON_CAPTION_SIZE} />
             <meshBasicMaterial color="#000000" transparent opacity={0.5 * element.opacity} depthWrite={false} />
           </mesh>
-          <Text position={[0, -0.36, 0.03]} fontSize={0.055} color="white" anchorX="center" anchorY="middle">
+          <Text position={[0, BUTTON_CAPTION_Y, 0.03]} fontSize={0.055} color="white" anchorX="center" anchorY="middle">
             {label}
           </Text>
         </group>

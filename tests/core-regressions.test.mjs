@@ -5,6 +5,7 @@ import { createRequire } from "node:module"
 import ts from "typescript"
 
 const require = createRequire(import.meta.url)
+const THREE = require("three")
 function load(path, mocks = {}) {
   const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
   const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } })
@@ -18,6 +19,7 @@ const { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio } = load("sr
 const { getActionUrl } = load("src/lib/ar/actions.ts")
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
 const { createProjectSchema } = load("src/lib/schemas/index.ts")
+const objectGeometry = load("src/lib/ar/object-geometry.ts")
 
 test("new projects default to marker tracking and accept markerless modes", () => {
   const base = { name: "Experiência", type: "business_card" }
@@ -58,6 +60,48 @@ test("spatial objects turn their front toward the viewer on the horizontal plane
   assert.equal(yawTowardViewer(6, 0, 0, 0), -Math.PI / 2)
   assert.equal(yawTowardViewer(-6, 0, 0, 0), Math.PI / 2)
   assert.equal(yawTowardViewer(0, 0, 0, 0), null)
+})
+test("GPS and surface render saved object scale with the studio's video and image proportions", async () => {
+  const { buildSpatialScene } = load("src/lib/ar/spatial-scene.ts", {
+    "three/examples/jsm/loaders/GLTFLoader.js": { GLTFLoader: class {} },
+    "@/lib/ar/billboard": { yawTowardViewer },
+    "@/lib/ar/spatial-media": { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio },
+    "@/lib/ar/object-geometry": objectGeometry,
+  })
+  const originalDocument = globalThis.document
+  const originalLoadAsync = THREE.TextureLoader.prototype.loadAsync
+  const context = { beginPath() {}, arc() {}, fill() {}, roundRect() {}, fillText() {} }
+  globalThis.document = { createElement: (tag) => tag === "canvas" ? { getContext: () => context } : { pause() {}, removeAttribute() {}, load() {} } }
+  THREE.TextureLoader.prototype.loadAsync = async () => new THREE.Texture({ width: 1200, height: 800 })
+  const base = { name: "Objeto", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1.4, 0.8, 1], opacity: 1, visible: true, animationType: null, faceCamera: false }
+  let scene
+  try {
+    scene = await buildSpatialScene([
+      { ...base, id: "video", type: "video-mp4", assetUrl: "/test.mp4" },
+      { ...base, id: "chroma", type: "video-chromakey", assetUrl: "/test.mp4" },
+      { ...base, id: "image", type: "imagem", assetUrl: "/test.png" },
+      { ...base, id: "button", type: "botao-site", showCaption: true },
+    ])
+    const [video, chroma, image, button] = scene.root.children
+    for (const group of [video, chroma]) {
+      const mesh = group.children[0]
+      assert.equal(mesh.geometry.parameters.width, 1.5)
+      assert.equal(mesh.geometry.parameters.height, 0.85)
+      assert.deepEqual(group.scale.toArray(), base.scale)
+      assert.equal(mesh.geometry.parameters.height * group.scale.y, 0.68)
+    }
+    assert.equal(image.children[0].geometry.parameters.width, 1.5)
+    assert.equal(image.children[0].geometry.parameters.height, 1)
+    assert.deepEqual(image.scale.toArray(), base.scale)
+    assert.equal(button.children[0].geometry.parameters.width, 0.5)
+    assert.equal(button.children[0].geometry.parameters.height, 0.5)
+    assert.equal(button.children[1].geometry.parameters.height, 0.15)
+    assert.deepEqual(button.scale.toArray(), base.scale)
+  } finally {
+    scene?.dispose()
+    THREE.TextureLoader.prototype.loadAsync = originalLoadAsync
+    globalThis.document = originalDocument
+  }
 })
 test("spatial video starts muted and enables sound only on explicit playback", async () => {
   const video = { tagName: "VIDEO", muted: true, plays: 0, play() { this.plays++; return Promise.resolve() }, pause() {} }

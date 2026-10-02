@@ -27,7 +27,9 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
   const [starting, setStarting] = useState(false)
   const [ready, setReady] = useState(false)
   const [placed, setPlaced] = useState(false)
-  const playMedia = useRef<(() => void) | null>(null)
+  const [soundOn, setSoundOn] = useState(false)
+  const [soundError, setSoundError] = useState(false)
+  const mediaControl = useRef<{ enableAudio: () => Promise<boolean>; muteAudio: () => void } | null>(null)
   const [message, setMessage] = useState("Verificando compatibilidade…")
   const callbacks = useRef({ onStateChange, onInteraction })
   useEffect(() => { callbacks.current = { onStateChange, onInteraction } }, [onStateChange, onInteraction])
@@ -59,12 +61,13 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       hitSource?.cancel()
       renderer?.setAnimationLoop(null)
       content?.dispose()
+      mediaControl.current = null
       disposeSpatialGroup(reticle)
       renderer?.dispose()
       renderer?.domElement.remove()
       running.current = false
       place.current = null
-      if (alive.current) { setActive(false); setStarting(false); setReady(false); setPlaced(false); setMessage("Experiência encerrada. Você pode iniciar novamente.") }
+      if (alive.current) { setActive(false); setStarting(false); setReady(false); setPlaced(false); setSoundOn(false); setSoundError(false); setMessage("Experiência encerrada. Você pode iniciar novamente.") }
     }
     stop.current = () => { void session?.end().catch(() => {}); cleanup() }
     try {
@@ -89,7 +92,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       const loaded = await buildSpatialScene(experience.scene?.objects ?? [])
       if (ended || !alive.current) { loaded.dispose(); return }
       content = loaded
-      playMedia.current = () => { void loaded.play() }
+      mediaControl.current = loaded
       const scene = new THREE.Scene()
       scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 3), reticle, content.root)
       content.root.visible = false
@@ -109,6 +112,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       }
       session.addEventListener("select", () => { if (!placed) place.current?.() })
       const clock = new THREE.Clock()
+      const viewerPosition = new THREE.Vector3()
       let previousReady = false
       renderer.setAnimationLoop((_time, frame) => {
         if (ended || !renderer || !content) return
@@ -122,7 +126,12 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
           if (reticle.matrix.elements[5] < 0.9) reticle.visible = false
         }
         if (reticle.visible !== previousReady) { previousReady = reticle.visible; setReady(previousReady) }
-        content.update(delta, clock.elapsedTime)
+        const viewerPose = reference && frame?.getViewerPose(reference)
+        if (viewerPose) {
+          const { x, y, z } = viewerPose.transform.position
+          viewerPosition.set(x, y, z)
+        }
+        content.update(delta, clock.elapsedTime, viewerPose ? viewerPosition : undefined)
         renderer.render(scene, camera)
       })
       const reposition = () => { placed = false; setPlaced(false); content!.root.visible = false; setMessage("Mova a câmera lentamente até encontrar o chão ou uma mesa.") }
@@ -137,7 +146,16 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       callbacks.current.onStateChange?.("error")
     }
   }
+  async function toggleSound() {
+    if (!mediaControl.current) return
+    if (soundOn) { mediaControl.current.muteAudio(); setSoundOn(false); return }
+    const enabled = await mediaControl.current.enableAudio()
+    if (!alive.current) return
+    setSoundOn(enabled)
+    setSoundError(!enabled)
+  }
   const repositionRef = useRef<(() => void) | null>(null)
+  const hasMedia = experience.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-")))
   return <div className="fixed inset-0 bg-slate-950 text-white">
     <div ref={host} className="absolute inset-0" />
     <div ref={overlay} className="absolute inset-0 pointer-events-none flex flex-col justify-between p-5">
@@ -146,7 +164,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
         {!active && <Button onClick={start} disabled={!supported || starting}>{starting ? "Carregando…" : "Iniciar AR na superfície"}</Button>}
         {active && <><Button onClick={() => place.current?.()} disabled={!ready}>Posicionar aqui</Button><Button variant="outline" onClick={() => repositionRef.current?.()}>Reposicionar</Button><Button variant="outline" onClick={() => stop.current?.()}>Encerrar</Button></>}
         {supported === false && <p className="text-sm">Abra em um aparelho e navegador compatíveis com WebXR AR.</p>}
-        {placed && <><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} /><Button variant="outline" onClick={() => playMedia.current?.()}>Reproduzir mídia</Button></>}
+        {placed && <><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-xs">O som foi bloqueado. Toque novamente.</p>}</>}
         {hasWatermark && siteName && <span className="w-full text-center text-xs text-white/60">{siteName}</span>}
       </div>
     </div>

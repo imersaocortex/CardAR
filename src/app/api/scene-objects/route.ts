@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       asset_url: body.asset_url ?? null,
       asset_thumbnail: body.asset_thumbnail ?? null,
       show_caption: body.show_caption ?? null,
+      face_camera: body.face_camera ?? false,
       chroma_key_color: body.chroma_key_color ?? null,
       chroma_key_tolerance: body.chroma_key_tolerance ?? null,
       chroma_key_smoothness: body.chroma_key_smoothness ?? null,

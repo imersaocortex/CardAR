@@ -98,6 +98,8 @@ export function StudioProperties() {
       updateElement(selectedElement.id, { animationType: value as AnimationType })
     } else if (field === "showCaption") {
       updateElement(selectedElement.id, { showCaption: value as boolean })
+    } else if (field === "faceCamera") {
+      updateElement(selectedElement.id, { faceCamera: value as boolean })
     } else if (field === "chromaKeyColor") {
       updateElement(selectedElement.id, { chromaKeyColor: value as string })
     } else if (field === "chromaKeyTolerance") {
@@ -110,6 +112,7 @@ export function StudioProperties() {
   const is3D = selectedElement.type === "modelo-3d" || selectedElement.type === "modelo-3d-animado"
   const isButton = selectedElement.type.startsWith("botao-")
   const isImage = selectedElement.type === "imagem"
+  const isVideo = selectedElement.type.startsWith("video-")
   const isChromaKey = selectedElement.type === "video-chromakey"
   const isMedia = is3D || selectedElement.type === "video-mp4" || isChromaKey || selectedElement.type === "imagem" || selectedElement.type === "audio"
 
@@ -246,6 +249,16 @@ export function StudioProperties() {
             ))}
           </div>
         </div>
+
+        {(is3D || isImage || isVideo || isButton) && (
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-border/60 p-3">
+            <div>
+              <Label htmlFor="face-camera" className="text-xs font-medium cursor-pointer">Sempre voltado para a câmera</Label>
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">No GPS e em superfícies, a frente acompanha o celular. A rotação horizontal automática prevalece sobre a animação de giro.</p>
+            </div>
+            <Switch id="face-camera" checked={selectedElement.faceCamera ?? false} onCheckedChange={(v) => handleChange("faceCamera", v)} />
+          </div>
+        )}
 
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-2">Escala</p>

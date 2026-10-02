@@ -152,6 +152,7 @@ export function StudioSidebar() {
       duration: 2,
       visible: true,
       assetUrl: isVideo ? defaultUrl : undefined,
+      faceCamera: isVideo || item.type === "imagem" || item.type.startsWith("botao-"),
     }
     addElement(newEl)
     toast({ title: `${item.name} adicionado`, description: "Use o painel de propriedades para ajustar." })
@@ -174,6 +175,7 @@ export function StudioSidebar() {
       duration: asset.category === "video" ? 5 : 0,
       visible: true,
       assetUrl: asset.public_url,
+      faceCamera: asset.category === "video" || asset.category === "image",
     }
     addElement(newEl)
     toast({ title: `"${asset.name}" adicionado`, description: "Asset adicionado à cena." })
@@ -190,6 +192,7 @@ export function StudioSidebar() {
       opacity: 1,
       duration: 0,
       visible: true,
+      faceCamera: asset.type === "imagem" || asset.type.startsWith("video-") || asset.type.startsWith("botao-"),
     }
     addElement(newEl)
     toast({ title: `${asset.name} adicionado`, description: "Pronto para usar na cena." })
@@ -238,6 +241,7 @@ export function StudioSidebar() {
         duration: uploadCategory === "video" ? 5 : 0,
         visible: true,
         assetUrl: asset.public_url,
+        faceCamera: uploadCategory === "video" || uploadCategory === "image",
       }
       addElement(newEl)
       setAssets((prev) => [asset, ...prev])

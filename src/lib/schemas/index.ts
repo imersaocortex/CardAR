@@ -59,6 +59,7 @@ export const sceneObjectSchema = z.object({
   asset_url: z.string().nullable().optional(),
   asset_thumbnail: z.string().nullable().optional(),
   show_caption: z.boolean().nullable().optional(),
+  face_camera: z.boolean().optional(),
   chroma_key_color: z.string().nullable().optional(),
   chroma_key_tolerance: z.number().nullable().optional(),
   chroma_key_smoothness: z.number().nullable().optional(),

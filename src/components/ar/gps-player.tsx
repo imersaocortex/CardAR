@@ -27,8 +27,10 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
   const [active, setActive] = useState(false)
   const [ready, setReady] = useState(false)
   const [visible, setVisible] = useState(false)
+  const [soundOn, setSoundOn] = useState(false)
+  const [soundError, setSoundError] = useState(false)
   const [heading, setHeading] = useState<number | null>(null)
-  const playMedia = useRef<(() => void) | null>(null)
+  const mediaControl = useRef<{ enableAudio: () => Promise<boolean>; muteAudio: () => void } | null>(null)
   const [status, setStatus] = useState("A experiência aparecerá na direção do ponto geográfico. Permita câmera, localização e orientação.")
   const [location, setLocation] = useState<{ distance: number; accuracy: number; bearing: number; atTarget: boolean; nearby: boolean } | null>(null)
   useEffect(() => { alive.current = true; return () => { alive.current = false; stop.current?.() } }, [])
@@ -51,8 +53,9 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       stream?.getTracks().forEach((track) => track.stop())
       if (video.current) video.current.srcObject = null
       renderer?.setAnimationLoop(null); content?.dispose(); renderer?.dispose(); renderer?.domElement.remove()
+      mediaControl.current = null
       busy.current = false
-      if (alive.current) { setActive(false); setReady(false); setVisible(false); setLocation(null); setHeading(null); setStatus("Experiência encerrada. Toque para iniciar novamente.") }
+      if (alive.current) { setActive(false); setReady(false); setVisible(false); setSoundOn(false); setSoundError(false); setLocation(null); setHeading(null); setStatus("Experiência encerrada. Toque para iniciar novamente.") }
     }
     try {
       if (experience.latitude == null || experience.longitude == null) throw new Error("As coordenadas não foram configuradas.")
@@ -72,7 +75,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
         throw new Error("Esta cena ainda não tem um objeto visível. Adicione um modelo, imagem ou vídeo no editor.")
       }
       content = loaded
-      playMedia.current = () => { void loaded.play() }
+      mediaControl.current = loaded
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
       host.current!.appendChild(renderer.domElement)
@@ -147,7 +150,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
           if (wasVisible) void content.play()
         }
         const delta = clock.getDelta()
-        content.update(delta, clock.elapsedTime)
+        content.update(delta, clock.elapsedTime, camera.position)
         renderer.render(scene, camera)
       })
       setReady(true)
@@ -157,6 +160,15 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       if (alive.current) setStatus(error instanceof Error ? error.message : "Não foi possível iniciar a experiência.")
       callback.current?.("error")
     }
+  }
+
+  async function toggleSound() {
+    if (!mediaControl.current) return
+    if (soundOn) { mediaControl.current.muteAudio(); setSoundOn(false); return }
+    const enabled = await mediaControl.current.enableAudio()
+    if (!alive.current) return
+    setSoundOn(enabled)
+    setSoundError(!enabled)
   }
 
   const turn = location && heading !== null && !location.atTarget ? bearingDifference(location.bearing, heading) : null
@@ -182,7 +194,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
     </div>}
     {hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-center"><span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span></div>}
     {ready && <>
-      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={() => playMedia.current?.()}>Reproduzir mídia</Button>}</div>}
+      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
       <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>
     </>}
   </div>

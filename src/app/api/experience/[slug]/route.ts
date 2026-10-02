@@ -100,6 +100,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
                 assetUrl: obj.asset_url || null,
                 assetThumbnail: obj.asset_thumbnail || null,
                 showCaption: obj.show_caption || null,
+                faceCamera: obj.face_camera ?? false,
                 chromaKeyColor: obj.chroma_key_color || null,
                 chromaKeyTolerance: obj.chroma_key_tolerance || null,
                 chromaKeySmoothness: obj.chroma_key_smoothness || null,

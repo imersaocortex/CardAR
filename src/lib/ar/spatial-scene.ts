@@ -1,6 +1,8 @@
 import * as THREE from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import type { ArSceneObject } from "@/lib/mindar"
+import { yawTowardViewer } from "@/lib/ar/billboard"
+import { enableSpatialAudio, muteSpatialAudio, playSpatialVideoMuted } from "@/lib/ar/spatial-media"
 
 export function disposeSpatialGroup(group: THREE.Object3D) {
   const textures = new Set<THREE.Texture>()
@@ -24,6 +26,8 @@ export async function buildSpatialScene(objects: ArSceneObject[]) {
   const mixers: THREE.AnimationMixer[] = []
   const animated: { group: THREE.Group; object: ArSceneObject }[] = []
   const loader = new GLTFLoader()
+  const viewer = new THREE.Vector3()
+  const objectPosition = new THREE.Vector3()
   const dispose = () => {
     media.forEach((element) => { element.pause(); element.removeAttribute("src"); element.load() })
     mixers.forEach((mixer) => { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()) })
@@ -93,13 +97,22 @@ export async function buildSpatialScene(objects: ArSceneObject[]) {
     }
     return {
       root, dispose,
-      play: () => Promise.allSettled(media.map((element) => element.play())),
-      update: (delta: number, elapsed: number) => {
+      play: () => playSpatialVideoMuted(media),
+      enableAudio: () => enableSpatialAudio(media),
+      muteAudio: () => muteSpatialAudio(media),
+      update: (delta: number, elapsed: number, viewerPosition?: THREE.Vector3) => {
         mixers.forEach((mixer) => mixer.update(delta))
+        if (viewerPosition) viewer.copy(viewerPosition)
+        root.updateWorldMatrix(true, true)
         animated.forEach(({ group, object }) => {
           if (object.animationType === "float") group.position.y = object.position[1] + Math.sin(elapsed * 2) * 0.03
           if (object.animationType === "rotate") group.rotation.y = object.rotation[1] + elapsed * 0.5
           if (object.animationType === "pulse") group.scale.fromArray(object.scale).multiplyScalar(1 + Math.sin(elapsed * 3) * 0.05)
+          if (object.faceCamera && viewerPosition) {
+            group.getWorldPosition(objectPosition)
+            const yaw = yawTowardViewer(objectPosition.x, objectPosition.z, viewer.x, viewer.z)
+            if (yaw !== null) group.rotation.y = yaw
+          }
         })
       },
     }

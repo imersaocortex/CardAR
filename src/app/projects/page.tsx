@@ -222,6 +222,7 @@ export default function ProjectsPage() {
                   asset_url: obj.asset_url,
                   asset_thumbnail: obj.asset_thumbnail,
                   show_caption: obj.show_caption,
+                  face_camera: obj.face_camera ?? false,
                   chroma_key_color: obj.chroma_key_color,
                   chroma_key_tolerance: obj.chroma_key_tolerance,
                   chroma_key_smoothness: obj.chroma_key_smoothness,

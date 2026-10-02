@@ -13,6 +13,8 @@ function load(path, mocks = {}) {
   return loaded.exports
 }
 const { geoOffset, gpsDisplayPosition, bearingDifference } = load("src/lib/ar/geo.ts")
+const { yawTowardViewer } = load("src/lib/ar/billboard.ts")
+const { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio } = load("src/lib/ar/spatial-media.ts")
 const { getActionUrl } = load("src/lib/ar/actions.ts")
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
 const { createProjectSchema } = load("src/lib/schemas/index.ts")
@@ -51,6 +53,26 @@ test("GPS keeps the model readable at any geographic distance and on arrival", (
   assert.equal(bearingDifference(10, 350), 20)
   assert.equal(bearingDifference(350, 10), -20)
 })
+test("spatial objects turn their front toward the viewer on the horizontal plane", () => {
+  assert.equal(yawTowardViewer(0, -6, 0, 0), 0)
+  assert.equal(yawTowardViewer(6, 0, 0, 0), -Math.PI / 2)
+  assert.equal(yawTowardViewer(-6, 0, 0, 0), Math.PI / 2)
+  assert.equal(yawTowardViewer(0, 0, 0, 0), null)
+})
+test("spatial video starts muted and enables sound only on explicit playback", async () => {
+  const video = { tagName: "VIDEO", muted: true, plays: 0, play() { this.plays++; return Promise.resolve() }, pause() {} }
+  const audio = { tagName: "AUDIO", muted: false, plays: 0, play() { this.plays++; return Promise.resolve() }, pause() { this.paused = true } }
+  await playSpatialVideoMuted([video, audio])
+  assert.equal(video.plays, 1)
+  assert.equal(video.muted, true)
+  assert.equal(audio.plays, 0)
+  assert.equal(await enableSpatialAudio([video, audio]), true)
+  assert.equal(video.muted, false)
+  assert.equal(audio.plays, 1)
+  muteSpatialAudio([video, audio])
+  assert.equal(video.muted, true)
+  assert.equal(audio.paused, true)
+})
 test("scene selection preserves public behavior and gives deterministic ties", () => {
   const scenes = [
     { id: "b", created_at: "2026-01-01", scene_objects: [{}] },
@@ -69,7 +91,7 @@ test("AR actions reject executable URLs and preserve supported contact actions",
   assert.equal(getActionUrl("tel:+55 (11) 2222-3333"), "tel:+551122223333")
 })
 
-const element = { id: "2fd30d57-8249-4436-88ae-bba0f3982473", type: "imagem", name: "Teste", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], opacity: 1, visible: true, duration: 0, chromaKeyTolerance: 0, chromaKeySmoothness: 0 }
+const element = { id: "2fd30d57-8249-4436-88ae-bba0f3982473", type: "imagem", name: "Teste", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], opacity: 1, visible: true, faceCamera: true, duration: 0, chromaKeyTolerance: 0, chromaKeySmoothness: 0 }
 function studio(rpc) {
   return load("src/store/index.ts", {
     "@/lib/supabase/client": { createClient: () => ({ rpc }) },
@@ -91,8 +113,12 @@ test("save retains IDs and zero-valued settings", async () => {
   assert.equal(saved.p_objects[0].id, element.id)
   assert.equal(saved.p_objects[0].chroma_key_tolerance, 0)
   assert.equal(saved.p_objects[0].duration, 0)
+  assert.equal(saved.p_objects[0].face_camera, true)
   assert.equal(store.getState().sceneId, "scene")
   assert.equal(store.getState().isSaved, true)
+  store.getState().updateElement(element.id, { faceCamera: false })
+  await store.getState().saveScene()
+  assert.equal(saved.p_objects[0].face_camera, false)
 })
 test("edits made during an in-flight save remain unsaved", async () => {
   let finish

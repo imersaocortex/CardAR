@@ -16,6 +16,7 @@ export interface ArSceneObject {
   assetUrl: string | null
   assetThumbnail: string | null
   showCaption: boolean | null
+  faceCamera: boolean
   chromaKeyColor: string | null
   chromaKeyTolerance: number | null
   chromaKeySmoothness: number | null

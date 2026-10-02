@@ -41,6 +41,7 @@ export interface StudioElement {
   assetUrl?: string
   assetThumbnail?: string
   showCaption?: boolean
+  faceCamera?: boolean
   animationType?: AnimationType
   hasEmbeddedAnimations?: boolean
   chromaKeyColor?: string

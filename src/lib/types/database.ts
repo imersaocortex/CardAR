@@ -408,6 +408,7 @@ export interface Database {
           asset_url: string | null
           asset_thumbnail: string | null
           show_caption: boolean | null
+          face_camera: boolean
           chroma_key_color: string | null
           chroma_key_tolerance: number | null
           chroma_key_smoothness: number | null
@@ -437,6 +438,7 @@ export interface Database {
           asset_url?: string | null
           asset_thumbnail?: string | null
           show_caption?: boolean | null
+          face_camera?: boolean
           chroma_key_color?: string | null
           chroma_key_tolerance?: number | null
           chroma_key_smoothness?: number | null
@@ -466,6 +468,7 @@ export interface Database {
           asset_url?: string | null
           asset_thumbnail?: string | null
           show_caption?: boolean | null
+          face_camera?: boolean
           chroma_key_color?: string | null
           chroma_key_tolerance?: number | null
           chroma_key_smoothness?: number | null

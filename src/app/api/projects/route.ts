@@ -122,6 +122,10 @@ export async function POST(request: Request) {
       organization_id: orgId,
       name: parsed.data.name,
       type: parsed.data.type,
+      tracking_mode: parsed.data.tracking_mode,
+      latitude: parsed.data.tracking_mode === "gps" ? parsed.data.latitude : null,
+      longitude: parsed.data.tracking_mode === "gps" ? parsed.data.longitude : null,
+      activation_radius: parsed.data.activation_radius,
       slug,
       created_by: user.id,
     })

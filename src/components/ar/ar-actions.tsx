@@ -4,15 +4,16 @@ import { useRef, useCallback, useState } from "react"
 import { Camera, CameraOff, RotateCcw, Share2, ScanLine } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { QrScanner } from "./qr-scanner"
+import Image from "next/image"
 
 interface ArActionsProps {
   videoRef: React.RefObject<HTMLVideoElement | null>
   containerRef: React.RefObject<HTMLDivElement | null>
   onSwitchCamera?: () => void
-  markerDetected: boolean
+  reuseCameraForQr?: boolean
 }
 
-export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetected }: ArActionsProps) {
+export function ArActions({ videoRef, containerRef, onSwitchCamera, reuseCameraForQr = false }: ArActionsProps) {
   const [lastCapture, setLastCapture] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -21,7 +22,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
   const recordAnimRef = useRef(0)
   const recordCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
-  function drawCompositedFrame(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const drawCompositedFrame = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const video = videoRef.current
     const container = containerRef.current
     if (!container) return
@@ -43,7 +44,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
     if (threeCanvas) {
       ctx.drawImage(threeCanvas, 0, 0, w, h)
     }
-  }
+  }, [videoRef, containerRef])
 
   const capturePhoto = useCallback(() => {
     const container = containerRef.current
@@ -69,7 +70,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
     link.click()
 
     setTimeout(() => setLastCapture(null), 2000)
-  }, [videoRef, containerRef])
+  }, [drawCompositedFrame, containerRef])
 
   const startRecording = useCallback(async () => {
     const container = containerRef.current
@@ -89,11 +90,13 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
     const selectedMime = mimeTypes.find((t) => MediaRecorder.isTypeSupported(t)) || ""
 
     let stream: MediaStream | null = null
+    let usingCanvasStream = true
     try {
       stream = canvas.captureStream(fps)
     } catch {
       // Fallback: try getDisplayMedia (desktop only)
       try {
+        usingCanvasStream = false
         stream = await navigator.mediaDevices.getDisplayMedia({
           video: { displaySurface: "browser" },
           audio: false,
@@ -142,14 +145,14 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
       drawCompositedFrame(ctx, w, h)
     }
 
-    if (stream && (stream as any).getVideoTracks) {
+    if (usingCanvasStream) {
       // canvas.captureStream path - composite needed
       composite()
     }
 
     mediaRecorder.start()
     setIsRecording(true)
-  }, [containerRef, videoRef])
+  }, [containerRef, videoRef, drawCompositedFrame])
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -247,7 +250,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
             className="absolute top-4 left-4"
           >
             <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-emerald-400 shadow-lg">
-              <img src={lastCapture} alt="capture" className="w-full h-full object-cover" />
+              <Image src={lastCapture} alt="capture" width={80} height={80} unoptimized className="w-full h-full object-cover" />
             </div>
           </motion.div>
         )}
@@ -257,6 +260,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, markerDetect
         <QrScanner
           onClose={() => setScannerOpen(false)}
           onScan={handleQrScan}
+          sourceVideoRef={reuseCameraForQr ? videoRef : undefined}
         />
       )}
     </>

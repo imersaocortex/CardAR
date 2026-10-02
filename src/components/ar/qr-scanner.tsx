@@ -7,9 +7,10 @@ import jsQR from "jsqr"
 interface QrScannerProps {
   onClose: () => void
   onScan: (data: string) => void
+  sourceVideoRef?: React.RefObject<HTMLVideoElement | null>
 }
 
-export function QrScanner({ onClose, onScan }: QrScannerProps) {
+export function QrScanner({ onClose, onScan, sourceVideoRef }: QrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef(true)
@@ -19,22 +20,29 @@ export function QrScanner({ onClose, onScan }: QrScannerProps) {
   useEffect(() => {
     let cancelled = false
     let raf = 0
+    let ownsStream = false
+    const scannerVideo = videoRef.current
 
     const init = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        })
+        const sourceStream = sourceVideoRef?.current?.srcObject
+        let stream = sourceStream instanceof MediaStream ? sourceStream : null
+        if (!stream) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false,
+          })
+          ownsStream = true
+        }
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop())
+          if (ownsStream) stream.getTracks().forEach((t) => t.stop())
           return
         }
         streamRef.current = stream
 
-        const video = videoRef.current
+        const video = scannerVideo
         if (!video) {
-          stream.getTracks().forEach((t) => t.stop())
+          if (ownsStream) stream.getTracks().forEach((t) => t.stop())
           return
         }
         video.srcObject = stream
@@ -81,12 +89,13 @@ export function QrScanner({ onClose, onScan }: QrScannerProps) {
     return () => {
       cancelled = true
       cancelAnimationFrame(raf)
+      if (scannerVideo) scannerVideo.srcObject = null
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop())
+        if (ownsStream) streamRef.current.getTracks().forEach((t) => t.stop())
         streamRef.current = null
       }
     }
-  }, [onScan])
+  }, [onScan, sourceVideoRef])
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">

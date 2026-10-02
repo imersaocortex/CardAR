@@ -1068,7 +1068,6 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
             videoRef={videoRef}
             containerRef={containerRef}
             onSwitchCamera={handleSwitchCamera}
-            markerDetected={arState === "detected"}
           />
         </div>
       )}

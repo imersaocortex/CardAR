@@ -12,7 +12,7 @@ function load(path, mocks = {}) {
   new Function("require", "module", "exports", outputText)((name) => name in mocks ? mocks[name] : require(name), loaded, loaded.exports)
   return loaded.exports
 }
-const { geoOffset } = load("src/lib/ar/geo.ts")
+const { geoOffset, gpsDisplayPosition, bearingDifference } = load("src/lib/ar/geo.ts")
 const { getActionUrl } = load("src/lib/ar/actions.ts")
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
 const { createProjectSchema } = load("src/lib/schemas/index.ts")
@@ -40,6 +40,16 @@ test("GPS handles the antimeridian without a world-spanning jump", () => {
   const point = geoOffset(0, 179.999, 0, -179.999)
   assert.ok(point.distance > 222 && point.distance < 223)
   assert.ok(point.east > 0)
+})
+
+test("GPS keeps the model readable at any geographic distance and on arrival", () => {
+  const far = gpsDisplayPosition({ distance: 200, bearing: 90 }, 12)
+  assert.equal(far.atTarget, false)
+  assert.ok(Math.abs(far.east - 6) < 0.0001)
+  assert.ok(Math.abs(far.north) < 0.0001)
+  assert.equal(gpsDisplayPosition({ distance: 4, bearing: 0 }, 15).atTarget, true)
+  assert.equal(bearingDifference(10, 350), 20)
+  assert.equal(bearingDifference(350, 10), -20)
 })
 test("scene selection preserves public behavior and gives deterministic ties", () => {
   const scenes = [

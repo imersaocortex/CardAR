@@ -391,8 +391,9 @@ export default function ProjectsPage() {
                     <Input id="proj-longitude" type="number" step="any" min="-180" max="180" placeholder="Ex: -46.6333" value={newProject.longitude} onChange={(e) => setNewProject({ ...newProject, longitude: e.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="proj-radius">Raio de ativação (metros)</Label>
+                    <Label htmlFor="proj-radius">Raio de proximidade (metros)</Label>
                     <Input id="proj-radius" type="number" min="10" max="5000" value={newProject.activationRadius} onChange={(e) => setNewProject({ ...newProject, activationRadius: e.target.value })} />
+                    <p className="text-xs text-muted-foreground">Indica quando o visitante está perto do ponto. O objeto aparece na direção das coordenadas mesmo fora desse raio.</p>
                   </div>
                   <Button variant="outline" type="button" onClick={() => navigator.geolocation?.getCurrentPosition(({ coords }) => setNewProject((current) => ({ ...current, latitude: String(coords.latitude), longitude: String(coords.longitude) })), () => toast({ title: "Não foi possível obter sua localização", variant: "destructive" }), { enableHighAccuracy: true, timeout: 15000 })}>Usar minha localização</Button>
                 </div>}

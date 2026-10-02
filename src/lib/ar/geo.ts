@@ -9,3 +9,16 @@ export function geoOffset(latitude: number, longitude: number, targetLatitude: n
   const bearing = Math.atan2(Math.sin(dLambda) * Math.cos(phi2), Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda))
   return { distance, bearing: (bearing * 180 / Math.PI + 360) % 360, east: distance * Math.sin(bearing), north: distance * Math.cos(bearing) }
 }
+
+// Keep the AR model at a readable visual distance. Geographic distance is used
+// for guidance, not as the model's distance from the camera.
+export function gpsDisplayPosition(offset: { distance: number; bearing: number }, accuracy: number) {
+  const atTarget = offset.distance <= Math.max(3, Math.min(accuracy, 20))
+  const angle = rad(offset.bearing)
+  const visualDistance = 6
+  return { atTarget, east: visualDistance * Math.sin(angle), north: visualDistance * Math.cos(angle) }
+}
+
+export function bearingDifference(targetBearing: number, cameraHeading: number) {
+  return ((targetBearing - cameraHeading + 540) % 360) - 180
+}

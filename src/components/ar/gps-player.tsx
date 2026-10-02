@@ -6,6 +6,8 @@ import { buildSpatialScene } from "@/lib/ar/spatial-scene"
 import { bearingDifference, geoOffset, gpsDisplayPosition } from "@/lib/ar/geo"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { Button } from "@/components/ui/button"
+import { X } from "lucide-react"
+import { ArActions } from "./ar-actions"
 import { SpatialActions } from "./spatial-actions"
 
 type CompassEvent = DeviceOrientationEvent & { webkitCompassHeading?: number; webkitCompassAccuracy?: number }
@@ -23,6 +25,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
   const callback = useRef(onStateChange)
   useEffect(() => { callback.current = onStateChange }, [onStateChange])
   const [active, setActive] = useState(false)
+  const [ready, setReady] = useState(false)
   const [visible, setVisible] = useState(false)
   const [heading, setHeading] = useState<number | null>(null)
   const playMedia = useRef<(() => void) | null>(null)
@@ -49,7 +52,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       if (video.current) video.current.srcObject = null
       renderer?.setAnimationLoop(null); content?.dispose(); renderer?.dispose(); renderer?.domElement.remove()
       busy.current = false
-      if (alive.current) { setActive(false); setVisible(false); setLocation(null); setHeading(null) }
+      if (alive.current) { setActive(false); setReady(false); setVisible(false); setLocation(null); setHeading(null); setStatus("Experiência encerrada. Toque para iniciar novamente.") }
     }
     try {
       if (experience.latitude == null || experience.longitude == null) throw new Error("As coordenadas não foram configuradas.")
@@ -70,7 +73,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       }
       content = loaded
       playMedia.current = () => { void loaded.play() }
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
       host.current!.appendChild(renderer.domElement)
       const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 10000)
@@ -135,7 +138,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
             }
           }
         }
-        const message = !compassOk ? "Aguardando bússola com direção do norte. Movimente o celular para calibrar ou confira a permissão de movimento no navegador." : !positionOk ? "Aguardando localização GPS atualizada…" : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa. Afaste-se de objetos metálicos e movimente o celular para calibrar." : atTarget ? "Você chegou ao ponto. O objeto aparece à sua frente." : "Siga a direção indicada para encontrar o objeto. A posição GPS é aproximada."
+        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Objeto à frente" : "Siga a direção do objeto"
         if (message !== lastStatus) { lastStatus = message; setStatus(message) }
         if (anchor.visible !== wasVisible) {
           wasVisible = anchor.visible
@@ -147,6 +150,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
         content.update(delta, clock.elapsedTime)
         renderer.render(scene, camera)
       })
+      setReady(true)
       callback.current?.("scanning")
     } catch (error) {
       stop.current?.()
@@ -155,19 +159,31 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
     }
   }
 
-  return <div className="fixed inset-0 bg-slate-950 text-white">
+  const turn = location && heading !== null && !location.atTarget ? bearingDifference(location.bearing, heading) : null
+  const hasMedia = experience.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-")))
+
+  return <div className="fixed inset-0 overflow-hidden bg-slate-950 text-white">
     <video ref={video} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" />
     <div ref={host} className="absolute inset-0" />
-    <div className="absolute inset-x-4 top-4 mx-auto max-w-md rounded-2xl bg-black/70 p-4 backdrop-blur">
-      <h1 className="font-semibold">{experience.name}</h1><p className="mt-2 text-sm" role="status">{status}</p>
-      {location && <p className="mt-3 font-mono text-xs text-cyan-300">{Math.round(location.distance)} m até o ponto · direção {Math.round(location.bearing)}° · GPS ±{Math.round(location.accuracy)} m</p>}
-      {location?.nearby && <p className="mt-1 text-xs text-emerald-300">Dentro do raio de proximidade configurado</p>}
-      {active && location && heading !== null && !location.atTarget && <p className="mt-2 text-sm font-medium text-cyan-200">{Math.abs(bearingDifference(location.bearing, heading)) < 15 ? "O objeto está à frente" : `Gire ${Math.round(Math.abs(bearingDifference(location.bearing, heading)))}° para ${bearingDifference(location.bearing, heading) > 0 ? "a direita" : "a esquerda"}`} <span className="inline-block text-lg" style={{ transform: `rotate(${bearingDifference(location.bearing, heading)}deg)` }} aria-hidden="true">↑</span></p>}
+    <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-4">
+      <span className="max-w-[55%] truncate text-[11px] font-medium text-white/70 drop-shadow-md">{experience.name}</span>
+      {active && <button type="button" onClick={() => stop.current?.()} aria-label="Encerrar experiência" className="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/80 backdrop-blur-sm"><X className="h-4 w-4" /></button>}
     </div>
-    <div className="absolute inset-x-4 bottom-6 flex flex-col items-center gap-3">
-      <Button onClick={active ? () => stop.current?.() : start}>{active ? "Encerrar experiência" : "Iniciar experiência GPS"}</Button>
-      {visible && <div className="flex flex-wrap justify-center gap-2"><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} /><Button variant="outline" onClick={() => playMedia.current?.()}>Reproduzir mídia</Button></div>}
-      {hasWatermark && siteName && <span className="rounded-full bg-black/60 px-4 py-1 text-xs">{siteName}</span>}
-    </div>
+    {active && location && <div className="pointer-events-none absolute right-4 top-14 z-20 text-right font-mono text-[10px] leading-relaxed text-white/70 drop-shadow-md">
+      <p>{Math.round(location.distance)} m até o ponto</p>
+      <p>GPS ±{Math.round(location.accuracy)} m{location.nearby ? " · próximo" : ""}</p>
+    </div>}
+    {!active && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-8 text-center">
+      <Button onClick={start}>Iniciar experiência GPS</Button>
+      <p className="max-w-xs text-xs text-white/75" role="status">{status}</p>
+    </div>}
+    {active && <div className="pointer-events-none absolute left-4 top-12 z-20 max-w-[50%] text-[10px] leading-snug text-white/75 drop-shadow-md" role="status">
+      {ready && visible && location ? (location.atTarget ? "Objeto à frente" : turn !== null && Math.abs(turn) < 15 ? "Objeto à frente" : turn !== null ? <span>Gire {Math.round(Math.abs(turn))}° para {turn > 0 ? "a direita" : "a esquerda"} <span className="inline-block" style={{ transform: `rotate(${turn}deg)` }} aria-hidden="true">↑</span></span> : status) : status}
+    </div>}
+    {hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-center"><span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span></div>}
+    {ready && <>
+      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={() => playMedia.current?.()}>Reproduzir mídia</Button>}</div>}
+      <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>
+    </>}
   </div>
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import {
-  Box, Video, Camera, Search, Plus, Cuboid, Upload, FileUp, Square, Image, Music
+  Box, Video, Camera, Search, Plus, Cuboid, Square, Image, Music
 } from "lucide-react"
 
 function WhatsAppIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
@@ -63,13 +63,6 @@ function EmailIcon({ className, style }: { className?: string; style?: React.CSS
 }
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useStudioStore } from "@/store"
 import { ElementType, StudioElement } from "@/types"
 import { toast } from "@/hooks/use-toast"
@@ -114,11 +107,7 @@ interface AssetItem {
 
 export function StudioSidebar() {
   const [search, setSearch] = useState("")
-  const [uploadCategory, setUploadCategory] = useState<"3d" | "video" | "image">("3d")
-  const [showUploadModal, setShowUploadModal] = useState(false)
-  const [uploadedFileName, setUploadedFileName] = useState("")
   const [assets, setAssets] = useState<AssetItem[]>([])
-  const [assetsLoading, setAssetsLoading] = useState(true)
   const { addElement, elements } = useStudioStore()
 
   useEffect(() => {
@@ -128,7 +117,6 @@ export function StudioSidebar() {
         if (Array.isArray(data)) setAssets(data)
       })
       .catch(() => {})
-      .finally(() => setAssetsLoading(false))
   }, [])
 
   const filtered = elementLibrary.filter((item) =>
@@ -198,63 +186,9 @@ export function StudioSidebar() {
     toast({ title: `${asset.name} adicionado`, description: "Pronto para usar na cena." })
   }
 
-  const handleUpload = async () => {
-    const fileInput = document.createElement("input")
-    fileInput.type = "file"
-    const extMap: Record<string, string> = { "3d": ".glb,.gltf", video: ".mp4,.mov,.webm", image: ".png,.jpg,.jpeg,.webp,.gif" }
-    fileInput.accept = extMap[uploadCategory] || "*"
-    fileInput.onchange = async (e: any) => {
-      const file = e.target?.files?.[0]
-      if (!file) return
-      const name = file.name.replace(/\.[^/.]+$/, "")
-      setUploadedFileName(file.name)
-
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("name", name)
-
-      const res = await fetch("/api/assets", { method: "POST", body: formData })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Erro ao fazer upload" }))
-        toast({ title: "Upload falhou", description: err.error || "Erro desconhecido", variant: "destructive" })
-        setShowUploadModal(false)
-        setUploadedFileName("")
-        return
-      }
-
-      const asset = await res.json()
-
-      const typeMap: Record<string, ElementType> = {
-        "3d": "modelo-3d",
-        video: "video-mp4",
-        image: "imagem",
-      }
-
-      const newEl: StudioElement = {
-        id: crypto.randomUUID(),
-        type: typeMap[uploadCategory],
-        name: name,
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-        scale: [1, 1, 1],
-        opacity: 1,
-        duration: uploadCategory === "video" ? 5 : 0,
-        visible: true,
-        assetUrl: asset.public_url,
-        faceCamera: uploadCategory === "video" || uploadCategory === "image",
-      }
-      addElement(newEl)
-      setAssets((prev) => [asset, ...prev])
-      toast({ title: `"${name}" adicionado`, description: `Asset ${uploadCategory} importado com sucesso.`, variant: "success" })
-      setShowUploadModal(false)
-      setUploadedFileName("")
-    }
-    fileInput.click()
-  }
-
   return (
     <aside className="w-64 border-r border-border bg-card/30 flex flex-col shrink-0">
-      <div className="p-3 border-b border-border space-y-2">
+      <div className="p-3 border-b border-border">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -264,86 +198,33 @@ export function StudioSidebar() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full h-8 text-xs">
-              <Upload className="h-3.5 w-3.5 mr-1" />
-              Upload Asset
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Upload de Asset</DialogTitle>
-              <DialogDescription>
-                Faça upload de modelos 3D, vídeos ou imagens para usar na cena.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label>Tipo de Arquivo</Label>
-                <Select value={uploadCategory} onValueChange={(v: any) => setUploadCategory(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3d">Modelo 3D (.glb/.gltf)</SelectItem>
-                    <SelectItem value="video">Vídeo (.mp4/.mov)</SelectItem>
-                    <SelectItem value="image">Imagem (.png/.jpg)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div
-                onClick={handleUpload}
-                className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/40 transition-colors cursor-pointer"
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                    <FileUp className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">Clique para selecionar arquivo</p>
-                  <p className="text-xs text-muted-foreground/60">
-                    {uploadCategory === "3d" ? "GLB, GLTF" : uploadCategory === "video" ? "MP4, MOV, WebM" : "PNG, JPG, JPEG"}
-                    {" • Máx 50MB"}
-                  </p>
-                </div>
-              </div>
-              {uploadedFileName && (
-                <p className="text-xs text-emerald-400">✓ {uploadedFileName} carregado</p>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowUploadModal(false)}>Cancelar</Button>
-              <Button variant="gradient" onClick={handleUpload} disabled={!uploadedFileName}>
-                Adicionar à Cena
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-4">
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2 flex items-center gap-1">
+          <div className="rounded-xl border border-border/70 bg-background/50 p-2.5">
+            <p className="mb-2 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <Square className="h-3 w-3" />
               Botões Prontos
             </p>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5">
               {readyAssets.map((asset) => {
                 const Icon = asset.icon
                 return (
                   <button
+                    type="button"
                     key={asset.name}
                     onClick={() => handleAddReadyAsset(asset)}
-                    className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-accent/50 transition-colors group"
+                    title={`Adicionar ${asset.name}`}
+                    className="group flex min-h-20 flex-col items-center justify-center gap-1 rounded-lg border border-border/60 bg-card/80 px-1 py-2 text-center shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                   >
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-105"
                       style={{ backgroundColor: `${asset.color}20` }}
                     >
-                      <Icon className="h-4 w-4" style={{ color: asset.color }} />
+                      <Icon className="h-5 w-5" style={{ color: asset.color }} />
                     </div>
-                    <span className="text-[10px] text-muted-foreground group-hover:text-foreground transition-colors truncate w-full text-center">
+                    <span className="w-full truncate text-[10px] font-medium leading-tight text-foreground/75 transition-colors group-hover:text-foreground">
                       {asset.name.replace("Botão ", "")}
                     </span>
                   </button>
@@ -389,7 +270,7 @@ export function StudioSidebar() {
               </p>
               <div className="space-y-1">
                 {assets.map((asset) => {
-                  const catLabel: Record<string, { color: string; icon: any }> = {
+                  const catLabel: Record<string, { color: string; icon: ElementLibraryItem["icon"] }> = {
                     "3d": { color: "#7c3aed", icon: Box },
                     video: { color: "#3b82f6", icon: Video },
                     image: { color: "#f59e0b", icon: Image },

@@ -10,13 +10,15 @@ export function geoOffset(latitude: number, longitude: number, targetLatitude: n
   return { distance, bearing: (bearing * 180 / Math.PI + 360) % 360, east: distance * Math.sin(bearing), north: distance * Math.cos(bearing) }
 }
 
-// Keep the AR model at a readable visual distance. Geographic distance is used
-// for guidance, not as the model's distance from the camera.
-export function gpsDisplayPosition(offset: { distance: number; bearing: number }, accuracy: number) {
-  const atTarget = offset.distance <= Math.max(3, Math.min(accuracy, 20))
-  const angle = rad(offset.bearing)
-  const visualDistance = 6
-  return { atTarget, east: visualDistance * Math.sin(angle), north: visualDistance * Math.cos(angle) }
+// Use geographic meters for perspective in GPS mode. Keep a small minimum
+// distance so the scene remains in front of the camera at the exact point.
+export function gpsDisplayPosition(offset: { distance: number; bearing: number }, accuracy: number, lastReliableBearing?: number | null) {
+  const accuracyRadius = Number.isFinite(accuracy) ? Math.max(3, Math.min(accuracy, 20)) : 3
+  const atTarget = offset.distance <= accuracyRadius
+  const bearing = offset.distance < 3 && lastReliableBearing != null ? lastReliableBearing : offset.bearing
+  const angle = rad(bearing)
+  const displayDistance = Math.max(3, offset.distance)
+  return { atTarget, east: displayDistance * Math.sin(angle), north: displayDistance * Math.cos(angle) }
 }
 
 export function bearingDifference(targetBearing: number, cameraHeading: number) {

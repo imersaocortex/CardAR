@@ -88,6 +88,8 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       const resize = () => { renderer!.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() }
       resize(); window.addEventListener("resize", resize); listeners.push(() => window.removeEventListener("resize", resize))
       let compassAt = 0, positionAt = 0, atTarget = false, wasVisible = false
+      let lastReliableBearing: number | null = null
+      const desiredPosition = new THREE.Vector3()
       let compassAccuracy: number | null = null
       const euler = new THREE.Euler()
       const correction = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5))
@@ -110,10 +112,13 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       watch = navigator.geolocation.watchPosition(({ coords }) => {
         if (ended) return
         const offset = geoOffset(coords.latitude, coords.longitude, experience.latitude!, experience.longitude!)
-        const placement = gpsDisplayPosition(offset, coords.accuracy)
+        const placement = gpsDisplayPosition(offset, coords.accuracy, lastReliableBearing)
+        if (!placement.atTarget) lastReliableBearing = offset.bearing
+        const firstFix = positionAt === 0
         positionAt = Date.now()
         atTarget = placement.atTarget
-        anchor.position.set(placement.east, 0, -placement.north)
+        desiredPosition.set(placement.east, 0, -placement.north)
+        if (firstFix) anchor.position.copy(desiredPosition)
         setLocation({ distance: offset.distance, bearing: offset.bearing, accuracy: coords.accuracy, atTarget, nearby: offset.distance <= (experience.activationRadius ?? 100) })
       }, (error) => {
         positionAt = 0
@@ -129,19 +134,20 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
         const compassOk = now - compassAt < 10000
         const positionOk = now - positionAt < 30000
         anchor.visible = compassOk && positionOk
+        const delta = clock.getDelta()
+        if (positionOk) anchor.position.lerp(desiredPosition, 1 - Math.exp(-delta * 4))
         if (compassOk && positionOk) {
           camera.getWorldDirection(forward)
           forward.y = 0
           if (forward.lengthSq() > 0.001) {
             forward.normalize()
-            if (atTarget) anchor.position.set(forward.x * 6, 0, forward.z * 6)
             if (now - lastHeadingAt > 250) {
               setHeading((Math.atan2(forward.x, -forward.z) * 180 / Math.PI + 360) % 360)
               lastHeadingAt = now
             }
           }
         }
-        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Objeto à frente" : "Siga a direção do objeto"
+        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Próximo ao ponto" : "Siga a direção do objeto"
         if (message !== lastStatus) { lastStatus = message; setStatus(message) }
         if (anchor.visible !== wasVisible) {
           wasVisible = anchor.visible
@@ -149,7 +155,6 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
           callback.current?.(wasVisible ? "detected" : "lost")
           if (wasVisible) void content.play()
         }
-        const delta = clock.getDelta()
         content.update(delta, clock.elapsedTime, camera.position)
         renderer.render(scene, camera)
       })
@@ -190,7 +195,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       <p className="max-w-xs text-xs text-white/75" role="status">{status}</p>
     </div>}
     {active && <div className="pointer-events-none absolute left-4 top-12 z-20 max-w-[50%] text-[10px] leading-snug text-white/75 drop-shadow-md" role="status">
-      {ready && visible && location ? (location.atTarget ? "Objeto à frente" : turn !== null && Math.abs(turn) < 15 ? "Objeto à frente" : turn !== null ? <span>Gire {Math.round(Math.abs(turn))}° para {turn > 0 ? "a direita" : "a esquerda"} <span className="inline-block" style={{ transform: `rotate(${turn}deg)` }} aria-hidden="true">↑</span></span> : status) : status}
+      {ready && visible && location ? (location.atTarget ? "Próximo ao ponto" : turn !== null && Math.abs(turn) < 15 ? "Objeto à frente" : turn !== null ? <span>Gire {Math.round(Math.abs(turn))}° para {turn > 0 ? "a direita" : "a esquerda"} <span className="inline-block" style={{ transform: `rotate(${turn}deg)` }} aria-hidden="true">↑</span></span> : status) : status}
     </div>}
     {hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-center"><span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span></div>}
     {ready && <>

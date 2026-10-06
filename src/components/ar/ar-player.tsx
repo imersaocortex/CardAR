@@ -9,13 +9,14 @@ import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } fr
 
 interface ArPlayerProps {
   experience: ArExperienceData
+  experiences?: ArExperienceData[]
   hasWatermark?: boolean
   siteName?: string
   onStateChange?: (state: ArState) => void
   onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
 }
 
-export function ArPlayer({ experience, hasWatermark = true, siteName = "", onStateChange, onInteraction }: ArPlayerProps) {
+export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -25,7 +26,6 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
   const animFrameRef = useRef<number>(0)
   const streamRef = useRef<MediaStream | null>(null)
   const startingRef = useRef(false)
-  const anchorBuiltRef = useRef(false)
   const arStateRef = useRef<ArState>("loading")
   const detectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
@@ -120,18 +120,17 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
     }
   }, [onInteraction])
 
-  const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group, imageWidth: number, imageHeight: number) => {
-    if (!experience.scene?.objects || anchorBuiltRef.current) return
-    anchorBuiltRef.current = true
+  const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group, imageWidth: number, imageHeight: number, project: ArExperienceData) => {
+    if (!project.scene?.objects) return
 
-    const ref = getMarkerDimensions(experience.type || "square_1x1")
+    const ref = getMarkerDimensions(project.type || "square_1x1")
     const fx = imageWidth / (1000 * ref.width)
     const fy = imageHeight / (1000 * ref.height)
     const fz = imageWidth / (1000 * ref.width)
     const cx = imageWidth / 2000
     const cy = imageHeight / 2000
 
-    for (const obj of experience.scene.objects) {
+    for (const obj of project.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
       const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
       const isImage = obj.type === "imagem"
@@ -449,13 +448,12 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
 
       anchorGroup.add(group)
     }
-  }, [experience.scene?.objects])
+  }, [])
 
   const startAR = useCallback(async () => {
-    if (!containerRef.current || !experience.marker?.targetUrl) return
+    if (!containerRef.current || (!experiences?.length && !experience.marker?.targetUrl)) return
     if (startingRef.current) return
     startingRef.current = true
-    anchorBuiltRef.current = false
 
     if (!checkWebGL()) {
       setFallback("webgl")
@@ -565,10 +563,15 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
       const cam = new THREE.PerspectiveCamera(60, w / h, 0.1, 1000)
       cameraRef.current = cam
 
-      const anchorGroup = new THREE.Group()
-      anchorGroup.visible = false
+      const projects = experiences?.length ? experiences : [experience]
+      const anchorGroups = projects.map(() => {
+        const group = new THREE.Group()
+        group.visible = false
+        scene.add(group)
+        return group
+      })
+      const anchorGroup = anchorGroups[0]
       anchorGroupRef.current = anchorGroup
-      scene.add(anchorGroup)
 
       step("Importando MindAR...")
       let MindAR: any
@@ -589,7 +592,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
       let mindBuffer: ArrayBuffer | Uint8Array | null = null
       let loadedAsImage = false
 
-      if (targetUrl) {
+      if (projects.length === 1 && targetUrl) {
         step("Baixando .mind: " + targetUrl.slice(0, 50))
         try {
           const res = await fetch("/api/storage/download?url=" + encodeURIComponent(targetUrl))
@@ -619,7 +622,27 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
         }
       }
 
-      if (!mindBuffer) {
+      if (projects.length > 1) {
+        step(`Preparando ${projects.length} marcadores…`)
+        const images = await Promise.all(projects.map(async (project) => {
+          if (!project.marker?.imageUrl) throw new Error(`Marcador ausente: ${project.name}`)
+          const response = await fetch("/api/storage/download?url=" + encodeURIComponent(project.marker.imageUrl))
+          if (!response.ok) throw new Error(`Falha ao baixar o marcador de ${project.name}`)
+          const blobUrl = URL.createObjectURL(await response.blob())
+          try {
+            const image = new Image()
+            await new Promise<void>((resolve, reject) => {
+              image.onload = () => resolve()
+              image.onerror = () => reject(new Error(`Imagem inválida: ${project.name}`))
+              image.src = blobUrl
+            })
+            return image
+          } finally { URL.revokeObjectURL(blobUrl) }
+        }))
+        const compiler = new MindAR.Compiler()
+        await compiler.compileImageTargets(images, () => {})
+        mindBuffer = compiler.exportData()
+      } else if (!mindBuffer) {
         loadedAsImage = true
         step("Baixando imagem do marcador...")
         const imgRes = await fetch("/api/storage/download?url=" + encodeURIComponent(imageUrl))
@@ -642,7 +665,8 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
       }
 
       const finalBuffer = mindBuffer!
-      let isShowing = false
+      const visibleTargets = new Set<number>()
+      const detectedTargets = new Set<number>()
       let frameCount = 0
 
       if (loadedAsImage) {
@@ -652,7 +676,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
       const controller = new MindAR.Controller({
         inputWidth: vw,
         inputHeight: vh,
-        maxTrack: 1,
+        maxTrack: projects.length,
         filterMinCF: 0.005,
         filterBeta: 0.01,
         warmupTolerance: 0,
@@ -664,10 +688,17 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
           }
           if (data.type !== "updateMatrix") return
 
+          const index = data.targetIndex ?? 0
+          const targetGroup = anchorGroups[index]
+          if (!targetGroup) return
           if (data.worldMatrix) {
-            if (!isShowing) {
-              isShowing = true
-              anchorGroup.visible = true
+            if (!visibleTargets.has(index)) {
+              visibleTargets.add(index)
+              targetGroup.visible = true
+              if (projects.length > 1 && !detectedTargets.has(index)) {
+                detectedTargets.add(index)
+                onInteraction?.("click", { action: "marker_detected", project_id: projects[index].id })
+              }
               updateState("detected")
               setShowOverlay(false)
               if (detectionTimeoutRef.current) {
@@ -675,7 +706,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
                 detectionTimeoutRef.current = null
               }
               setNoDetectionWarning(false)
-              anchorGroup.traverse((child: any) => {
+              targetGroup.traverse((child: any) => {
                 if (child._audio) child._audio.play().catch(() => {})
                 if (child.userData?.video) {
                   const video = child.userData.video as HTMLVideoElement
@@ -698,15 +729,14 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
             const mp = new THREE.Vector3()
             const mq = new THREE.Quaternion()
             mr.decompose(mp, mq, new THREE.Vector3())
-            anchorGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
-            anchorGroup.quaternion.copy(mq)
+            targetGroup.position.set(mp.x / 1000, mp.y / 1000, mp.z / 1000)
+            targetGroup.quaternion.copy(mq)
           } else {
-            if (isShowing) {
-              isShowing = false
-              anchorGroup.visible = false
-              updateState("lost")
-              setShowOverlay(true)
-              anchorGroup.traverse((child: any) => {
+            if (visibleTargets.has(index)) {
+              visibleTargets.delete(index)
+              targetGroup.visible = false
+              if (visibleTargets.size === 0) { updateState("lost"); setShowOverlay(true) }
+              targetGroup.traverse((child: any) => {
                 if (child._audio) child._audio.pause()
                 if (child.userData?.video) {
                   const video = child.userData.video as HTMLVideoElement
@@ -720,11 +750,11 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
 
       step("Adicionando marcador ao tracker...")
       const { dimensions: markerDims } = controller.addImageTargetsFromBuffer(finalBuffer)
-      const markerImageWidth = markerDims[0][0] as number
-      const markerImageHeight = markerDims[0][1] as number
-      step(`Dimensões do marcador: ${markerImageWidth}x${markerImageHeight}px`)
-      await buildSceneObjects(anchorGroup, markerImageWidth, markerImageHeight)
-      step("Cena 3D pronta (" + experience.scene?.objects?.length + " objetos)")
+      if (markerDims.length !== projects.length) throw new Error("Quantidade de marcadores compilados incorreta")
+      for (let index = 0; index < projects.length; index++) {
+        await buildSceneObjects(anchorGroups[index], markerDims[index][0], markerDims[index][1], projects[index])
+      }
+      step(`Cenas 3D prontas (${projects.length} projetos)`)
       step("Marcador pronto. Inicializando motor...")
 
       try {
@@ -767,7 +797,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
         const vpW = renderer.domElement.clientWidth
         const vpH = renderer.domElement.clientHeight
 
-        anchorGroup.traverse((child: any) => {
+        anchorGroups.filter((group) => group.visible).forEach((group) => group.traverse((child: any) => {
           if (!child.isMesh || !child.userData.clickable) return
           child.updateWorldMatrix(true, false)
           const worldPos = new THREE.Vector3()
@@ -784,7 +814,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
             const action = child.userData.action as string
             if (action) handleAction(action)
           }
-        })
+        }))
       }
 
       let lastClickTime = 0
@@ -811,8 +841,8 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
         animFrameRef.current = requestAnimationFrame(animate)
         frameCountRef.current++
 
-        if (anchorGroup.visible) {
-          anchorGroup.traverse((child: any) => {
+        if (visibleTargets.size > 0) {
+          anchorGroups.filter((group) => group.visible).forEach((group) => group.traverse((child: any) => {
             if (child.userData?.videoTexture) {
               child.userData.videoTexture.needsUpdate = true
             }
@@ -831,7 +861,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
               const s = child.userData._baseScale * (1 + Math.sin(Date.now() / 300) * 0.05)
               child.scale.set(s, s, s)
             }
-          })
+          }))
         }
 
         renderer.render(scene, cam)
@@ -890,10 +920,10 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
       }
       updateState("error")
     }
-  }, [experience, checkWebGL, updateState, handleAction, buildSceneObjects])
+  }, [experience, experiences, checkWebGL, updateState, handleAction, buildSceneObjects])
 
   useEffect(() => {
-    if (!experience.marker?.targetUrl) {
+    if (!experiences?.length && !experience.marker?.targetUrl) {
       setFallback("no-camera")
       updateState("error")
       return
@@ -913,7 +943,7 @@ export function ArPlayer({ experience, hasWatermark = true, siteName = "", onSta
         streamRef.current.getTracks().forEach((t) => t.stop())
       }
     }
-  }, [experience.marker?.targetUrl, startAR, updateState, initKey])
+  }, [experience.marker?.targetUrl, experiences, startAR, updateState, initKey])
 
   const handleSwitchCamera = useCallback(async () => {
     const newFacing = facingModeRef.current === "environment" ? "user" : "environment"

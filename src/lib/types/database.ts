@@ -115,6 +115,8 @@ export interface Database {
           assets_limit_bytes: number
           assets_limit_label: string
           features: string[]
+          multi_project_enabled: boolean
+          has_watermark: boolean
           active: boolean
           billing_cycle: string
           trial_days: number
@@ -129,6 +131,8 @@ export interface Database {
           assets_limit_bytes: number
           assets_limit_label: string
           features?: string[]
+          multi_project_enabled?: boolean
+          has_watermark?: boolean
           active?: boolean
           billing_cycle?: string
           trial_days?: number
@@ -143,6 +147,8 @@ export interface Database {
           assets_limit_bytes?: number
           assets_limit_label?: string
           features?: string[]
+          multi_project_enabled?: boolean
+          has_watermark?: boolean
           active?: boolean
           billing_cycle?: string
           trial_days?: number

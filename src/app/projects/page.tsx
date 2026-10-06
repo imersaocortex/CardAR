@@ -19,6 +19,7 @@ import { AppShell } from "@/components/layout/app-shell"
 import { cn, mapProjectStatus } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { toast } from "@/hooks/use-toast"
 import { createProject, deleteProject } from "@/lib/actions/projects"
 
@@ -329,6 +330,7 @@ export default function ProjectsPage() {
               <span>Assinatura vencida — projetos suspensos</span>
             </div>
           )}
+          <Button variant="outline" asChild><Link href="/projects/collections">Vários projetos em uma URL</Link></Button>
           <Dialog open={showNewModal} onOpenChange={setShowNewModal}>
             <DialogTrigger asChild>
               <Button variant="gradient" disabled={subSuspended}>

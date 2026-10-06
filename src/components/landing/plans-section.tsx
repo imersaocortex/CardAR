@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
+import { planFeatureLabels } from "@/lib/plans/feature-labels"
 
 interface Plan {
   id: string
@@ -16,6 +17,8 @@ interface Plan {
   projects_limit: number
   assets_limit_label: string
   features: string[]
+  has_watermark?: boolean
+  multi_project_enabled?: boolean
   billing_cycle: string
   trial_days: number
   highlight?: boolean
@@ -152,7 +155,7 @@ export function PlansSection() {
                 </div>
 
                 <div className="space-y-3 mb-8">
-                  {plan.features.map((feature) => (
+                  {planFeatureLabels(plan).map((feature) => (
                     <div key={feature} className="flex items-start gap-3">
                       <Check className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
                       <span className="text-sm text-muted-foreground">{feature}</span>

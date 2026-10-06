@@ -20,6 +20,22 @@ const { getActionUrl } = load("src/lib/ar/actions.ts")
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
 const { createProjectSchema } = load("src/lib/schemas/index.ts")
 const objectGeometry = load("src/lib/ar/object-geometry.ts")
+const { validateCollectionMembers } = load("src/lib/ar/collection-validation.ts")
+
+test("collections reject mixed technologies, other organizations and unpublished projects", () => {
+  const marker = (id, overrides = {}) => ({ id, organization_id: "owner", tracking_mode: "marker", status: "published", project_markers: [{ image_url: "https://example.com/marker.png" }], ...overrides })
+  const first = marker("one")
+  const second = marker("two")
+  assert.equal(validateCollectionMembers("marker", "owner", ["one", "two"], [first, second]), null)
+  assert.match(validateCollectionMembers("marker", "owner", ["one", "two"], [first, marker("two", { tracking_mode: "gps" })]), /tecnologia/)
+  assert.match(validateCollectionMembers("marker", "owner", ["one", "two"], [first, marker("two", { organization_id: "other" })]), /organização/)
+  assert.match(validateCollectionMembers("marker", "owner", ["one", "two"], [first, marker("two", { status: "draft" })]), /publicados/)
+  assert.match(validateCollectionMembers("marker", "owner", ["one", "two"], [first, marker("two", { project_markers: [] })]), /marcador/)
+  assert.match(validateCollectionMembers("marker", "owner", ["one", "one"], [first]), /diferentes/)
+  const gps = (id, coordinates = true) => ({ id, organization_id: "owner", tracking_mode: "gps", status: "published", latitude: coordinates ? 0 : null, longitude: 0 })
+  assert.equal(validateCollectionMembers("gps", "owner", ["a", "b"], [gps("a"), gps("b")]), null)
+  assert.match(validateCollectionMembers("gps", "owner", ["a", "b"], [gps("a"), gps("b", false)]), /coordenadas/)
+})
 
 test("new projects default to marker tracking and accept markerless modes", () => {
   const base = { name: "Experiência", type: "business_card" }

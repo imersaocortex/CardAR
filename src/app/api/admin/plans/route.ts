@@ -75,6 +75,7 @@ export async function POST(request: Request) {
     billing_cycle: parsed.data.billing_cycle,
     trial_days: parsed.data.trial_days,
     has_watermark: parsed.data.has_watermark,
+    multi_project_enabled: parsed.data.multi_project_enabled,
     allowed_media_types: parsed.data.allowed_media_types,
     paypal_plan_id: parsed.data.paypal_plan_id || null,
   }

@@ -29,6 +29,7 @@ interface Plan {
   assets_limit_bytes: number
   assets_limit_label: string
   features: string[]
+  multi_project_enabled?: boolean
   active: boolean
   created_at: string
   subscriptions?: { count: number }[]
@@ -62,6 +63,7 @@ export function PlansTab() {
     billing_cycle: "monthly",
     trial_days: 0,
     has_watermark: true,
+    multi_project_enabled: false,
     allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
     highlight: false,
     paypal_plan_id: "",
@@ -97,6 +99,7 @@ export function PlansTab() {
       billing_cycle: "monthly",
       trial_days: 0,
       has_watermark: true,
+      multi_project_enabled: false,
       allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
       highlight: false,
       paypal_plan_id: "",
@@ -118,6 +121,7 @@ export function PlansTab() {
       billing_cycle: (plan as any).billing_cycle || "monthly",
       trial_days: (plan as any).trial_days || 0,
       has_watermark: (plan as any).has_watermark !== false,
+      multi_project_enabled: plan.multi_project_enabled === true,
       allowed_media_types: Array.isArray((plan as any).allowed_media_types)
         ? (plan as any).allowed_media_types.join(", ")
         : "image/png,image/jpeg,model/gltf-binary",
@@ -169,6 +173,7 @@ export function PlansTab() {
         billing_cycle: form.billing_cycle,
         trial_days: form.trial_days,
         has_watermark: form.has_watermark,
+        multi_project_enabled: form.multi_project_enabled,
         allowed_media_types: form.allowed_media_types.split(",").map((t) => t.trim()).filter(Boolean),
         highlight: form.highlight,
         paypal_plan_id: form.paypal_plan_id || null,
@@ -460,6 +465,10 @@ export function PlansTab() {
                 onCheckedChange={(v) => setForm((p) => ({ ...p, has_watermark: !v }))}
               />
               <Label htmlFor="plan-watermark">Remover marca d'água</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch id="plan-multi-project" checked={form.multi_project_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, multi_project_enabled: value }))} />
+              <Label htmlFor="plan-multi-project">Permitir experiências com vários projetos</Label>
             </div>
 
             <div className="space-y-2">

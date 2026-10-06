@@ -12,6 +12,12 @@ Aplicação Next.js 16, Supabase e experiências AR por imagem, superfície plan
 
 Para publicar a opção **Sempre voltado para a câmera**, aplique manualmente `supabase/migrations/025_face_camera.sql` após a migração 024 e execute `supabase/verify_025.sql` (somente leitura). Os dois resultados devem ser `ok = true` antes de implantar o player e o editor. A migração ativa a orientação para imagens e vídeos já presentes em projetos GPS ou de superfície; a opção pode ser desligada em cada objeto. Vídeos começam silenciosos e o visitante toca em **Ativar som** para ouvir o áudio, conforme a política dos navegadores móveis.
 
+### Experiências com vários projetos e superfícies
+
+Depois da migração 025, aplique manualmente `supabase/migrations/026_multi_experiences.sql` no SQL Editor do Supabase e execute `supabase/verify_026.sql` (somente leitura). Confirme `ok = true` nas duas primeiras consultas e `invalid_collections = 0`. Só então publique o código correspondente. A migração cria coleções com uma URL, adiciona a permissão `multi_project_enabled` aos planos e deixa todos os planos existentes com o recurso **desligado**. O superadministrador deve habilitá-lo explicitamente nos planos desejados; a opção de retirar a marca d'água continua independente. Coleções aceitam de 2 a 10 projetos de marcador ou de 2 a 20 projetos GPS, sempre publicados, da mesma organização e tecnologia. Quando um projeto é despublicado ou excluído, ele sai automaticamente da coleção; se restar menos de dois, a coleção e sua URL são removidas.
+
+No modo de superfície, WebXR com hit-test detecta chão ou mesa e usa âncoras quando o aparelho as oferece. Navegadores sem WebXR ou sem hit-test recebem um **modo manual** com câmera e orientação: o visitante pode posicionar a cena, mas esse modo não detecta planos nem rastreia o deslocamento físico do celular. Para validar fixação real no ambiente, teste em um dispositivo compatível com WebXR AR; também confira um aparelho sem suporte para verificar a alternativa manual.
+
 ### Variáveis de faturamento
 
 | Variável | Uso |

@@ -12,6 +12,9 @@ export async function GET(req: NextRequest) {
     if (urlParam && !bucket && !path) {
       try {
         const parsed = new URL(urlParam)
+        if (parsed.origin !== new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).origin) {
+          return NextResponse.json({ error: "Invalid storage host" }, { status: 400 })
+        }
         const parts = parsed.pathname.split("/")
         // /storage/v1/object/public/<bucket>/<path...>
         const publicIdx = parts.indexOf("public")
@@ -26,6 +29,9 @@ export async function GET(req: NextRequest) {
 
     if (!bucket || !path) {
       return NextResponse.json({ error: "Missing bucket or path or url" }, { status: 400 })
+    }
+    if (bucket !== "markers" || path.includes("..")) {
+      return NextResponse.json({ error: "Unsupported storage path" }, { status: 403 })
     }
 
     const admin = createAdminClient()

@@ -113,6 +113,7 @@ export const createPlanSchema = z.object({
   billing_cycle: z.enum(["monthly", "yearly"]).default("monthly"),
   trial_days: z.number().int().min(0).default(0),
   has_watermark: z.boolean().default(true),
+  multi_project_enabled: z.boolean().default(false),
   allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
   highlight: z.boolean().default(false),
   paypal_plan_id: z.string().nullable().optional(),

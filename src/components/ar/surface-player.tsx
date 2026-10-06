@@ -6,6 +6,7 @@ import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { buildSpatialScene, disposeSpatialGroup } from "@/lib/ar/spatial-scene"
 import { Button } from "@/components/ui/button"
 import { SpatialActions } from "./spatial-actions"
+import { SurfaceFallbackPlayer } from "./surface-fallback-player"
 
 interface Props {
   experience: ArExperienceData
@@ -31,6 +32,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
   const [soundError, setSoundError] = useState(false)
   const mediaControl = useRef<{ enableAudio: () => Promise<boolean>; muteAudio: () => void } | null>(null)
   const [message, setMessage] = useState("Verificando compatibilidade…")
+  const [manualMode, setManualMode] = useState(false)
   const callbacks = useRef({ onStateChange, onInteraction })
   useEffect(() => { callbacks.current = { onStateChange, onInteraction } }, [onStateChange, onInteraction])
 
@@ -51,6 +53,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
     let renderer: THREE.WebGLRenderer | undefined
     let content: Awaited<ReturnType<typeof buildSpatialScene>> | undefined
     let hitSource: XRHitTestSource | undefined
+    let worldAnchor: XRAnchor | undefined
     const reticle = new THREE.Mesh(new THREE.RingGeometry(0.09, 0.12, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x22d3ee }))
     reticle.matrixAutoUpdate = false
     reticle.visible = false
@@ -59,6 +62,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       if (ended) return
       ended = true
       hitSource?.cancel()
+      worldAnchor?.delete()
       renderer?.setAnimationLoop(null)
       content?.dispose()
       mediaControl.current = null
@@ -73,7 +77,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
     try {
       // Request the session directly from the user's click to preserve user activation.
       session = await navigator.xr.requestSession("immersive-ar", {
-        requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay"], domOverlay: { root: overlay.current },
+        requiredFeatures: ["hit-test"], optionalFeatures: ["dom-overlay", "anchors"], domOverlay: { root: overlay.current },
       })
       if (!alive.current || ended) { await session.end(); cleanup(); return }
       session.addEventListener("end", cleanup, { once: true })
@@ -98,17 +102,9 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       content.root.visible = false
       const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100)
       let placed = false
+      let placementRequested = false
       place.current = () => {
-        if (!reticle.visible || !content) return
-        content.root.position.setFromMatrixPosition(reticle.matrix)
-        // Scene coordinates remain upright; only accept near-horizontal surfaces.
-        content.root.visible = true
-        placed = true
-        setPlaced(true)
-        void content.play()
-        setMessage("Cena posicionada. Toque em Reposicionar para escolher outra superfície.")
-        callbacks.current.onStateChange?.("detected")
-        callbacks.current.onInteraction?.("click", { action: "surface_placed" })
+        if (reticle.visible && !placed) placementRequested = true
       }
       session.addEventListener("select", () => { if (!placed) place.current?.() })
       const clock = new THREE.Clock()
@@ -125,6 +121,26 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
           reticle.matrix.fromArray(pose.transform.matrix)
           if (reticle.matrix.elements[5] < 0.9) reticle.visible = false
         }
+        if (placementRequested && reticle.visible && pose) {
+          placementRequested = false
+          content.root.position.setFromMatrixPosition(reticle.matrix)
+          content.root.visible = true
+          placed = true
+          setPlaced(true)
+          void content.play()
+          if (hit?.createAnchor) void hit.createAnchor().then((anchor) => {
+            if (ended || !placed) { anchor.delete(); return }
+            worldAnchor?.delete()
+            worldAnchor = anchor
+          }).catch(() => {})
+          setMessage("Cena posicionada. Toque em Reposicionar para escolher outra superfície.")
+          callbacks.current.onStateChange?.("detected")
+          callbacks.current.onInteraction?.("click", { action: "surface_placed" })
+        }
+        if (worldAnchor && reference && placed) {
+          const anchoredPose = frame?.getPose(worldAnchor.anchorSpace, reference)
+          if (anchoredPose) content.root.position.set(anchoredPose.transform.position.x, anchoredPose.transform.position.y, anchoredPose.transform.position.z)
+        }
         if (reticle.visible !== previousReady) { previousReady = reticle.visible; setReady(previousReady) }
         const viewerPose = reference && frame?.getViewerPose(reference)
         if (viewerPose) {
@@ -134,7 +150,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
         content.update(delta, clock.elapsedTime, viewerPose ? viewerPosition : undefined)
         renderer.render(scene, camera)
       })
-      const reposition = () => { placed = false; setPlaced(false); content!.root.visible = false; setMessage("Mova a câmera lentamente até encontrar o chão ou uma mesa.") }
+      const reposition = () => { worldAnchor?.delete(); worldAnchor = undefined; placed = false; placementRequested = false; setPlaced(false); content!.root.visible = false; setMessage("Mova a câmera lentamente até encontrar o chão ou uma mesa.") }
       repositionRef.current = reposition
       setActive(true)
       setStarting(false)
@@ -142,7 +158,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       callbacks.current.onStateChange?.("scanning")
     } catch (error) {
       stop.current?.()
-      if (alive.current) setMessage(error instanceof Error ? `Não foi possível iniciar: ${error.message}` : "Não foi possível iniciar a experiência.")
+      if (alive.current) { setMessage(error instanceof Error ? `Não foi possível iniciar: ${error.message}` : "Não foi possível iniciar a experiência."); setManualMode(true) }
       callbacks.current.onStateChange?.("error")
     }
   }
@@ -156,6 +172,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
   }
   const repositionRef = useRef<(() => void) | null>(null)
   const hasMedia = experience.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-")))
+  if (manualMode || supported === false) return <SurfaceFallbackPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={onStateChange} onInteraction={onInteraction} />
   return <div className="fixed inset-0 bg-slate-950 text-white">
     <div ref={host} className="absolute inset-0" />
     <div ref={overlay} className="absolute inset-0 pointer-events-none flex flex-col justify-between p-5">
@@ -163,7 +180,6 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       <div className="pointer-events-auto mx-auto flex max-w-md flex-wrap justify-center gap-3 rounded-2xl bg-black/65 p-4">
         {!active && <Button onClick={start} disabled={!supported || starting}>{starting ? "Carregando…" : "Iniciar AR na superfície"}</Button>}
         {active && <><Button onClick={() => place.current?.()} disabled={!ready}>Posicionar aqui</Button><Button variant="outline" onClick={() => repositionRef.current?.()}>Reposicionar</Button><Button variant="outline" onClick={() => stop.current?.()}>Encerrar</Button></>}
-        {supported === false && <p className="text-sm">Abra em um aparelho e navegador compatíveis com WebXR AR.</p>}
         {placed && <><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-xs">O som foi bloqueado. Toque novamente.</p>}</>}
         {hasWatermark && siteName && <span className="w-full text-center text-xs text-white/60">{siteName}</span>}
       </div>

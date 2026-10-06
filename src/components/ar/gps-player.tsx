@@ -13,8 +13,8 @@ import { SpatialActions } from "./spatial-actions"
 type CompassEvent = DeviceOrientationEvent & { webkitCompassHeading?: number; webkitCompassAccuracy?: number }
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: (absolute?: boolean) => Promise<string> }
 
-export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction }: {
-  experience: ArExperienceData; siteName: string; hasWatermark: boolean; onStateChange?: (state: ArState) => void
+export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction }: {
+  experience: ArExperienceData; experiences?: ArExperienceData[]; siteName: string; hasWatermark: boolean; onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -42,7 +42,8 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
     let ended = false
     let stream: MediaStream | undefined
     let renderer: THREE.WebGLRenderer | undefined
-    let content: Awaited<ReturnType<typeof buildSpatialScene>> | undefined
+    const projects = experiences?.length ? experiences : [experience]
+    const contents: Awaited<ReturnType<typeof buildSpatialScene>>[] = []
     let watch: number | undefined
     const listeners: (() => void)[] = []
     stop.current = () => {
@@ -52,13 +53,13 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       listeners.forEach((remove) => remove())
       stream?.getTracks().forEach((track) => track.stop())
       if (video.current) video.current.srcObject = null
-      renderer?.setAnimationLoop(null); content?.dispose(); renderer?.dispose(); renderer?.domElement.remove()
+      renderer?.setAnimationLoop(null); contents.forEach((content) => content.dispose()); renderer?.dispose(); renderer?.domElement.remove()
       mediaControl.current = null
       busy.current = false
       if (alive.current) { setActive(false); setReady(false); setVisible(false); setSoundOn(false); setSoundError(false); setLocation(null); setHeading(null); setStatus("Experiência encerrada. Toque para iniciar novamente.") }
     }
     try {
-      if (experience.latitude == null || experience.longitude == null) throw new Error("As coordenadas não foram configuradas.")
+      if (projects.some((project) => project.latitude == null || project.longitude == null)) throw new Error("As coordenadas não foram configuradas.")
       if (!navigator.geolocation || !navigator.mediaDevices?.getUserMedia || !window.DeviceOrientationEvent) throw new Error("Use um celular com câmera, GPS e bússola em uma conexão HTTPS.")
       const orientationAPI = DeviceOrientationEvent as OrientationAPI
       if (orientationAPI.requestPermission && await orientationAPI.requestPermission(true) !== "granted") throw new Error("Permita o acesso à orientação para localizar a experiência.")
@@ -68,28 +69,36 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       if (ended || !alive.current) { stream.getTracks().forEach((track) => track.stop()); return }
       video.current!.srcObject = stream
       await video.current!.play()
-      const loaded = await buildSpatialScene(experience.scene?.objects ?? [])
-      if (ended || !alive.current) { loaded.dispose(); return }
-      if (!experience.scene?.objects?.some((object) => object.visible && (object.assetUrl || object.type.startsWith("botao-")))) {
-        loaded.dispose()
+      for (const project of projects) {
+        const loaded = await buildSpatialScene(project.scene?.objects ?? [])
+        contents.push(loaded)
+      }
+      if (ended || !alive.current) return
+      if (!projects.some((project) => project.scene?.objects?.some((object) => object.visible && (object.assetUrl || object.type.startsWith("botao-"))))) {
         throw new Error("Esta cena ainda não tem um objeto visível. Adicione um modelo, imagem ou vídeo no editor.")
       }
-      content = loaded
-      mediaControl.current = loaded
+      mediaControl.current = {
+        enableAudio: async () => (await Promise.all(contents.map((content) => content.enableAudio()))).some(Boolean),
+        muteAudio: () => contents.forEach((content) => content.muteAudio()),
+      }
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
       host.current!.appendChild(renderer.domElement)
       const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 10000)
       const scene = new THREE.Scene()
-      const anchor = new THREE.Group()
-      anchor.add(content.root)
-      anchor.visible = false
-      scene.add(anchor, new THREE.HemisphereLight(0xffffff, 0x667788, 3))
+      const anchors = contents.map((content) => {
+        const anchor = new THREE.Group()
+        anchor.add(content.root)
+        anchor.visible = false
+        scene.add(anchor)
+        return anchor
+      })
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 3))
       const resize = () => { renderer!.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() }
       resize(); window.addEventListener("resize", resize); listeners.push(() => window.removeEventListener("resize", resize))
       let compassAt = 0, positionAt = 0, atTarget = false, wasVisible = false
-      let lastReliableBearing: number | null = null
-      const desiredPosition = new THREE.Vector3()
+      const lastReliableBearings: (number | null)[] = projects.map(() => null)
+      const desiredPositions = projects.map(() => new THREE.Vector3())
       let compassAccuracy: number | null = null
       const euler = new THREE.Euler()
       const correction = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5))
@@ -111,15 +120,21 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       listeners.push(() => { window.removeEventListener("deviceorientationabsolute", orientation); window.removeEventListener("deviceorientation", orientation) })
       watch = navigator.geolocation.watchPosition(({ coords }) => {
         if (ended) return
-        const offset = geoOffset(coords.latitude, coords.longitude, experience.latitude!, experience.longitude!)
-        const placement = gpsDisplayPosition(offset, coords.accuracy, lastReliableBearing)
-        if (!placement.atTarget) lastReliableBearing = offset.bearing
         const firstFix = positionAt === 0
         positionAt = Date.now()
-        atTarget = placement.atTarget
-        desiredPosition.set(placement.east, 0, -placement.north)
-        if (firstFix) anchor.position.copy(desiredPosition)
-        setLocation({ distance: offset.distance, bearing: offset.bearing, accuracy: coords.accuracy, atTarget, nearby: offset.distance <= (experience.activationRadius ?? 100) })
+        let nearest: { distance: number; bearing: number; atTarget: boolean; nearby: boolean } | null = null
+        for (const [index, project] of projects.entries()) {
+          const offset = geoOffset(coords.latitude, coords.longitude, project.latitude!, project.longitude!)
+          const placement = gpsDisplayPosition(offset, coords.accuracy, lastReliableBearings[index])
+          if (!placement.atTarget) lastReliableBearings[index] = offset.bearing
+          desiredPositions[index].set(placement.east, 0, -placement.north)
+          if (firstFix) anchors[index].position.copy(desiredPositions[index])
+          if (!nearest || offset.distance < nearest.distance) nearest = {
+            distance: offset.distance, bearing: offset.bearing, atTarget: placement.atTarget,
+            nearby: offset.distance <= (project.activationRadius ?? 100),
+          }
+        }
+        if (nearest) { atTarget = nearest.atTarget; setLocation({ ...nearest, accuracy: coords.accuracy }) }
       }, (error) => {
         positionAt = 0
         setStatus(error.code === 1 ? "Localização bloqueada. Permita o acesso nas configurações do navegador e tente novamente." : "GPS indisponível. Procure um local aberto.")
@@ -129,13 +144,13 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
       let lastHeadingAt = 0
       const forward = new THREE.Vector3()
       renderer.setAnimationLoop(() => {
-        if (ended || !content || !renderer) return
+        if (ended || !renderer) return
         const now = Date.now()
         const compassOk = now - compassAt < 10000
         const positionOk = now - positionAt < 30000
-        anchor.visible = compassOk && positionOk
+        anchors.forEach((anchor) => { anchor.visible = compassOk && positionOk })
         const delta = clock.getDelta()
-        if (positionOk) anchor.position.lerp(desiredPosition, 1 - Math.exp(-delta * 4))
+        if (positionOk) anchors.forEach((anchor, index) => anchor.position.lerp(desiredPositions[index], 1 - Math.exp(-delta * 4)))
         if (compassOk && positionOk) {
           camera.getWorldDirection(forward)
           forward.y = 0
@@ -149,13 +164,13 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
         }
         const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Próximo ao ponto" : "Siga a direção do objeto"
         if (message !== lastStatus) { lastStatus = message; setStatus(message) }
-        if (anchor.visible !== wasVisible) {
-          wasVisible = anchor.visible
+        if (anchors[0].visible !== wasVisible) {
+          wasVisible = anchors[0].visible
           setVisible(wasVisible)
           callback.current?.(wasVisible ? "detected" : "lost")
-          if (wasVisible) void content.play()
+          if (wasVisible) contents.forEach((content) => { void content.play() })
         }
-        content.update(delta, clock.elapsedTime, camera.position)
+        contents.forEach((content) => content.update(delta, clock.elapsedTime, camera.position))
         renderer.render(scene, camera)
       })
       setReady(true)
@@ -177,7 +192,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
   }
 
   const turn = location && heading !== null && !location.atTarget ? bearingDifference(location.bearing, heading) : null
-  const hasMedia = experience.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-")))
+  const hasMedia = (experiences?.length ? experiences : [experience]).some((project) => project.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-"))))
 
   return <div className="fixed inset-0 overflow-hidden bg-slate-950 text-white">
     <video ref={video} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" />
@@ -199,7 +214,7 @@ export function GpsPlayer({ experience, siteName, hasWatermark, onStateChange, o
     </div>}
     {hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-center"><span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span></div>}
     {ready && <>
-      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
+      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={(experiences?.length ? experiences : [experience]).flatMap((project) => project.scene?.objects ?? [])} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
       <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>
     </>}
   </div>

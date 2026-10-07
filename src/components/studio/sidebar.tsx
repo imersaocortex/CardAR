@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import {
-  Box, Video, Camera, Search, Plus, Cuboid, Square, Image, Music
+  Box, Video, Camera, Search, Plus, Cuboid, Square, Image, Music, Radio
 } from "lucide-react"
 
 function WhatsAppIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
@@ -79,6 +79,7 @@ const elementLibrary: ElementLibraryItem[] = [
   { type: "modelo-3d", name: "Modelo 3D", icon: Box, color: "#7c3aed", category: "midia" },
   { type: "modelo-3d-animado", name: "Modelo 3D Animado", icon: Cuboid, color: "#06b6d4", category: "midia" },
   { type: "video-mp4", name: "Vídeo MP4", icon: Video, color: "#3b82f6", category: "midia" },
+  { type: "video-hls", name: "Streaming HLS", icon: Radio, color: "#06b6d4", category: "midia" },
   { type: "video-chromakey", name: "Vídeo Chromakey", icon: Camera, color: "#22c55e", category: "midia" },
   { type: "imagem", name: "Imagem", icon: Image, color: "#f59e0b", category: "midia" },
   { type: "audio", name: "Áudio", icon: Music, color: "#ec4899", category: "midia" },
@@ -127,7 +128,7 @@ export function StudioSidebar() {
   const midia = filtered.filter((i) => i.category === "midia")
 
   const handleAddElement = (item: ElementLibraryItem) => {
-    const isVideo = item.type === "video-mp4" || item.type === "video-chromakey"
+    const isVideo = item.type === "video-mp4" || item.type === "video-chromakey" || item.type === "video-hls"
     const defaultUrl = item.type === "video-chromakey" ? "/chormakey-default.mp4" : "/mp4-default.mp4"
     const newEl: StudioElement = {
       id: crypto.randomUUID(),
@@ -139,7 +140,7 @@ export function StudioSidebar() {
       opacity: 1,
       duration: 2,
       visible: true,
-      assetUrl: isVideo ? defaultUrl : undefined,
+      assetUrl: isVideo && item.type !== "video-hls" ? defaultUrl : undefined,
       faceCamera: isVideo || item.type === "imagem" || item.type.startsWith("botao-"),
     }
     addElement(newEl)

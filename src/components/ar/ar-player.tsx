@@ -5,6 +5,7 @@ import * as THREE from "three"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { getMarkerDimensions } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
+import { attachHlsSource } from "@/lib/ar/hls-video"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
 
 interface ArPlayerProps {
@@ -41,6 +42,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
   const [initStep, setInitStep] = useState("")
   const [needsVideoInteraction, setNeedsVideoInteraction] = useState(false)
   const videoElementsRef = useRef<HTMLVideoElement[]>([])
+  const streamCleanupsRef = useRef<(() => void)[]>([])
 
   const step = useCallback((msg: string) => {
     console.log("[AR]", msg)
@@ -132,7 +134,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
 
     for (const obj of project.scene.objects) {
       const isModel = obj.type === "modelo-3d" || obj.type === "modelo-3d-animado"
-      const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey"
+      const isVideo = obj.type === "video-mp4" || obj.type === "video-chromakey" || obj.type === "video-hls"
       const isImage = obj.type === "imagem"
       const isAudio = obj.type === "audio"
       const isButton = obj.type.startsWith("botao-")
@@ -204,13 +206,11 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
           v.muted = true
           v.playsInline = true
           v.preload = "auto"
-          v.src = obj.assetUrl
-          v.load()
-
           videoElementsRef.current.push(v)
           mesh.userData.video = v
 
           v.addEventListener("canplay", () => {
+            if (mesh.userData.videoTexture) return
             const texture = new THREE.VideoTexture(v)
             texture.minFilter = THREE.LinearFilter
             texture.magFilter = THREE.LinearFilter
@@ -264,6 +264,12 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
 
             mesh.userData.videoTexture = texture
           })
+          if (obj.type === "video-hls") {
+            streamCleanupsRef.current.push(await attachHlsSource(v, obj.assetUrl, (message) => console.error("[AR]", message)))
+          } else {
+            v.src = obj.assetUrl
+            v.load()
+          }
         }
       }
 
@@ -886,6 +892,9 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
           detectionTimeoutRef.current = null
         }
         cleanups.forEach((fn) => fn())
+        streamCleanupsRef.current.forEach((cleanup) => cleanup())
+        streamCleanupsRef.current = []
+        videoElementsRef.current.forEach((element) => { element.pause(); element.removeAttribute("src"); element.load() })
         videoRef.current = null
         rendererRef.current = null
         sceneRef.current = null
@@ -905,6 +914,10 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         streamRef.current = null
       }
       cleanups.forEach((fn) => fn())
+      streamCleanupsRef.current.forEach((cleanup) => cleanup())
+      streamCleanupsRef.current = []
+      videoElementsRef.current.forEach((element) => { element.pause(); element.removeAttribute("src"); element.load() })
+      videoElementsRef.current = []
 
       const msg = String(err)
       if (msg.includes("getUserMedia") || msg.includes("permission") || msg.includes("NotAllowed")) {

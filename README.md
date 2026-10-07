@@ -18,6 +18,10 @@ Depois da migração 025, aplique manualmente `supabase/migrations/026_multi_exp
 
 No modo de superfície, WebXR com hit-test detecta chão ou mesa e usa âncoras quando o aparelho as oferece. Navegadores sem WebXR ou sem hit-test recebem um **modo manual** com câmera e orientação: o visitante pode posicionar a cena, mas esse modo não detecta planos nem rastreia o deslocamento físico do celular. Para validar fixação real no ambiente, teste em um dispositivo compatível com WebXR AR; também confira um aparelho sem suporte para verificar a alternativa manual.
 
+### Streaming HLS no construtor
+
+Adicione **Streaming HLS** na seção de mídia e informe, nas propriedades do elemento, a URL pública HTTPS da playlist `.m3u8`. Links com parâmetros de consulta são aceitos. A playlist e todos os segmentos precisam permitir CORS para a origem da plataforma. O mesmo elemento funciona em experiências com marcador, GPS ou superfície e usa a escala configurada no construtor. O vídeo inicia sem som; o visitante pode ativá-lo no player. YouTube não é suportado neste elemento. Nenhuma migração SQL é necessária.
+
 ### Variáveis de faturamento
 
 | Variável | Uso |

@@ -1,12 +1,14 @@
 "use client"
 
-import { Suspense, useMemo, useRef, useEffect, Component } from "react"
+import { Suspense, useMemo, useRef, useEffect, useState, Component } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { OrbitControls, Grid, Environment, ContactShadows, Text, Edges, useVideoTexture, useTexture, useGLTF, useAnimations } from "@react-three/drei"
 import { useStudioStore, projectTypeDimensions } from "@/store"
 import { StudioElement } from "@/types"
 import * as THREE from "three"
 import { BUTTON_CAPTION_SIZE, BUTTON_CAPTION_Y, BUTTON_PLANE_SIZE, imagePlaneSize, VIDEO_PLANE_SIZE } from "@/lib/ar/object-geometry"
+import { attachHlsSource } from "@/lib/ar/hls-video"
+import { isPublicHlsUrl } from "@/lib/ar/hls-url"
 
 const socialColors: Record<string, string> = {
   "botao-whatsapp": "#25D366",
@@ -273,6 +275,62 @@ function VideoPlane({ element }: { element: StudioElement }) {
   )
 }
 
+function HlsVideoStream({ source, opacity }: { source: string; opacity: number }) {
+  const [texture, setTexture] = useState<THREE.VideoTexture | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const video = document.createElement("video")
+    video.muted = true
+    video.loop = true
+    video.playsInline = true
+    video.autoplay = true
+    const nextTexture = new THREE.VideoTexture(video)
+    nextTexture.colorSpace = THREE.SRGBColorSpace
+    let cancelled = false
+    let release: (() => void) | undefined
+    const onReady = () => {
+      if (!cancelled) setTexture(nextTexture)
+      video.play().catch(() => {})
+    }
+    video.addEventListener("loadeddata", onReady)
+    attachHlsSource(video, source, setError)
+      .then((cleanup) => { if (cancelled) cleanup(); else release = cleanup })
+      .catch((cause) => { if (!cancelled) setError(String(cause)) })
+    return () => {
+      cancelled = true
+      video.removeEventListener("loadeddata", onReady)
+      release?.()
+      video.pause()
+      nextTexture.dispose()
+    }
+  }, [source])
+
+  return (
+    <group>
+      <mesh>
+        <planeGeometry args={VIDEO_PLANE_SIZE} />
+        <meshBasicMaterial map={texture ?? undefined} color={texture ? "white" : "#164e63"} side={2} opacity={opacity} transparent={opacity < 1} />
+      </mesh>
+      {!texture && <Text position={[0, 0, 0.02]} fontSize={0.09} maxWidth={1.3} color="white" anchorX="center" anchorY="middle">{error ? "Falha no HLS" : "Streaming HLS"}</Text>}
+    </group>
+  )
+}
+
+function HlsVideoPlane({ element }: { element: StudioElement }) {
+  const source = element.assetUrl
+  if (source && isPublicHlsUrl(source)) return <HlsVideoStream key={source} source={source} opacity={element.opacity} />
+  return (
+    <group>
+      <mesh>
+        <planeGeometry args={VIDEO_PLANE_SIZE} />
+        <meshBasicMaterial color="#164e63" side={2} opacity={element.opacity} transparent={element.opacity < 1} />
+      </mesh>
+      <Text position={[0, 0, 0.02]} fontSize={0.09} color="white" anchorX="center" anchorY="middle">Streaming HLS</Text>
+    </group>
+  )
+}
+
 const chromaKeyVert = `
   varying vec2 vUv;
   void main() {
@@ -386,6 +444,8 @@ function ElementRenderer({ element }: { element: StudioElement }) {
       return <Model3D element={element} />
     case "video-mp4":
       return <VideoPlane element={element} />
+    case "video-hls":
+      return <HlsVideoPlane element={element} />
     case "video-chromakey":
       return <ChromaKeyPlane element={element} />
     case "imagem":

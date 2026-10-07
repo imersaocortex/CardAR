@@ -5,6 +5,7 @@ import { StudioElement, Layer, ProjectType } from "@/types"
 import { mockElements, mockLayers } from "@/lib/mock-data"
 import { createClient } from "@/lib/supabase/client"
 import { selectPrimaryScene } from "@/lib/scenes"
+import { isPublicHlsUrl } from "@/lib/ar/hls-url"
 
 export const projectTypeDimensions: Record<ProjectType, { width: number; height: number; label: string }> = {
   cartao: { width: 0.85, height: 0.55, label: "Cartão de Visita (88mm × 48mm)" },
@@ -119,6 +120,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   saveScene: async () => {
     const { projectId, sceneId, elements } = get()
     if (!projectId) throw new Error("Projeto não carregado")
+    const invalidStream = elements.find((el) => el.visible && el.type === "video-hls" && !isPublicHlsUrl(el.assetUrl))
+    if (invalidStream) throw new Error(`Informe uma URL HTTPS .m3u8 válida para "${invalidStream.name}" antes de salvar.`)
     const supabase = createClient()
     // The database transaction either persists the entire scene or rolls it back.
     const { data, error } = await supabase.rpc("save_studio_scene", {

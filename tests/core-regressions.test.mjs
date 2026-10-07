@@ -20,6 +20,7 @@ const { getActionUrl } = load("src/lib/ar/actions.ts")
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
 const { createProjectSchema } = load("src/lib/schemas/index.ts")
 const objectGeometry = load("src/lib/ar/object-geometry.ts")
+const { isPublicHlsUrl } = load("src/lib/ar/hls-url.ts")
 const { validateCollectionMembers } = load("src/lib/ar/collection-validation.ts")
 
 test("collections reject mixed technologies, other organizations and unpublished projects", () => {
@@ -88,12 +89,20 @@ test("spatial objects turn their front toward the viewer on the horizontal plane
   assert.equal(yawTowardViewer(-6, 0, 0, 0), Math.PI / 2)
   assert.equal(yawTowardViewer(0, 0, 0, 0), null)
 })
+test("HLS links require HTTPS playlists and allow a query string", () => {
+  assert.equal(isPublicHlsUrl("https://media.example.com/live/stream.m3u8?token=public"), true)
+  for (const url of ["http://media.example.com/live.m3u8", "https://media.example.com/movie.mp4", "https://user:pass@media.example.com/live.m3u8", "not a URL", ""]) {
+    assert.equal(isPublicHlsUrl(url), false)
+  }
+})
 test("GPS and surface render saved object scale with the studio's video and image proportions", async () => {
+  let attachedHlsUrl = null
   const { buildSpatialScene } = load("src/lib/ar/spatial-scene.ts", {
     "three/examples/jsm/loaders/GLTFLoader.js": { GLTFLoader: class {} },
     "@/lib/ar/billboard": { yawTowardViewer },
     "@/lib/ar/spatial-media": { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio },
     "@/lib/ar/object-geometry": objectGeometry,
+    "@/lib/ar/hls-video": { attachHlsSource: async (_video, url) => { attachedHlsUrl = url; return () => {} } },
   })
   const originalDocument = globalThis.document
   const originalLoadAsync = THREE.TextureLoader.prototype.loadAsync
@@ -105,12 +114,14 @@ test("GPS and surface render saved object scale with the studio's video and imag
   try {
     scene = await buildSpatialScene([
       { ...base, id: "video", type: "video-mp4", assetUrl: "/test.mp4" },
+      { ...base, id: "hls", type: "video-hls", assetUrl: "https://media.example.com/live.m3u8" },
       { ...base, id: "chroma", type: "video-chromakey", assetUrl: "/test.mp4" },
       { ...base, id: "image", type: "imagem", assetUrl: "/test.png" },
       { ...base, id: "button", type: "botao-site", showCaption: true },
     ])
-    const [video, chroma, image, button] = scene.root.children
-    for (const group of [video, chroma]) {
+    const [video, hls, chroma, image, button] = scene.root.children
+    assert.equal(attachedHlsUrl, "https://media.example.com/live.m3u8")
+    for (const group of [video, hls, chroma]) {
       const mesh = group.children[0]
       assert.equal(mesh.geometry.parameters.width, 1.5)
       assert.equal(mesh.geometry.parameters.height, 0.85)
@@ -168,6 +179,7 @@ function studio(rpc) {
     "@/lib/supabase/client": { createClient: () => ({ rpc }) },
     "@/lib/mock-data": { mockElements: [], mockLayers: [] },
     "@/lib/scenes": { selectPrimaryScene },
+    "@/lib/ar/hls-url": { isPublicHlsUrl },
   }).useStudioStore
 }
 test("failed persistence never marks an unsaved scene as saved", async () => {
@@ -175,6 +187,13 @@ test("failed persistence never marks an unsaved scene as saved", async () => {
   store.setState({ projectId: "project", elements: [element], isSaved: false })
   await assert.rejects(store.getState().saveScene(), /Não foi possível salvar/)
   assert.equal(store.getState().isSaved, false)
+})
+test("studio refuses to save an HLS element without a valid playlist", async () => {
+  let writes = 0
+  const store = studio(async () => { writes++; return { data: "scene", error: null } })
+  store.setState({ projectId: "project", elements: [{ ...element, type: "video-hls", assetUrl: "http://example.com/live.m3u8" }], isSaved: false })
+  await assert.rejects(store.getState().saveScene(), /URL HTTPS .m3u8 válida/)
+  assert.equal(writes, 0)
 })
 test("save retains IDs and zero-valued settings", async () => {
   let saved

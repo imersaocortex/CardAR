@@ -4,6 +4,7 @@ import type { ArSceneObject } from "@/lib/mindar"
 import { yawTowardViewer } from "@/lib/ar/billboard"
 import { enableSpatialAudio, muteSpatialAudio, playSpatialVideoMuted } from "@/lib/ar/spatial-media"
 import { BUTTON_CAPTION_SIZE, BUTTON_CAPTION_Y, BUTTON_PLANE_SIZE, imagePlaneSize, VIDEO_PLANE_SIZE } from "@/lib/ar/object-geometry"
+import { attachHlsSource } from "@/lib/ar/hls-video"
 
 const buttonStyles: Record<string, { color: string; label: string; icon?: string }> = {
   "botao-whatsapp": { color: "#25D366", label: "WhatsApp", icon: "/whatsapp-icon.svg" },
@@ -73,12 +74,14 @@ export function disposeSpatialGroup(group: THREE.Object3D) {
 export async function buildSpatialScene(objects: ArSceneObject[]) {
   const root = new THREE.Group()
   const media: HTMLMediaElement[] = []
+  const streamCleanups: (() => void)[] = []
   const mixers: THREE.AnimationMixer[] = []
   const animated: { group: THREE.Group; object: ArSceneObject }[] = []
   const loader = new GLTFLoader()
   const viewer = new THREE.Vector3()
   const objectPosition = new THREE.Vector3()
   const dispose = () => {
+    streamCleanups.forEach((cleanup) => cleanup())
     media.forEach((element) => { element.pause(); element.removeAttribute("src"); element.load() })
     mixers.forEach((mixer) => { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()) })
     disposeSpatialGroup(root)
@@ -130,8 +133,13 @@ export async function buildSpatialScene(objects: ArSceneObject[]) {
         } else {
           const video = document.createElement("video")
           video.crossOrigin = "anonymous"; video.playsInline = true; video.loop = true; video.muted = true
-          video.src = object.assetUrl
           media.push(video)
+          if (object.type === "video-hls") {
+            video.autoplay = true
+            streamCleanups.push(await attachHlsSource(video, object.assetUrl))
+          } else {
+            video.src = object.assetUrl
+          }
           texture = new THREE.VideoTexture(video)
         }
         texture.colorSpace = THREE.SRGBColorSpace

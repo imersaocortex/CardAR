@@ -1,7 +1,7 @@
 "use client"
 
 import { useStudioStore } from "@/store"
-import { Eye, EyeOff, Lock, Unlock, GripVertical, Box, Video, MessageCircle, Globe, Image, Phone, Mail, Camera, Cuboid } from "lucide-react"
+import { Eye, EyeOff, Lock, Unlock, GripVertical, Box, Video, MessageCircle, Globe, Image, Phone, Mail, Camera, Cuboid, Radio } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
@@ -10,6 +10,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   "modelo-3d": Box,
   "modelo-3d-animado": Cuboid,
   "video-mp4": Video,
+  "video-hls": Radio,
   "video-chromakey": Camera,
   "botao-whatsapp": MessageCircle,
   "botao-site": Globe,

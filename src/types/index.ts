@@ -16,6 +16,7 @@ export type ElementType =
   | "modelo-3d"
   | "modelo-3d-animado"
   | "video-mp4"
+  | "video-hls"
   | "video-chromakey"
   | "imagem"
   | "audio"

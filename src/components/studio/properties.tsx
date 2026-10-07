@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AnimationType } from "@/types"
+import { AnimationType, StudioElement } from "@/types"
 import { toast } from "@/hooks/use-toast"
+import { isPublicHlsUrl } from "@/lib/ar/hls-url"
 
 interface AssetItem {
   id: string
@@ -40,6 +41,36 @@ const elementToAssetCategory: Record<string, string> = {
   "video-mp4": "video",
   "video-chromakey": "video",
   "imagem": "image",
+}
+
+function HlsUrlField({ element }: { element: StudioElement }) {
+  const updateElement = useStudioStore((state) => state.updateElement)
+  const [draft, setDraft] = useState(element.assetUrl ?? "")
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="hls-stream-url" className="text-xs">URL do streaming HLS</Label>
+      <Input
+        id="hls-stream-url"
+        type="url"
+        inputMode="url"
+        placeholder="https://exemplo.com/stream.m3u8"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          const source = draft.trim()
+          if (!source) updateElement(element.id, { assetUrl: undefined })
+          else if (isPublicHlsUrl(source)) {
+            if (source !== element.assetUrl) updateElement(element.id, { assetUrl: source })
+          } else {
+            toast({ title: "Link HLS inválido", description: "Use uma URL HTTPS pública terminada em .m3u8.", variant: "destructive" })
+          }
+        }}
+        className="h-8 text-xs"
+      />
+      <p className="text-[11px] leading-snug text-muted-foreground">O servidor do vídeo precisa permitir acesso CORS à playlist e aos segmentos. O áudio é ativado pelo visitante na experiência.</p>
+      {draft && !isPublicHlsUrl(draft) && <p className="text-[11px] text-destructive">Informe uma URL HTTPS válida de playlist .m3u8.</p>}
+    </div>
+  )
 }
 
 export function StudioProperties() {
@@ -149,6 +180,10 @@ export function StudioProperties() {
         </div>
 
         <Separator />
+
+        {selectedElement.type === "video-hls" && (
+          <HlsUrlField key={selectedElement.id} element={selectedElement} />
+        )}
 
         {isMedia && (
           <div>

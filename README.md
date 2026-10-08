@@ -22,6 +22,14 @@ No modo de superfície, WebXR com hit-test detecta chão ou mesa e usa âncoras 
 
 Adicione **Streaming HLS** na seção de mídia e informe, nas propriedades do elemento, a URL pública HTTPS da playlist `.m3u8`. Links com parâmetros de consulta são aceitos. A playlist e todos os segmentos precisam permitir CORS para a origem da plataforma. O mesmo elemento funciona em experiências com marcador, GPS ou superfície e usa a escala configurada no construtor. O vídeo inicia sem som; o visitante pode ativá-lo no player. YouTube não é suportado neste elemento. Nenhuma migração SQL é necessária.
 
+### Óculos VR e instalação PWA
+
+Cada link de experiência individual ou coleção publica um manifesto PWA próprio e oferece **Instalar app**. O aplicativo abre diretamente aquele link. A instalação depende do navegador; a experiência e as mídias ainda precisam de internet. O service worker fornece apenas uma tela explicativa quando a navegação estiver offline e não armazena dados de projetos, autenticação ou mídia. Nenhuma migração SQL é necessária.
+
+O botão **Óculos VR** oferece visão dividida para óculos que usam o smartphone, como Google Cardboard. Marcador e GPS continuam usando a câmera e os sensores do celular; o modo de superfície usa o posicionamento manual existente, sem detecção física de planos. Ative a visão dividida e coloque o telefone na horizontal nos óculos. Para QR, gravação e outros controles de toque, retire o telefone e saia da visão dividida. O modo normal permanece inalterado.
+
+No Meta Quest Browser, o modo de superfície já abre uma sessão WebXR `immersive-ar` com visão do ambiente quando o aparelho oferece hit-test. O navegador não fornece os pixels da câmera de passthrough à página para o rastreamento MindAR dos marcadores; os modos de marcador e GPS não são oferecidos ali como experiências imersivas equivalentes. Publicar um PWA na Meta Horizon Store exige empacotamento, assinatura e testes no headset, além deste manifesto. Valide o Cardboard em um smartphone real e a superfície em um Meta Quest antes de anunciar compatibilidade com modelos específicos.
+
 ### Variáveis de faturamento
 
 | Variável | Uso |

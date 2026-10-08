@@ -22,6 +22,19 @@ const { createProjectSchema } = load("src/lib/schemas/index.ts")
 const objectGeometry = load("src/lib/ar/object-geometry.ts")
 const { isPublicHlsUrl } = load("src/lib/ar/hls-url.ts")
 const { validateCollectionMembers } = load("src/lib/ar/collection-validation.ts")
+const { experienceManifest } = load("src/lib/pwa/experience-manifest.ts")
+
+test("each installable experience opens its own URL", () => {
+  const single = experienceManifest("Visita AR", "/experience/visita")
+  const collection = experienceManifest("Coleção", "/experience/multi/colecao")
+  assert.equal(single.start_url, "/experience/visita")
+  assert.equal(collection.start_url, "/experience/multi/colecao")
+  assert.notEqual(single.id, collection.id)
+  assert.equal(single.scope, "/experience/visita")
+  assert.equal(collection.scope, "/experience/multi/colecao")
+  assert.ok(single.icons.some((icon) => icon.sizes === "192x192"))
+  assert.ok(single.icons.some((icon) => icon.sizes === "512x512"))
+})
 
 test("collections reject mixed technologies, other organizations and unpublished projects", () => {
   const marker = (id, overrides = {}) => ({ id, organization_id: "owner", tracking_mode: "marker", status: "published", project_markers: [{ image_url: "https://example.com/marker.png" }], ...overrides })

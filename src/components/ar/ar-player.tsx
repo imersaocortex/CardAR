@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as THREE from "three"
+import { StereoEffect } from "three/addons/effects/StereoEffect.js"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { getMarkerDimensions } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
@@ -15,11 +16,14 @@ interface ArPlayerProps {
   siteName?: string
   onStateChange?: (state: ArState) => void
   onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
+  cardboard?: boolean
 }
 
-export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction }: ArPlayerProps) {
+export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction, cardboard = false }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const stereoVideoRef = useRef<HTMLVideoElement | null>(null)
+  const cardboardRef = useRef(cardboard)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -43,6 +47,12 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
   const [needsVideoInteraction, setNeedsVideoInteraction] = useState(false)
   const videoElementsRef = useRef<HTMLVideoElement[]>([])
   const streamCleanupsRef = useRef<(() => void)[]>([])
+
+  useEffect(() => {
+    cardboardRef.current = cardboard
+    if (videoRef.current) videoRef.current.style.width = cardboard ? "50%" : "100%"
+    if (stereoVideoRef.current) stereoVideoRef.current.style.display = cardboard ? "block" : "none"
+  }, [cardboard])
 
   const step = useCallback((msg: string) => {
     console.log("[AR]", msg)
@@ -501,15 +511,34 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       videoRef.current = video
       cleanups.push(() => video.remove())
 
+      const stereoVideo = document.createElement("video")
+      stereoVideo.setAttribute("autoplay", "")
+      stereoVideo.setAttribute("muted", "")
+      stereoVideo.setAttribute("playsinline", "")
+      stereoVideo.style.position = "absolute"
+      stereoVideo.style.top = "0"
+      stereoVideo.style.right = "0"
+      stereoVideo.style.width = "50%"
+      stereoVideo.style.height = "100%"
+      stereoVideo.style.objectFit = "cover"
+      stereoVideo.style.zIndex = "-2"
+      stereoVideo.style.display = cardboardRef.current ? "block" : "none"
+      video.style.width = cardboardRef.current ? "50%" : "100%"
+      container.appendChild(stereoVideo)
+      stereoVideoRef.current = stereoVideo
+      cleanups.push(() => { stereoVideo.remove(); stereoVideoRef.current = null })
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       })
       streamRef.current = stream
       video.srcObject = stream
+      stereoVideo.srcObject = stream
       cleanups.push(() => stream.getTracks().forEach((t) => t.stop()))
 
       await video.play()
+      void stereoVideo.play().catch(() => {})
 
       await new Promise<void>((resolve, reject) => {
         let attempts = 0
@@ -552,6 +581,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       renderer.domElement.style.height = "100%"
       container.appendChild(renderer.domElement)
       rendererRef.current = renderer
+      const stereoEffect = new StereoEffect(renderer)
       cleanups.push(() => {
         renderer.dispose()
         renderer.domElement.remove()
@@ -826,6 +856,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       let lastClickTime = 0
 
       const handleClickEvent = (event: MouseEvent) => {
+        if (cardboardRef.current) return
         const now = Date.now()
         if (now - lastClickTime < 200) return
         lastClickTime = now
@@ -870,7 +901,8 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
           }))
         }
 
-        renderer.render(scene, cam)
+        if (cardboardRef.current) stereoEffect.render(scene, cam)
+        else { renderer.setViewport(0, 0, window.innerWidth, window.innerHeight); renderer.render(scene, cam) }
       }
 
       animate()
@@ -1052,13 +1084,9 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
     <div className="fixed inset-0 overflow-hidden">
       <div ref={containerRef} className="fixed inset-0" />
 
-      {hasWatermark && (
-        <div className="absolute bottom-20 left-0 right-0 z-30 flex justify-center pointer-events-none">
-          <div className="px-3 py-1 rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
-            <span className="text-[10px] text-white/50 font-medium">{siteName}</span>
-          </div>
-        </div>
-      )}
+      {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-30 flex ${cardboard ? "justify-around" : "justify-center"}`}>
+        {(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye} className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] font-medium text-white/50 backdrop-blur-sm">{siteName}</span>)}
+      </div>}
 
       {needsVideoInteraction && arState === "detected" && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
@@ -1077,7 +1105,11 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         </div>
       )}
 
-      {showOverlay && (
+      {cardboard && <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex text-center text-[10px] text-white/80 drop-shadow-md" role="status">
+        {[0, 1].map((eye) => <span key={eye} className="w-1/2 px-2">{arState === "detected" ? "Marcador detectado" : arState === "loading" ? "Carregando marcador…" : "Aponte para o marcador"}</span>)}
+      </div>}
+
+      {showOverlay && !cardboard && (
         <>
           {arState === "loading" && (
             <div className="absolute top-8 left-1/2 z-10 -translate-x-1/2">
@@ -1105,7 +1137,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         </>
       )}
 
-      {arState !== "loading" && arState !== "error" && (
+      {!cardboard && arState !== "loading" && arState !== "error" && (
         <div className="absolute bottom-6 left-0 right-0 z-20">
           <ArActions
             videoRef={videoRef}
@@ -1115,7 +1147,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         </div>
       )}
 
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 pointer-events-none">
+      {!cardboard && <div className="absolute top-0 left-0 right-0 z-20 p-4 pointer-events-none">
         <div className="flex items-center justify-between pointer-events-auto">
           <div className="flex items-center gap-2">
             <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-secondary">
@@ -1134,7 +1166,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
             />
           </div>
         </div>
-      </div>
+      </div>}
 
     </div>
   )

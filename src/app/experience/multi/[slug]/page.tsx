@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { useParams } from "next/navigation"
 import { ArPlayer } from "@/components/ar/ar-player"
+import { PwaInstallButton } from "@/components/ar/pwa-install-button"
+import { CardboardToggle } from "@/components/ar/cardboard-toggle"
 import type { ArExperienceData } from "@/lib/mindar"
 
 const GpsPlayer = dynamic(() => import("@/components/ar/gps-player").then((module) => module.GpsPlayer), { ssr: false })
@@ -19,6 +21,7 @@ export default function MultiExperiencePage() {
   const { slug } = useParams<{ slug: string }>()
   const [data, setData] = useState<CollectionData | null>(null)
   const [error, setError] = useState("")
+  const [cardboard, setCardboard] = useState(false)
   const sessionId = useRef(`multi_${crypto.randomUUID()}`)
   useEffect(() => {
     let alive = true
@@ -50,6 +53,6 @@ export default function MultiExperiencePage() {
   if (error) return <main className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white"><div><h1 className="text-xl font-semibold">Experiência indisponível</h1><p className="mt-2 text-sm text-white/70">{error}</p></div></main>
   if (!data) return <main className="flex min-h-screen items-center justify-center bg-black text-white">Carregando experiência…</main>
   const first = { ...data.projects[0], name: data.collection.name }
-  if (data.collection.trackingMode === "gps") return <GpsPlayer experience={first} experiences={data.projects} hasWatermark={data.hasWatermark} siteName={data.siteName} onInteraction={interaction} />
-  return <ArPlayer experience={first} experiences={data.projects} hasWatermark={data.hasWatermark} siteName={data.siteName} onInteraction={interaction} />
+  if (data.collection.trackingMode === "gps") return <><GpsPlayer experience={first} experiences={data.projects} hasWatermark={data.hasWatermark} siteName={data.siteName} onInteraction={interaction} cardboard={cardboard} /><PwaInstallButton hidden={cardboard} /><CardboardToggle active={cardboard} trackingMode="gps" onChange={setCardboard} /></>
+  return <><ArPlayer experience={first} experiences={data.projects} hasWatermark={data.hasWatermark} siteName={data.siteName} onInteraction={interaction} cardboard={cardboard} /><PwaInstallButton hidden={cardboard} /><CardboardToggle active={cardboard} trackingMode="marker" onChange={setCardboard} /></>
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import * as THREE from "three"
+import { StereoEffect } from "three/addons/effects/StereoEffect.js"
 import { buildSpatialScene } from "@/lib/ar/spatial-scene"
 import { bearingDifference, geoOffset, gpsDisplayPosition, isGpsWithinRadius } from "@/lib/ar/geo"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
@@ -13,12 +14,16 @@ import { SpatialActions } from "./spatial-actions"
 type CompassEvent = DeviceOrientationEvent & { webkitCompassHeading?: number; webkitCompassAccuracy?: number }
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: (absolute?: boolean) => Promise<string> }
 
-export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction }: {
+export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false }: {
   experience: ArExperienceData; experiences?: ArExperienceData[]; siteName: string; hasWatermark: boolean; onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
+  cardboard?: boolean
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const stereoVideo = useRef<HTMLVideoElement>(null)
+  const cardboardRef = useRef(cardboard)
+  useEffect(() => { cardboardRef.current = cardboard }, [cardboard])
   const stop = useRef<(() => void) | null>(null)
   const busy = useRef(false)
   const alive = useRef(true)
@@ -57,6 +62,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       listeners.forEach((remove) => remove())
       stream?.getTracks().forEach((track) => track.stop())
       if (video.current) video.current.srcObject = null
+      if (stereoVideo.current) stereoVideo.current.srcObject = null
       renderer?.setAnimationLoop(null); contents.forEach((content) => content.dispose()); renderer?.dispose(); renderer?.domElement.remove()
       mediaControl.current = null
       busy.current = false
@@ -73,7 +79,9 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
       if (ended || !alive.current) { stream.getTracks().forEach((track) => track.stop()); return }
       video.current!.srcObject = stream
+      stereoVideo.current!.srcObject = stream
       await video.current!.play()
+      void stereoVideo.current!.play().catch(() => {})
       for (const project of projects) {
         const loaded = await buildSpatialScene(project.scene?.objects ?? [], { autoplayHls: false })
         contents.push(loaded)
@@ -89,6 +97,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
       host.current!.appendChild(renderer.domElement)
+      const stereoEffect = new StereoEffect(renderer)
       const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 10000)
       const scene = new THREE.Scene()
       const anchors = contents.map((content) => {
@@ -206,7 +215,8 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
           callback.current?.(wasVisible ? "detected" : "lost")
         }
         contents.forEach((content) => content.update(delta, clock.elapsedTime, camera.position))
-        renderer.render(scene, camera)
+        if (cardboardRef.current) stereoEffect.render(scene, camera)
+        else { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, camera) }
       })
       setReady(true)
       callback.current?.("scanning")
@@ -232,13 +242,14 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
   const hasMedia = visibleProjectIndices.some((index) => projectsForDisplay[index]?.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-"))))
 
   return <div className="fixed inset-0 overflow-hidden bg-slate-950 text-white">
-    <video ref={video} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" />
+    <video ref={video} autoPlay muted playsInline className={`absolute inset-y-0 left-0 h-full object-cover ${cardboard ? "w-1/2" : "w-full"}`} />
+    <video ref={stereoVideo} autoPlay muted playsInline aria-hidden="true" className={`absolute inset-y-0 right-0 h-full w-1/2 object-cover ${cardboard ? "block" : "hidden"}`} />
     <div ref={host} className="absolute inset-0" />
-    <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-4">
+    {!cardboard && <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-4">
       <span className="max-w-[55%] truncate text-[11px] font-medium text-white/70 drop-shadow-md">{experience.name}</span>
       {active && <button type="button" onClick={() => stop.current?.()} aria-label="Encerrar experiência" className="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/80 backdrop-blur-sm"><X className="h-4 w-4" /></button>}
-    </div>
-    {active && location && <div className="pointer-events-none absolute right-4 top-14 z-20 text-right font-mono text-[10px] leading-relaxed text-white/70 drop-shadow-md">
+    </div>}
+    {!cardboard && active && location && <div className="pointer-events-none absolute right-4 top-14 z-20 text-right font-mono text-[10px] leading-relaxed text-white/70 drop-shadow-md">
       <p>{Math.round(location.distance)} m até o ponto</p>
       <p>GPS ±{Math.round(location.accuracy)} m · raio {location.radius} m</p>
     </div>}
@@ -246,13 +257,14 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       <Button onClick={start}>Iniciar experiência GPS</Button>
       <p className="max-w-xs text-xs text-white/75" role="status">{status}</p>
     </div>}
-    {active && <div className="pointer-events-none absolute left-4 top-12 z-20 max-w-[50%] text-[10px] leading-snug text-white/75 drop-shadow-md" role="status">
+    {!cardboard && active && <div className="pointer-events-none absolute left-4 top-12 z-20 max-w-[50%] text-[10px] leading-snug text-white/75 drop-shadow-md" role="status">
       {ready && visible && location ? (location.atTarget ? "Próximo ao ponto" : turn !== null && Math.abs(turn) < 15 ? "Objeto à frente" : turn !== null ? <span>Gire {Math.round(Math.abs(turn))}° para {turn > 0 ? "a direita" : "a esquerda"} <span className="inline-block" style={{ transform: `rotate(${turn}deg)` }} aria-hidden="true">↑</span></span> : status) : status}
     </div>}
-    {hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-center"><span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span></div>}
+    {cardboard && active && <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex text-center text-[10px] text-white/70 drop-shadow-md" role="status">{[0, 1].map((eye) => <span key={eye} className="w-1/2 px-2">{location ? `${Math.round(location.distance)} m · ${status}` : status}</span>)}</div>}
+    {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex ${cardboard ? "justify-around" : "justify-center"}`}>{(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye} className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span>)}</div>}
     {ready && <>
-      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={visibleProjectIndices.flatMap((index) => projectsForDisplay[index]?.scene?.objects ?? [])} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
-      <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>
+      {!cardboard && visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={visibleProjectIndices.flatMap((index) => projectsForDisplay[index]?.scene?.objects ?? [])} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
+      {!cardboard && <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>}
     </>}
   </div>
 }

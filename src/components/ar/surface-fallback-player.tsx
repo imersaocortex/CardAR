@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import * as THREE from "three"
+import { StereoEffect } from "three/addons/effects/StereoEffect.js"
 import { Button } from "@/components/ui/button"
 import { buildSpatialScene } from "@/lib/ar/spatial-scene"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
@@ -10,19 +11,22 @@ import { SpatialActions } from "./spatial-actions"
 
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<string> }
 
-export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction }: {
+export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false }: {
   experience: ArExperienceData; siteName: string; hasWatermark: boolean
   onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
+  cardboard?: boolean
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const stereoVideo = useRef<HTMLVideoElement>(null)
   const stop = useRef<(() => void) | null>(null)
   const place = useRef<(height: number) => void>(() => {})
   const media = useRef<{ enableAudio: () => Promise<boolean>; muteAudio: () => void } | null>(null)
   const alive = useRef(true)
   const [active, setActive] = useState(false)
   const [placed, setPlaced] = useState(false)
+  const [showControls, setShowControls] = useState(true)
   const [soundOn, setSoundOn] = useState(false)
   const [height, setHeight] = useState<"table" | "floor">("table")
   const [status, setStatus] = useState("Neste aparelho, posicione a cena manualmente. A câmera acompanha a rotação, mas não detecta a superfície nem acompanha deslocamentos físicos.")
@@ -42,6 +46,7 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       listeners.forEach((remove) => remove())
       stream?.getTracks().forEach((track) => track.stop())
       if (video.current) video.current.srcObject = null
+      if (stereoVideo.current) stereoVideo.current.srcObject = null
       renderer?.setAnimationLoop(null)
       content?.dispose()
       renderer?.dispose()
@@ -59,13 +64,16 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
       if (ended || !alive.current) { stream.getTracks().forEach((track) => track.stop()); return }
       video.current.srcObject = stream
+      stereoVideo.current!.srcObject = stream
       await video.current.play()
+      void stereoVideo.current!.play().catch(() => {})
       content = await buildSpatialScene(experience.scene?.objects ?? [])
       if (ended || !alive.current) return
       media.current = content
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
       host.current.appendChild(renderer.domElement)
+      const stereoEffect = new StereoEffect(renderer)
       const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.01, 100)
       camera.position.set(0, 1.5, 0)
       const scene = new THREE.Scene()
@@ -101,7 +109,8 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       renderer.setAnimationLoop(() => {
         if (ended || !renderer || !content) return
         content.update(clock.getDelta(), clock.elapsedTime, camera.position)
-        renderer.render(scene, camera)
+        if (cardboard) stereoEffect.render(scene, camera)
+        else { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, camera) }
       })
       setStatus("Escolha chão ou mesa e toque em Posicionar. O movimento físico do celular não é rastreado neste modo.")
       onStateChange?.("scanning")
@@ -118,21 +127,25 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
     else setSoundOn(await media.current.enableAudio())
   }
   return <div className="fixed inset-0 overflow-hidden bg-slate-950 text-white">
-    <video ref={video} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" />
+    <video ref={video} autoPlay muted playsInline className={`absolute inset-y-0 left-0 h-full object-cover ${cardboard ? "w-1/2" : "w-full"}`} />
+    <video ref={stereoVideo} autoPlay muted playsInline aria-hidden="true" className={`absolute inset-y-0 right-0 h-full w-1/2 object-cover ${cardboard ? "block" : "hidden"}`} />
     <div ref={host} className="absolute inset-0" />
-    <div className="absolute inset-x-4 top-4 z-20 rounded-xl bg-black/55 p-3 text-center backdrop-blur-sm">
+    {!cardboard && <div className="absolute inset-x-4 top-4 z-20 rounded-xl bg-black/55 p-3 text-center backdrop-blur-sm">
       <p className="text-sm font-medium">{experience.name} · posicionamento manual</p>
       <p className="mt-1 text-xs text-white/75" role="status">{status}</p>
-    </div>
+    </div>}
+    {cardboard && <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex text-center text-[10px] text-white/75 drop-shadow-md" role="status">{[0, 1].map((eye) => <span key={eye} className="w-1/2 px-2">{placed ? "Cena posicionada" : "Posicione a cena antes de colocar o celular nos óculos"}</span>)}</div>}
     {!active && <div className="absolute inset-0 z-10 flex items-center justify-center"><Button onClick={start}>Abrir câmera</Button></div>}
-    {active && <div className="absolute inset-x-4 bottom-24 z-20 flex flex-wrap items-center justify-center gap-2 rounded-xl bg-black/55 p-3 backdrop-blur-sm">
+    {active && (!cardboard || showControls) && <div className="absolute inset-x-4 bottom-24 z-20 flex flex-wrap items-center justify-center gap-2 rounded-xl bg-black/55 p-3 backdrop-blur-sm">
       <label className="text-xs">Altura <select value={height} onChange={(event) => setHeight(event.target.value as "table" | "floor")} className="ml-1 rounded bg-slate-900 p-2"><option value="table">Mesa</option><option value="floor">Chão</option></select></label>
       <Button size="sm" onClick={() => place.current(height === "floor" ? 0 : 0.8)}>{placed ? "Reposicionar" : "Posicionar"}</Button>
       <Button size="sm" variant="outline" onClick={() => stop.current?.()}>Encerrar</Button>
       {placed && <SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />}
       {placed && hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}
+      {cardboard && placed && <Button size="sm" variant="outline" onClick={() => setShowControls(false)}>Ocultar controles</Button>}
     </div>}
-    {hasWatermark && siteName && <span className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 text-center text-[10px] text-white/50">{siteName}</span>}
-    {active && <div className="absolute bottom-5 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>}
+    {cardboard && active && placed && !showControls && <button type="button" onClick={() => setShowControls(true)} className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[10px] text-white/75">Mostrar controles</button>}
+    {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex text-[10px] text-white/50 ${cardboard ? "justify-around" : "justify-center"}`}>{(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye}>{siteName}</span>)}</div>}
+    {active && (!cardboard || showControls) && <div className="absolute bottom-5 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>}
   </div>
 }

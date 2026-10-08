@@ -7,6 +7,9 @@ const GpsPlayer = dynamic(() => import("@/components/ar/gps-player").then((modul
 import { useParams } from "next/navigation"
 import { Loader2, X } from "lucide-react"
 import { ArPlayer } from "@/components/ar/ar-player"
+import { PwaInstallButton } from "@/components/ar/pwa-install-button"
+import { CardboardToggle } from "@/components/ar/cardboard-toggle"
+import { SurfaceFallbackPlayer } from "@/components/ar/surface-fallback-player"
 import { NoCamera, MarkerNotCompiled } from "@/components/ar/ar-fallbacks"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 
@@ -42,6 +45,7 @@ export default function ExperiencePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [arState, setArState] = useState<ArState>("loading")
+  const [cardboard, setCardboard] = useState(false)
   const sessionIdRef = useRef(generateSessionId())
   const trackedRef = useRef({ view: false, detected: false })
 
@@ -116,8 +120,11 @@ export default function ExperiencePage() {
     )
   }
 
-  if (experience.trackingMode === "surface") return <SurfacePlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} />
-  if (experience.trackingMode === "gps") return <GpsPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} />
+  if (experience.trackingMode === "surface") return <>{cardboard
+    ? <SurfaceFallbackPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} cardboard />
+    : <SurfacePlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} />}
+    <PwaInstallButton hidden={cardboard} /><CardboardToggle active={cardboard} trackingMode="surface" onChange={setCardboard} /></>
+  if (experience.trackingMode === "gps") return <><GpsPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} cardboard={cardboard} /><PwaInstallButton hidden={cardboard} /><CardboardToggle active={cardboard} trackingMode="gps" onChange={setCardboard} /></>
 
   if (!experience.marker?.targetUrl) {
     return (
@@ -133,9 +140,12 @@ export default function ExperiencePage() {
         experience={experience}
         hasWatermark={hasWatermark}
         siteName={siteName}
+        cardboard={cardboard}
         onStateChange={handleStateChange}
         onInteraction={handleInteraction}
       />
+      <PwaInstallButton hidden={cardboard} />
+      <CardboardToggle active={cardboard} trackingMode="marker" onChange={setCardboard} />
     </div>
   )
 }

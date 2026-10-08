@@ -24,7 +24,7 @@ Adicione **Streaming HLS** na seção de mídia e informe, nas propriedades do e
 
 ### Óculos VR e instalação PWA
 
-Cada link de experiência individual ou coleção publica um manifesto PWA próprio e oferece **Instalar app**. O aplicativo abre diretamente aquele link. A instalação depende do navegador; a experiência e as mídias ainda precisam de internet. O service worker fornece apenas uma tela explicativa quando a navegação estiver offline e não armazena dados de projetos, autenticação ou mídia. Nenhuma migração SQL é necessária.
+Cada link de experiência individual ou coleção publica um manifesto PWA próprio. O botão **Instalar app** aparece no Chrome apenas quando o navegador oferece uma instalação válida e desaparece após instalar; no Safari do iPhone, orienta a adição pela tela de compartilhamento. Os ícones PWA foram gerados a partir do favicon atualmente configurado na identidade visual. Se o favicon for trocado no painel, regenere `public/pwa-favicon-192.png` e `public/pwa-favicon-512.png` a partir da nova imagem. O aplicativo abre diretamente aquele link. A experiência e as mídias ainda precisam de internet. O service worker fornece apenas uma tela explicativa quando a navegação estiver offline e não armazena dados de projetos, autenticação ou mídia. Nenhuma migração SQL é necessária.
 
 O botão **Óculos VR** oferece visão dividida para óculos que usam o smartphone, como Google Cardboard. Marcador e GPS continuam usando a câmera e os sensores do celular; o modo de superfície usa o posicionamento manual existente, sem detecção física de planos. Ative a visão dividida e coloque o telefone na horizontal nos óculos. Para QR, gravação e outros controles de toque, retire o telefone e saia da visão dividida. O modo normal permanece inalterado.
 

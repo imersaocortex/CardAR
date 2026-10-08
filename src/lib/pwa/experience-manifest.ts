@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next"
 
-export function experienceManifest(name: string, path: string): MetadataRoute.Manifest {
+export function experienceManifest(name: string, path: string, origin: string): MetadataRoute.Manifest {
   return {
     id: path,
     name,
@@ -12,14 +12,19 @@ export function experienceManifest(name: string, path: string): MetadataRoute.Ma
     background_color: "#020617",
     theme_color: "#020617",
     icons: [
-      { src: "/pwa-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/pwa-favicon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/pwa-favicon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
     ],
+    related_applications: [{
+      platform: "webapp",
+      url: `${origin}${path}/manifest.webmanifest`,
+      id: `${origin}${path}`,
+    }],
   }
 }
 
-export function manifestResponse(name: string, path: string) {
-  return new Response(JSON.stringify(experienceManifest(name, path)), {
+export function manifestResponse(name: string, path: string, origin: string) {
+  return new Response(JSON.stringify(experienceManifest(name, path, origin)), {
     headers: { "Content-Type": "application/manifest+json; charset=utf-8", "Cache-Control": "no-store" },
   })
 }

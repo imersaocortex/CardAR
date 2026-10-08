@@ -25,8 +25,8 @@ const { validateCollectionMembers } = load("src/lib/ar/collection-validation.ts"
 const { experienceManifest } = load("src/lib/pwa/experience-manifest.ts")
 
 test("each installable experience opens its own URL", () => {
-  const single = experienceManifest("Visita AR", "/experience/visita")
-  const collection = experienceManifest("Coleção", "/experience/multi/colecao")
+  const single = experienceManifest("Visita AR", "/experience/visita", "https://example.com")
+  const collection = experienceManifest("Coleção", "/experience/multi/colecao", "https://example.com")
   assert.equal(single.start_url, "/experience/visita")
   assert.equal(collection.start_url, "/experience/multi/colecao")
   assert.notEqual(single.id, collection.id)
@@ -34,6 +34,9 @@ test("each installable experience opens its own URL", () => {
   assert.equal(collection.scope, "/experience/multi/colecao")
   assert.ok(single.icons.some((icon) => icon.sizes === "192x192"))
   assert.ok(single.icons.some((icon) => icon.sizes === "512x512"))
+  assert.ok(single.icons.every((icon) => icon.src.startsWith("/pwa-favicon-")))
+  assert.equal(single.related_applications[0].url, "https://example.com/experience/visita/manifest.webmanifest")
+  assert.equal(single.related_applications[0].id, "https://example.com/experience/visita")
 })
 
 test("collections reject mixed technologies, other organizations and unpublished projects", () => {

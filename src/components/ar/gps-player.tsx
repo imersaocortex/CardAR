@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import * as THREE from "three"
 import { buildSpatialScene } from "@/lib/ar/spatial-scene"
-import { bearingDifference, geoOffset, gpsDisplayPosition } from "@/lib/ar/geo"
+import { bearingDifference, geoOffset, gpsDisplayPosition, isGpsWithinRadius } from "@/lib/ar/geo"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
@@ -27,12 +27,14 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
   const [active, setActive] = useState(false)
   const [ready, setReady] = useState(false)
   const [visible, setVisible] = useState(false)
+  const [visibleProjectIndices, setVisibleProjectIndices] = useState<number[]>([])
   const [soundOn, setSoundOn] = useState(false)
+  const soundOnRef = useRef(false)
   const [soundError, setSoundError] = useState(false)
   const [heading, setHeading] = useState<number | null>(null)
   const mediaControl = useRef<{ enableAudio: () => Promise<boolean>; muteAudio: () => void } | null>(null)
   const [status, setStatus] = useState("A experiência aparecerá na direção do ponto geográfico. Permita câmera, localização e orientação.")
-  const [location, setLocation] = useState<{ distance: number; accuracy: number; bearing: number; atTarget: boolean; nearby: boolean } | null>(null)
+  const [location, setLocation] = useState<{ distance: number; accuracy: number; bearing: number; atTarget: boolean; radius: number } | null>(null)
   useEffect(() => { alive.current = true; return () => { alive.current = false; stop.current?.() } }, [])
 
   async function start() {
@@ -44,6 +46,8 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
     let renderer: THREE.WebGLRenderer | undefined
     const projects = experiences?.length ? experiences : [experience]
     const contents: Awaited<ReturnType<typeof buildSpatialScene>>[] = []
+    const inRange = projects.map(() => false)
+    const visibleByIndex = projects.map(() => false)
     let watch: number | undefined
     const listeners: (() => void)[] = []
     stop.current = () => {
@@ -56,7 +60,8 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       renderer?.setAnimationLoop(null); contents.forEach((content) => content.dispose()); renderer?.dispose(); renderer?.domElement.remove()
       mediaControl.current = null
       busy.current = false
-      if (alive.current) { setActive(false); setReady(false); setVisible(false); setSoundOn(false); setSoundError(false); setLocation(null); setHeading(null); setStatus("Experiência encerrada. Toque para iniciar novamente.") }
+      soundOnRef.current = false
+      if (alive.current) { setActive(false); setReady(false); setVisible(false); setVisibleProjectIndices([]); setSoundOn(false); setSoundError(false); setLocation(null); setHeading(null); setStatus("Experiência encerrada. Toque para iniciar novamente.") }
     }
     try {
       if (projects.some((project) => project.latitude == null || project.longitude == null)) throw new Error("As coordenadas não foram configuradas.")
@@ -70,7 +75,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       video.current!.srcObject = stream
       await video.current!.play()
       for (const project of projects) {
-        const loaded = await buildSpatialScene(project.scene?.objects ?? [])
+        const loaded = await buildSpatialScene(project.scene?.objects ?? [], { autoplayHls: false })
         contents.push(loaded)
       }
       if (ended || !alive.current) return
@@ -78,7 +83,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
         throw new Error("Esta cena ainda não tem um objeto visível. Adicione um modelo, imagem ou vídeo no editor.")
       }
       mediaControl.current = {
-        enableAudio: async () => (await Promise.all(contents.map((content) => content.enableAudio()))).some(Boolean),
+        enableAudio: async () => (await Promise.all(contents.map((content, index) => visibleByIndex[index] ? content.enableAudio() : Promise.resolve(false)))).some(Boolean),
         muteAudio: () => contents.forEach((content) => content.muteAudio()),
       }
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
@@ -96,7 +101,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 3))
       const resize = () => { renderer!.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() }
       resize(); window.addEventListener("resize", resize); listeners.push(() => window.removeEventListener("resize", resize))
-      let compassAt = 0, positionAt = 0, atTarget = false, wasVisible = false
+      let compassAt = 0, positionAt = 0, atTarget = false, wasVisible = false, nearestRadius = 100
       const lastReliableBearings: (number | null)[] = projects.map(() => null)
       const desiredPositions = projects.map(() => new THREE.Vector3())
       let compassAccuracy: number | null = null
@@ -122,19 +127,24 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
         if (ended) return
         const firstFix = positionAt === 0
         positionAt = Date.now()
-        let nearest: { distance: number; bearing: number; atTarget: boolean; nearby: boolean } | null = null
+        type NearbyPoint = { distance: number; bearing: number; atTarget: boolean; radius: number }
+        let nearest: NearbyPoint | null = null
+        let nearestInRange: NearbyPoint | null = null
         for (const [index, project] of projects.entries()) {
           const offset = geoOffset(coords.latitude, coords.longitude, project.latitude!, project.longitude!)
           const placement = gpsDisplayPosition(offset, coords.accuracy, lastReliableBearings[index])
+          const radius = project.activationRadius ?? 100
+          const nearby = isGpsWithinRadius(offset.distance, radius)
+          inRange[index] = nearby
           if (!placement.atTarget) lastReliableBearings[index] = offset.bearing
           desiredPositions[index].set(placement.east, 0, -placement.north)
           if (firstFix) anchors[index].position.copy(desiredPositions[index])
-          if (!nearest || offset.distance < nearest.distance) nearest = {
-            distance: offset.distance, bearing: offset.bearing, atTarget: placement.atTarget,
-            nearby: offset.distance <= (project.activationRadius ?? 100),
-          }
+          const point = { distance: offset.distance, bearing: offset.bearing, atTarget: placement.atTarget, radius }
+          if (!nearest || point.distance < nearest.distance) nearest = point
+          if (nearby && (!nearestInRange || point.distance < nearestInRange.distance)) nearestInRange = point
         }
-        if (nearest) { atTarget = nearest.atTarget; setLocation({ ...nearest, accuracy: coords.accuracy }) }
+        const currentPoint: NearbyPoint | null = nearestInRange ?? nearest
+        if (currentPoint) { atTarget = currentPoint.atTarget; nearestRadius = currentPoint.radius; setLocation({ ...currentPoint, accuracy: coords.accuracy }) }
       }, (error) => {
         positionAt = 0
         setStatus(error.code === 1 ? "Localização bloqueada. Permita o acesso nas configurações do navegador e tente novamente." : "GPS indisponível. Procure um local aberto.")
@@ -148,7 +158,33 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
         const now = Date.now()
         const compassOk = now - compassAt < 10000
         const positionOk = now - positionAt < 30000
-        anchors.forEach((anchor) => { anchor.visible = compassOk && positionOk })
+        const visibleIndices: number[] = []
+        let visibilityChanged = false
+        anchors.forEach((anchor, index) => {
+          const shouldShow = compassOk && positionOk && inRange[index]
+          anchor.visible = shouldShow
+          if (shouldShow) visibleIndices.push(index)
+          if (shouldShow === visibleByIndex[index]) return
+          visibleByIndex[index] = shouldShow
+          visibilityChanged = true
+          if (shouldShow) {
+            anchor.position.copy(desiredPositions[index])
+            const projectHasMedia = projects[index].scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-")))
+            if (soundOnRef.current && projectHasMedia) {
+              void contents[index].enableAudio().then((enabled) => {
+                if (!enabled && !ended && alive.current && visibleByIndex[index]) { setSoundError(true); void contents[index].play() }
+              })
+            } else {
+              void contents[index].play()
+            }
+          } else {
+            contents[index].muteAudio()
+            contents[index].pause()
+          }
+        })
+        if (visibilityChanged) setVisibleProjectIndices(visibleIndices)
+        if (visibilityChanged && visibleIndices.length === 0) setSoundError(false)
+        if (visibleIndices.length === 0 && soundOnRef.current) { soundOnRef.current = false; setSoundOn(false) }
         const delta = clock.getDelta()
         if (positionOk) anchors.forEach((anchor, index) => anchor.position.lerp(desiredPositions[index], 1 - Math.exp(-delta * 4)))
         if (compassOk && positionOk) {
@@ -162,13 +198,12 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
             }
           }
         }
-        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Próximo ao ponto" : "Siga a direção do objeto"
+        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : visibleIndices.length === 0 ? `Aproxime-se até ${nearestRadius} m do ponto` : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Próximo ao ponto" : "Siga a direção do objeto"
         if (message !== lastStatus) { lastStatus = message; setStatus(message) }
-        if (anchors[0].visible !== wasVisible) {
-          wasVisible = anchors[0].visible
+        if ((visibleIndices.length > 0) !== wasVisible) {
+          wasVisible = visibleIndices.length > 0
           setVisible(wasVisible)
           callback.current?.(wasVisible ? "detected" : "lost")
-          if (wasVisible) contents.forEach((content) => { void content.play() })
         }
         contents.forEach((content) => content.update(delta, clock.elapsedTime, camera.position))
         renderer.render(scene, camera)
@@ -184,15 +219,17 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
 
   async function toggleSound() {
     if (!mediaControl.current) return
-    if (soundOn) { mediaControl.current.muteAudio(); setSoundOn(false); return }
+    if (soundOn) { mediaControl.current.muteAudio(); soundOnRef.current = false; setSoundOn(false); return }
     const enabled = await mediaControl.current.enableAudio()
     if (!alive.current) return
+    soundOnRef.current = enabled
     setSoundOn(enabled)
     setSoundError(!enabled)
   }
 
   const turn = location && heading !== null && !location.atTarget ? bearingDifference(location.bearing, heading) : null
-  const hasMedia = (experiences?.length ? experiences : [experience]).some((project) => project.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-"))))
+  const projectsForDisplay = experiences?.length ? experiences : [experience]
+  const hasMedia = visibleProjectIndices.some((index) => projectsForDisplay[index]?.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-"))))
 
   return <div className="fixed inset-0 overflow-hidden bg-slate-950 text-white">
     <video ref={video} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" />
@@ -203,7 +240,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
     </div>
     {active && location && <div className="pointer-events-none absolute right-4 top-14 z-20 text-right font-mono text-[10px] leading-relaxed text-white/70 drop-shadow-md">
       <p>{Math.round(location.distance)} m até o ponto</p>
-      <p>GPS ±{Math.round(location.accuracy)} m{location.nearby ? " · próximo" : ""}</p>
+      <p>GPS ±{Math.round(location.accuracy)} m · raio {location.radius} m</p>
     </div>}
     {!active && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-8 text-center">
       <Button onClick={start}>Iniciar experiência GPS</Button>
@@ -214,7 +251,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
     </div>}
     {hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-center"><span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span></div>}
     {ready && <>
-      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={(experiences?.length ? experiences : [experience]).flatMap((project) => project.scene?.objects ?? [])} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
+      {visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={visibleProjectIndices.flatMap((index) => projectsForDisplay[index]?.scene?.objects ?? [])} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
       <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>
     </>}
   </div>

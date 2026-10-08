@@ -13,7 +13,7 @@ function load(path, mocks = {}) {
   new Function("require", "module", "exports", outputText)((name) => name in mocks ? mocks[name] : require(name), loaded, loaded.exports)
   return loaded.exports
 }
-const { geoOffset, gpsDisplayPosition, bearingDifference } = load("src/lib/ar/geo.ts")
+const { geoOffset, gpsDisplayPosition, bearingDifference, isGpsWithinRadius } = load("src/lib/ar/geo.ts")
 const { yawTowardViewer } = load("src/lib/ar/billboard.ts")
 const { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio } = load("src/lib/ar/spatial-media.ts")
 const { getActionUrl } = load("src/lib/ar/actions.ts")
@@ -83,6 +83,15 @@ test("GPS perspective follows real distance while keeping the scene in front of 
   assert.equal(bearingDifference(10, 350), 20)
   assert.equal(bearingDifference(350, 10), -20)
 })
+test("GPS shows each point only within its own configured meter radius", () => {
+  assert.equal(isGpsWithinRadius(10, 10), true)
+  assert.equal(isGpsWithinRadius(10.01, 10), false)
+  assert.equal(isGpsWithinRadius(3, 10), true)
+  assert.equal(isGpsWithinRadius(geoOffset(0, 0, 0, 0.00008).distance, 10), true)
+  assert.equal(isGpsWithinRadius(geoOffset(0, 0, 0, 0.0001).distance, 10), false)
+  assert.deepEqual([[8, 5], [12, 20]].map(([distance, radius]) => isGpsWithinRadius(distance, radius)), [false, true])
+  assert.equal(isGpsWithinRadius(Number.NaN, 10), false)
+})
 test("spatial objects turn their front toward the viewer on the horizontal plane", () => {
   assert.equal(yawTowardViewer(0, -6, 0, 0), 0)
   assert.equal(yawTowardViewer(6, 0, 0, 0), -Math.PI / 2)
@@ -97,17 +106,24 @@ test("HLS links require HTTPS playlists and allow a query string", () => {
 })
 test("GPS and surface render saved object scale with the studio's video and image proportions", async () => {
   let attachedHlsUrl = null
+  let hlsAutoplay = null
+  const createdVideos = []
   const { buildSpatialScene } = load("src/lib/ar/spatial-scene.ts", {
     "three/examples/jsm/loaders/GLTFLoader.js": { GLTFLoader: class {} },
     "@/lib/ar/billboard": { yawTowardViewer },
     "@/lib/ar/spatial-media": { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio },
     "@/lib/ar/object-geometry": objectGeometry,
-    "@/lib/ar/hls-video": { attachHlsSource: async (_video, url) => { attachedHlsUrl = url; return () => {} } },
+    "@/lib/ar/hls-video": { attachHlsSource: async (video, url) => { attachedHlsUrl = url; hlsAutoplay = video.autoplay; return () => {} } },
   })
   const originalDocument = globalThis.document
   const originalLoadAsync = THREE.TextureLoader.prototype.loadAsync
   const context = { beginPath() {}, arc() {}, fill() {}, roundRect() {}, fillText() {} }
-  globalThis.document = { createElement: (tag) => tag === "canvas" ? { getContext: () => context } : { pause() {}, removeAttribute() {}, load() {} } }
+  globalThis.document = { createElement: (tag) => {
+    if (tag === "canvas") return { getContext: () => context }
+    const video = { pauses: 0, pause() { this.pauses++ }, removeAttribute() {}, load() {} }
+    createdVideos.push(video)
+    return video
+  } }
   THREE.TextureLoader.prototype.loadAsync = async () => new THREE.Texture({ width: 1200, height: 800 })
   const base = { name: "Objeto", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1.4, 0.8, 1], opacity: 1, visible: true, animationType: null, faceCamera: false }
   let scene
@@ -118,9 +134,10 @@ test("GPS and surface render saved object scale with the studio's video and imag
       { ...base, id: "chroma", type: "video-chromakey", assetUrl: "/test.mp4" },
       { ...base, id: "image", type: "imagem", assetUrl: "/test.png" },
       { ...base, id: "button", type: "botao-site", showCaption: true },
-    ])
+    ], { autoplayHls: false })
     const [video, hls, chroma, image, button] = scene.root.children
     assert.equal(attachedHlsUrl, "https://media.example.com/live.m3u8")
+    assert.equal(hlsAutoplay, false)
     for (const group of [video, hls, chroma]) {
       const mesh = group.children[0]
       assert.equal(mesh.geometry.parameters.width, 1.5)
@@ -135,6 +152,9 @@ test("GPS and surface render saved object scale with the studio's video and imag
     assert.equal(button.children[0].geometry.parameters.height, 0.5)
     assert.equal(button.children[1].geometry.parameters.height, 0.15)
     assert.deepEqual(button.scale.toArray(), base.scale)
+    scene.pause()
+    assert.equal(createdVideos.length, 3)
+    assert.ok(createdVideos.every((video) => video.pauses === 1))
   } finally {
     scene?.dispose()
     THREE.TextureLoader.prototype.loadAsync = originalLoadAsync

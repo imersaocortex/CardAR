@@ -48,7 +48,7 @@ export function TrackingSettings({ projectId, disabled }: { projectId: string; d
         <Label htmlFor="latitude">Latitude (−90 a 90)</Label><Input id="latitude" type="number" step="any" min="-90" max="90" value={latitude} onChange={(e) => setLatitude(e.target.value)} />
         <Label htmlFor="longitude">Longitude (−180 a 180)</Label><Input id="longitude" type="number" step="any" min="-180" max="180" value={longitude} onChange={(e) => setLongitude(e.target.value)} />
         <Label htmlFor="radius">Raio de proximidade (metros)</Label><Input id="radius" type="number" min="10" max="5000" value={radius} onChange={(e) => setRadius(e.target.value)} />
-        <p className="text-xs text-muted-foreground">O raio sinaliza proximidade; o objeto aparece na direção das coordenadas mesmo fora dele.</p>
+        <p className="text-xs text-muted-foreground">A cena aparece somente dentro deste raio e acompanha a distância do celular até as coordenadas.</p>
         <Button variant="outline" onClick={() => navigator.geolocation?.getCurrentPosition(({ coords }) => { setLatitude(String(coords.latitude)); setLongitude(String(coords.longitude)) }, () => toast({ title: "Não foi possível obter sua localização", variant: "destructive" }), { enableHighAccuracy: true, timeout: 15000 })}>Usar minha localização</Button>
       </div>}
       <Button onClick={save} disabled={!loaded || busy}>{busy ? "Salvando…" : "Salvar configuração"}</Button>

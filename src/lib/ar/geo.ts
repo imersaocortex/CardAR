@@ -21,6 +21,10 @@ export function gpsDisplayPosition(offset: { distance: number; bearing: number }
   return { atTarget, east: displayDistance * Math.sin(angle), north: displayDistance * Math.cos(angle) }
 }
 
+export function isGpsWithinRadius(distance: number, radius: number) {
+  return Number.isFinite(distance) && Number.isFinite(radius) && distance >= 0 && radius >= 0 && distance <= radius
+}
+
 export function bearingDifference(targetBearing: number, cameraHeading: number) {
   return ((targetBearing - cameraHeading + 540) % 360) - 180
 }

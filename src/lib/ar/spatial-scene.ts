@@ -71,7 +71,7 @@ export function disposeSpatialGroup(group: THREE.Object3D) {
   textures.forEach((texture) => texture.dispose())
 }
 
-export async function buildSpatialScene(objects: ArSceneObject[]) {
+export async function buildSpatialScene(objects: ArSceneObject[], options: { autoplayHls?: boolean } = {}) {
   const root = new THREE.Group()
   const media: HTMLMediaElement[] = []
   const streamCleanups: (() => void)[] = []
@@ -135,7 +135,7 @@ export async function buildSpatialScene(objects: ArSceneObject[]) {
           video.crossOrigin = "anonymous"; video.playsInline = true; video.loop = true; video.muted = true
           media.push(video)
           if (object.type === "video-hls") {
-            video.autoplay = true
+            video.autoplay = options.autoplayHls ?? true
             streamCleanups.push(await attachHlsSource(video, object.assetUrl))
           } else {
             video.src = object.assetUrl
@@ -163,6 +163,7 @@ export async function buildSpatialScene(objects: ArSceneObject[]) {
     return {
       root, dispose,
       play: () => playSpatialVideoMuted(media),
+      pause: () => media.forEach((element) => element.pause()),
       enableAudio: () => enableSpatialAudio(media),
       muteAudio: () => muteSpatialAudio(media),
       update: (delta: number, elapsed: number, viewerPosition?: THREE.Vector3) => {

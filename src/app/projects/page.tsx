@@ -396,7 +396,7 @@ export default function ProjectsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="proj-radius">Raio de proximidade (metros)</Label>
                     <Input id="proj-radius" type="number" min="10" max="5000" value={newProject.activationRadius} onChange={(e) => setNewProject({ ...newProject, activationRadius: e.target.value })} />
-                    <p className="text-xs text-muted-foreground">Indica quando o visitante está perto do ponto. O objeto aparece na direção das coordenadas mesmo fora desse raio.</p>
+                    <p className="text-xs text-muted-foreground">O objeto aparece apenas quando o visitante está dentro deste raio. Seu tamanho varia conforme a distância real do celular até o ponto.</p>
                   </div>
                   <Button variant="outline" type="button" onClick={() => navigator.geolocation?.getCurrentPosition(({ coords }) => setNewProject((current) => ({ ...current, latitude: String(coords.latitude), longitude: String(coords.longitude) })), () => toast({ title: "Não foi possível obter sua localização", variant: "destructive" }), { enableHighAccuracy: true, timeout: 15000 })}>Usar minha localização</Button>
                 </div>}

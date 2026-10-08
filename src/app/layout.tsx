@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
+import Script from "next/script"
 import "./globals.css"
 import { Providers } from "@/components/providers"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -24,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
     .eq("id", 1)
     .maybeSingle()
 
-  const branding = (data?.branding as Record<string, any>) || {}
+  const branding = (data?.branding ?? {}) as Record<string, string | null | undefined>
   const siteName = branding.site_name || "CortexAR"
   const metaTitle = branding.meta_title || `${siteName} - Realidade Aumentada para Negócios`
   const metaDescription = branding.meta_description || "Crie experiências de realidade aumentada para cartões de visita, panfletos e materiais impressos."
@@ -58,6 +59,14 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="min-h-screen bg-background text-foreground antialiased" suppressHydrationWarning>
+        <Script id="capture-experience-install" strategy="beforeInteractive">{`
+          window.addEventListener('beforeinstallprompt', function (event) {
+            if (!location.pathname.startsWith('/experience/')) return;
+            event.preventDefault();
+            window.__experienceInstallPrompt = { event: event, path: location.pathname };
+            window.dispatchEvent(new Event('experience-install-available'));
+          });
+        `}</Script>
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -11,9 +11,10 @@ interface ArActionsProps {
   containerRef: React.RefObject<HTMLDivElement | null>
   onSwitchCamera?: () => void
   reuseCameraForQr?: boolean
+  vrControl?: React.ReactNode
 }
 
-export function ArActions({ videoRef, containerRef, onSwitchCamera, reuseCameraForQr = false }: ArActionsProps) {
+export function ArActions({ videoRef, containerRef, onSwitchCamera, reuseCameraForQr = false, vrControl }: ArActionsProps) {
   const [lastCapture, setLastCapture] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -198,7 +199,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, reuseCameraF
   return (
     <>
       <div className="flex items-center justify-center gap-2">
-        <div className="flex items-center gap-4 bg-white/5 backdrop-blur-lg rounded-2xl px-4 py-2.5 border border-white/10">
+        <div className="flex items-center gap-2 bg-white/5 backdrop-blur-lg rounded-2xl px-2.5 py-2.5 border border-white/10 sm:gap-4 sm:px-4">
           <ActionButton
             icon={<Camera className="h-4 w-4" />}
             label="Foto"
@@ -238,6 +239,7 @@ export function ArActions({ videoRef, containerRef, onSwitchCamera, reuseCameraF
               />
             </>
           )}
+          {vrControl && <><div className="w-px h-6 bg-white/10" />{vrControl}</>}
         </div>
       </div>
 

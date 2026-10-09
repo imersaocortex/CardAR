@@ -17,9 +17,10 @@ interface ArPlayerProps {
   onStateChange?: (state: ArState) => void
   onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
   cardboard?: boolean
+  vrControl?: React.ReactNode
 }
 
-export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction, cardboard = false }: ArPlayerProps) {
+export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction, cardboard = false, vrControl }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stereoVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -1143,6 +1144,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
             videoRef={videoRef}
             containerRef={containerRef}
             onSwitchCamera={handleSwitchCamera}
+            vrControl={vrControl}
           />
         </div>
       )}

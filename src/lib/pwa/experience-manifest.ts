@@ -12,8 +12,8 @@ export function experienceManifest(name: string, path: string, origin: string): 
     background_color: "#020617",
     theme_color: "#020617",
     icons: [
-      { src: "/pwa-favicon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/pwa-favicon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/pwa-favicon-v2-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/pwa-favicon-v2-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
     ],
     related_applications: [{
       platform: "webapp",

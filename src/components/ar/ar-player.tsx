@@ -20,6 +20,10 @@ interface ArPlayerProps {
   vrControl?: React.ReactNode
 }
 
+function renderPixelRatio(cardboard: boolean): number {
+  return Math.min(window.devicePixelRatio || 1, cardboard ? 1.5 : 2)
+}
+
 export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction, cardboard = false, vrControl }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -52,7 +56,12 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
   useEffect(() => {
     cardboardRef.current = cardboard
     if (videoRef.current) videoRef.current.style.width = cardboard ? "50%" : "100%"
-    if (stereoVideoRef.current) stereoVideoRef.current.style.display = cardboard ? "block" : "none"
+    if (stereoVideoRef.current) {
+      stereoVideoRef.current.style.display = cardboard ? "block" : "none"
+      if (cardboard) void stereoVideoRef.current.play().catch(() => {})
+      else stereoVideoRef.current.pause()
+    }
+    rendererRef.current?.setPixelRatio(renderPixelRatio(cardboard))
   }, [cardboard])
 
   const step = useCallback((msg: string) => {
@@ -539,7 +548,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       cleanups.push(() => stream.getTracks().forEach((t) => t.stop()))
 
       await video.play()
-      void stereoVideo.play().catch(() => {})
+      if (cardboardRef.current) void stereoVideo.play().catch(() => {})
 
       await new Promise<void>((resolve, reject) => {
         let attempts = 0
@@ -574,7 +583,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         preserveDrawingBuffer: true,
       })
       renderer.setSize(w, h)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.setPixelRatio(renderPixelRatio(cardboardRef.current))
       renderer.domElement.style.position = "absolute"
       renderer.domElement.style.top = "0"
       renderer.domElement.style.left = "0"
@@ -823,7 +832,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         const w2 = window.innerWidth
         const h2 = window.innerHeight
         renderer.setSize(w2, h2)
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        renderer.setPixelRatio(renderPixelRatio(cardboardRef.current))
         cam.aspect = w2 / h2
         cam.updateProjectionMatrix()
       })
@@ -875,9 +884,23 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         window.removeEventListener("click", handleClickEvent)
       })
 
+      let previousFrameWasCardboard = cardboardRef.current
+      let stereoCanvasHasContent = false
       const animate = () => {
         animFrameRef.current = requestAnimationFrame(animate)
         frameCountRef.current++
+
+        const stereo = cardboardRef.current
+        if (stereo && visibleTargets.size === 0) {
+          // Leave the camera and MindAR running; avoid two empty WebGL renders while searching.
+          if (!previousFrameWasCardboard || stereoCanvasHasContent) {
+            renderer.setScissorTest(false)
+            renderer.clear()
+          }
+          stereoCanvasHasContent = false
+          previousFrameWasCardboard = true
+          return
+        }
 
         if (visibleTargets.size > 0) {
           anchorGroups.filter((group) => group.visible).forEach((group) => group.traverse((child: any) => {
@@ -902,8 +925,15 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
           }))
         }
 
-        if (cardboardRef.current) stereoEffect.render(scene, cam)
-        else { renderer.setViewport(0, 0, window.innerWidth, window.innerHeight); renderer.render(scene, cam) }
+        if (stereo) {
+          stereoEffect.render(scene, cam)
+          stereoCanvasHasContent = true
+        } else {
+          renderer.setViewport(0, 0, window.innerWidth, window.innerHeight)
+          renderer.render(scene, cam)
+          stereoCanvasHasContent = false
+        }
+        previousFrameWasCardboard = stereo
       }
 
       animate()
@@ -1009,6 +1039,10 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       if (videoRef.current) {
         videoRef.current.srcObject = stream
       }
+      if (stereoVideoRef.current) {
+        stereoVideoRef.current.srcObject = stream
+        if (cardboardRef.current) void stereoVideoRef.current.play().catch(() => {})
+      }
       facingModeRef.current = newFacing
     } catch {
       // Restore old stream on failure
@@ -1017,6 +1051,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         if (videoRef.current) {
           videoRef.current.srcObject = oldStream
         }
+        if (stereoVideoRef.current) stereoVideoRef.current.srcObject = oldStream
       }
     }
   }, [])

@@ -23,6 +23,23 @@ const objectGeometry = load("src/lib/ar/object-geometry.ts")
 const { isPublicHlsUrl } = load("src/lib/ar/hls-url.ts")
 const { validateCollectionMembers } = load("src/lib/ar/collection-validation.ts")
 const { experienceManifest } = load("src/lib/pwa/experience-manifest.ts")
+const { syncMarkerVideoDimensions } = load("src/lib/ar/marker-camera.ts")
+
+test("marker tracking follows camera dimensions after rotating into VR", () => {
+  const video = { videoWidth: 480, videoHeight: 640, width: 0, height: 0 }
+  assert.equal(syncMarkerVideoDimensions(video, 480, 640), "same")
+  assert.deepEqual([video.width, video.height], [480, 640])
+
+  video.videoWidth = 640
+  video.videoHeight = 480
+  assert.equal(syncMarkerVideoDimensions(video, 480, 640), "rotated")
+  assert.deepEqual([video.width, video.height], [640, 480])
+
+  video.videoWidth = 1280
+  video.videoHeight = 720
+  assert.equal(syncMarkerVideoDimensions(video, 480, 640), "reinitialize")
+  assert.deepEqual([video.width, video.height], [640, 480])
+})
 
 test("each installable experience opens its own URL", () => {
   const single = experienceManifest("Visita AR", "/experience/visita", "https://example.com")

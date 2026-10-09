@@ -7,6 +7,7 @@ import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { getMarkerDimensions } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { attachHlsSource } from "@/lib/ar/hls-video"
+import { syncMarkerVideoDimensions } from "@/lib/ar/marker-camera"
 import { CameraPermissionDenied, NoCamera, WebGLUnavailable, MarkerNotFound } from "./ar-fallbacks"
 
 interface ArPlayerProps {
@@ -29,6 +30,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stereoVideoRef = useRef<HTMLVideoElement | null>(null)
   const cardboardRef = useRef(cardboard)
+  const previousCardboardRef = useRef(cardboard)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
@@ -54,6 +56,8 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
   const streamCleanupsRef = useRef<(() => void)[]>([])
 
   useEffect(() => {
+    const enteringCardboard = cardboard && !previousCardboardRef.current
+    previousCardboardRef.current = cardboard
     cardboardRef.current = cardboard
     if (videoRef.current) videoRef.current.style.width = cardboard ? "50%" : "100%"
     if (stereoVideoRef.current) {
@@ -62,6 +66,10 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       else stereoVideoRef.current.pause()
     }
     rendererRef.current?.setPixelRatio(renderPixelRatio(cardboard))
+    if (enteringCardboard && rendererRef.current) {
+      // Reopen the camera after landscape lock so MindAR starts with the current frame orientation.
+      setInitKey((key) => key + 1)
+    }
   }, [cardboard])
 
   const step = useCallback((msg: string) => {
@@ -539,7 +547,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       cleanups.push(() => { stereoVideo.remove(); stereoVideoRef.current = null })
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: facingModeRef.current, width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       })
       streamRef.current = stream
@@ -573,8 +581,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
 
       const vw = video.videoWidth
       const vh = video.videoHeight
-      video.width = vw
-      video.height = vh
+      syncMarkerVideoDimensions(video, vw, vh)
       step("Câmera pronta (" + vw + "x" + vh + ")")
 
       const renderer = new THREE.WebGLRenderer({
@@ -817,6 +824,18 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       cam.updateProjectionMatrix()
 
       controller.processVideo(video)
+      let reinitializingForCamera = false
+      const handleCameraResize = () => {
+        const dimensionState = syncMarkerVideoDimensions(video, vw, vh)
+        if (dimensionState === "reinitialize" && !reinitializingForCamera) {
+          reinitializingForCamera = true
+          controller.stopProcessVideo()
+          setInitKey((key) => key + 1)
+        }
+      }
+      video.addEventListener("resize", handleCameraResize)
+      cleanups.push(() => video.removeEventListener("resize", handleCameraResize))
+      handleCameraResize()
       const proj = controller.getProjectionMatrix()
       if (proj) {
         const fovY = 2 * Math.atan(1 / proj[5])
@@ -948,7 +967,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
 
       const fullCleanup = () => {
         cancelAnimationFrame(animFrameRef.current)
-        controller.stopProcessVideo()
+        controller.dispose()
         clearTimeout(scanTimeout)
         if (detectionTimeoutRef.current) {
           clearTimeout(detectionTimeoutRef.current)

@@ -124,7 +124,7 @@ export default function ExperiencePage() {
     ? <SurfaceFallbackPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} cardboard />
     : <SurfacePlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} />}
     <PwaInstallButton hidden={cardboard} /><CardboardToggle active={cardboard} trackingMode="surface" onChange={setCardboard} /></>
-  if (experience.trackingMode === "gps") return <><GpsPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} cardboard={cardboard} /><PwaInstallButton hidden={cardboard} /><CardboardToggle active={cardboard} trackingMode="gps" onChange={setCardboard} /></>
+  if (experience.trackingMode === "gps") return <><GpsPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={handleStateChange} onInteraction={handleInteraction} cardboard={cardboard} vrControl={<CardboardToggle active={false} trackingMode="gps" onChange={setCardboard} inline />} /><PwaInstallButton hidden={cardboard} />{cardboard && <CardboardToggle active trackingMode="gps" onChange={setCardboard} />}</>
 
   if (!experience.marker?.targetUrl) {
     return (
@@ -141,11 +141,12 @@ export default function ExperiencePage() {
         hasWatermark={hasWatermark}
         siteName={siteName}
         cardboard={cardboard}
+        vrControl={<CardboardToggle active={false} trackingMode="marker" onChange={setCardboard} inline />}
         onStateChange={handleStateChange}
         onInteraction={handleInteraction}
       />
       <PwaInstallButton hidden={cardboard} />
-      <CardboardToggle active={cardboard} trackingMode="marker" onChange={setCardboard} />
+      {cardboard && <CardboardToggle active trackingMode="marker" onChange={setCardboard} />}
     </div>
   )
 }

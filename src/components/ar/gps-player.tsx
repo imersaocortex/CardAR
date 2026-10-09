@@ -14,10 +14,11 @@ import { SpatialActions } from "./spatial-actions"
 type CompassEvent = DeviceOrientationEvent & { webkitCompassHeading?: number; webkitCompassAccuracy?: number }
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: (absolute?: boolean) => Promise<string> }
 
-export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false }: {
+export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false, vrControl }: {
   experience: ArExperienceData; experiences?: ArExperienceData[]; siteName: string; hasWatermark: boolean; onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
   cardboard?: boolean
+  vrControl?: React.ReactNode
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -264,7 +265,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
     {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex ${cardboard ? "justify-around" : "justify-center"}`}>{(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye} className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span>)}</div>}
     {ready && <>
       {!cardboard && visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4"><SpatialActions objects={visibleProjectIndices.flatMap((index) => projectsForDisplay[index]?.scene?.objects ?? [])} onInteraction={onInteraction} />{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
-      {!cardboard && <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>}
+      {!cardboard && <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr vrControl={vrControl} /></div>}
     </>}
   </div>
 }

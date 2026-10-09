@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react"
 import { Glasses, X } from "lucide-react"
 
-export function CardboardToggle({ active, trackingMode, onChange }: {
+export function CardboardToggle({ active, trackingMode, onChange, inline = false }: {
   active: boolean
   trackingMode: "marker" | "gps" | "surface"
   onChange: (active: boolean) => void
+  inline?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [hint, setHint] = useState("")
@@ -34,8 +35,8 @@ export function CardboardToggle({ active, trackingMode, onChange }: {
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => {})
   }
 
-  return <div className="pointer-events-auto fixed bottom-24 right-4 z-50 max-w-[min(19rem,calc(100vw-2rem))] text-white">
-    {(open || hint) && <div className="mb-2 rounded-xl border border-white/20 bg-slate-950/95 p-3 text-xs leading-relaxed shadow-xl backdrop-blur" role="status">
+  return <div className={inline ? "pointer-events-auto relative text-white" : "pointer-events-auto fixed bottom-24 right-4 z-50 max-w-[min(19rem,calc(100vw-2rem))] text-white"}>
+    {(open || hint) && <div className={`${inline ? "absolute bottom-full right-0 mb-4 w-[min(19rem,calc(100vw-2rem))]" : "mb-2"} rounded-xl border border-white/20 bg-slate-950/95 p-3 text-xs leading-relaxed shadow-xl backdrop-blur`} role="status">
       {open ? <><p className="mb-1 font-semibold">Abrir nos óculos</p><p className="mb-2 text-white/65">Use o celular na horizontal. Ative som ou posicione a cena antes de colocá-lo nos óculos.</p>
         <button type="button" onClick={enterCardboard} className="block w-full rounded-lg bg-cyan-500 px-3 py-2 text-left font-medium text-slate-950">Óculos com smartphone</button>
         {trackingMode === "surface"
@@ -43,9 +44,9 @@ export function CardboardToggle({ active, trackingMode, onChange }: {
           : <p className="mt-2 text-white/65">Meta Quest: este modo usa câmera ou GPS do smartphone e não está disponível no navegador dos óculos.</p>}
       </> : <>{hint}<button type="button" onClick={() => setHint("")} aria-label="Fechar instrução" className="ml-2 inline-flex align-middle"><X className="h-4 w-4" /></button></>}
     </div>}
-    <button type="button" onClick={toggle} aria-pressed={active} aria-expanded={open} className="ml-auto flex items-center gap-2 rounded-full border border-white/20 bg-slate-950/75 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur transition-colors hover:bg-slate-800/90">
-      {active ? <X className="h-3.5 w-3.5" /> : <Glasses className="h-3.5 w-3.5" />}
-      {active ? "Sair VR" : "Óculos VR"}
+    <button type="button" onClick={toggle} aria-pressed={active} aria-expanded={open} aria-label={active ? "Sair do modo VR" : "Abrir opções de óculos VR"} className={inline ? "group flex flex-col items-center gap-0.5 text-white/60 transition-colors hover:text-white/90" : "ml-auto flex items-center gap-2 rounded-full border border-white/20 bg-slate-950/75 px-3 py-2 text-xs font-medium shadow-lg backdrop-blur transition-colors hover:bg-slate-800/90"}>
+      {active ? <X className={inline ? "h-4 w-4 transition-transform group-hover:scale-110" : "h-3.5 w-3.5"} /> : <Glasses className={inline ? "h-4 w-4 transition-transform group-hover:scale-110" : "h-3.5 w-3.5"} />}
+      <span className={inline ? "text-[10px]" : ""}>{inline ? "VR" : active ? "Sair VR" : "Óculos VR"}</span>
     </button>
   </div>
 }

@@ -12,7 +12,7 @@ type InstallNavigator = Navigator & {
   getInstalledRelatedApps?: () => Promise<Array<{ platform: string }>>
 }
 
-type InstallMode = "prompt" | "ios" | null
+type InstallMode = "prompt" | "ios" | "waiting" | null
 type InstallWindow = Window & {
   __experienceInstallPrompt?: { event: InstallPromptEvent; path: string }
 }
@@ -62,7 +62,7 @@ export function PwaInstallButton({ hidden = false }: { hidden?: boolean }) {
     }
     const frame = requestAnimationFrame(() => {
       void syncInstalled()
-      if (isIosSafari && !standalone.matches) setMode("ios")
+      if (!standalone.matches) setMode(isIosSafari ? "ios" : "waiting")
       syncPrompt()
     })
     standalone.addEventListener("change", syncInstalled)
@@ -105,13 +105,17 @@ export function PwaInstallButton({ hidden = false }: { hidden?: boolean }) {
       return
     }
     const prompt = pendingPrompt.current
-    if (!prompt) return
+    if (!prompt) {
+      setHint("O navegador ainda não liberou a instalação direta. Aguarde alguns segundos e tente novamente. No Chrome, também é possível usar o menu ⋮ > Instalar app.")
+      return
+    }
     pendingPrompt.current = null
     const installWindow = window as InstallWindow
     installWindow.__experienceInstallPrompt = undefined
-    setMode(null)
+    setMode("waiting")
     try {
-      await prompt.prompt()
+      const choice = await prompt.prompt()
+      if (choice.outcome === "dismissed") setHint("Instalação cancelada. Atualize a página se quiser tentar novamente.")
     } catch {
       setHint("Não foi possível iniciar a instalação. Atualize a página e tente novamente.")
     }

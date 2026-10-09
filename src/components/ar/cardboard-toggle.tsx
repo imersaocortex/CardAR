@@ -22,10 +22,10 @@ export function CardboardToggle({ active, trackingMode, onChange, inline = false
   async function enterCardboard() {
     setOpen(false)
     setHint("")
-    onChange(true)
     if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.().catch(() => {})
     const orientation = screen.orientation as ScreenOrientation & { lock?: (mode: "landscape") => Promise<void> }
     await orientation?.lock?.("landscape").catch(() => {})
+    onChange(true)
   }
 
   async function toggle() {

@@ -11,7 +11,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (!secret || Buffer.byteLength(secret) !== Buffer.byteLength(token) || !timingSafeEqual(Buffer.from(secret), Buffer.from(token))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   if (Number(request.headers.get("content-length")) > 1_000_000) return NextResponse.json({ error: "Payload excede o limite" }, { status: 413 })
   try {
-    const body = await request.json()
+    const raw = await request.text()
+    if (raw.length > 1_000_000) return NextResponse.json({ error: "Payload excede o limite" }, { status: 413 })
+    if (!raw.trim()) return NextResponse.json({ received: true })
+    const body = JSON.parse(raw)
     const events = parseEfiWebhookEvents(body)
     const admin = createAdminClient()
     for (const endToEndId of events.endToEndIds) {

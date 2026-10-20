@@ -32,18 +32,25 @@ No Meta Quest Browser, o modo de superfície já abre uma sessão WebXR `immersi
 
 ### Variáveis de faturamento
 
+Depois da migração 026, aplique manualmente `supabase/migrations/027_billing_provider_settings.sql` e execute `supabase/verify_027.sql` no SQL Editor. A tabela de controles começa com **Efí e PayPal desligados**. O painel **Administrativo → Pagamentos** permite ativar ou desativar cada provedor para novas contratações. Desativar uma opção não cancela contratos existentes; mantenha a rotina de conciliação e as credenciais necessárias enquanto houver contratos ativos. Se o código for publicado antes da migração, as novas contratações ficam indisponíveis até ela ser aplicada.
+
+Para Pix Automático, configure as variáveis da Efí somente na Vercel, selecione `EFI_ENVIRONMENT=production` ou `sandbox` e `EFI_PIX_MODE=automatic`. Depois de aplicar a migração e implantar o código, use **Verificar webhooks** e **Configurar webhooks** no painel. O segundo comando cadastra os três endereços (Pix inicial, autorização de recorrência e cobrança recorrente) somente se a chave e a conta não tiverem outro webhook cadastrado. A Vercel usa o modo sem validação mTLS na entrada; o endereço contém um token longo e o servidor reconcilia cada evento consultando novamente a Efí via mTLS antes de conceder acesso. Não compartilhe o token nem os certificados.
+
+**Este projeto está ligado ao Supabase de produção e ainda não há Supabase de homologação separado.** Não execute contratações sandbox nesse banco. Para habilitar o sandbox em um futuro ambiente isolado, defina `BILLING_SANDBOX_DB_ISOLATED=true` somente naquele ambiente. A presença dessa variável é uma confirmação operacional; não substitui a conferência de que `SUPABASE_URL` aponta para outro projeto. Até haver validação completa da jornada (autorização, pagamento inicial, renovação, rejeição, cancelamento e devolução), mantenha o interruptor da Efí desligado em produção. O PayPal permanece desligado até suas credenciais e webhook serem configurados.
+
 | Variável | Uso |
 | --- | --- |
 | `APP_URL` | Origem pública HTTPS para retorno do PayPal |
 | `BILLING_V2_ENABLED` | Libera as opções novas após migrações |
 | `BILLING_LIVE_ENABLED` | Permite operações nos provedores de produção |
+| `BILLING_SANDBOX_DB_ISOLATED` | Exigido apenas ao ativar um provedor sandbox; use `true` somente com Supabase separado de produção |
 | `PAYPAL_ENVIRONMENT`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` | API e verificação de webhooks PayPal; `production` seleciona API real |
-| `EFI_ENVIRONMENT`, `EFI_CLIENT_ID`, `EFI_CLIENT_SECRET`, `EFI_CERTIFICATE_BASE64`, `EFI_CERTIFICATE_PASSPHRASE`, `EFI_PIX_KEY`, `EFI_WEBHOOK_TOKEN` | API Pix mTLS e rota privada do webhook Efí; `production` seleciona API real |
+| `EFI_ENVIRONMENT`, `EFI_CLIENT_ID`, `EFI_CLIENT_SECRET`, `EFI_CERTIFICATE_BASE64`, `EFI_CERTIFICATE_PASSPHRASE`, `EFI_PIX_KEY`, `EFI_WEBHOOK_TOKEN` | API Pix mTLS e rota privada do webhook Efí; `production` seleciona API real. O token deve ter ao menos 24 caracteres aleatórios, usando apenas letras, números, `_` ou `-` |
 | `EFI_PIX_MODE` | `automatic` (padrão) ou `manual`; no modo manual o cliente paga cada período via Pix |
 | `EFI_ACCOUNT_NUMBER`, `EFI_ACCOUNT_BRANCH` | Conta recebedora para cobrança recorrente no Pix Automático |
 | `CRON_SECRET` | Autentica a rotina de reconciliação |
 
-Webhooks: PayPal `POST /api/webhooks/paypal`; Efí `POST /api/webhooks/efi/{EFI_WEBHOOK_TOKEN}` (a rota `/pix` também é aceita). Cadastre os eventos de assinatura e pagamento PayPal e os eventos Pix/cobrança recorrente da Efí nos respectivos painéis. O processamento consulta novamente o provedor antes de conceder acesso. Confirme o formato dos eventos no sandbox de cada conta.
+Webhooks: PayPal `POST /api/webhooks/paypal`; Efí `POST /api/webhooks/efi/{EFI_WEBHOOK_TOKEN}` (as rotas `/pix`, `/rec` e `/cobr` também são aceitas). Para a Efí, o painel cadastra a URL com `?ignorar=` conforme a documentação do provedor; o processamento aceita `pix`, `recs` e `cobsr`, mas consulta novamente a API antes de conceder acesso. Confirme o formato dos eventos no sandbox de uma instalação com banco isolado.
 
 O sistema de indicações registra quem convidou novos usuários. A migração `024` configura comissão de 10% sobre o primeiro pagamento e cada renovação confirmada, espera de 30 dias, solicitação de saque por Pix e revisão manual no painel administrativo. O administrador precisa conferir a transferência Pix fora do sistema antes de registrar o comprovante e marcar o saque como pago.
 

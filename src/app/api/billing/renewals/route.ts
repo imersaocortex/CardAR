@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createPixCharge, reconcilePayPal, reconcilePixCharge, type Agreement, type Charge } from "@/lib/payments/service"
-import { efiRequest, type PixRecurrence } from "@/lib/payments/efi"
+import { createPixCharge, reconcilePayPal, reconcilePixCharge, reconcilePixRecurrence, type Agreement, type Charge } from "@/lib/payments/service"
 
 export async function GET(request: Request) {
   if (process.env.BILLING_V2_ENABLED !== "true") return NextResponse.json({ skipped: true, reason: "Faturamento ainda não habilitado" })
@@ -19,9 +18,9 @@ export async function GET(request: Request) {
         if (chargeError) throw chargeError
         for (const charge of (charges ?? []) as Charge[]) await reconcilePixCharge(charge, agreement)
         if (agreement.pix_mode === "automatic" && agreement.external_id && agreement.paid_until) {
-          const remote = await efiRequest<PixRecurrence>(`/v2/rec/${encodeURIComponent(agreement.external_id)}`)
+          const remote = await reconcilePixRecurrence(agreement)
           const daysLeft = (new Date(agreement.paid_until).getTime() - Date.now()) / 86400000
-          if (remote.status === "APROVADA" && daysLeft >= 3 && daysLeft <= 10) await createPixCharge(agreement, true)
+          if (remote?.status === "APROVADA" && daysLeft >= 3 && daysLeft <= 10) await createPixCharge(agreement, true)
         }
       }
       const { error: recordError } = await admin.from("billing_agreements").update({ last_reconciled_at: new Date().toISOString() }).eq("id", agreement.id)

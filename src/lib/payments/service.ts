@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { paypalRequest, type PayPalSubscription } from "./paypal"
 import { efiRequest, EfiError, type PixCharge, type PixRecurrence } from "./efi"
 import { advanceBillingPeriod, amountInCents } from "./money"
+import { billingAvailability } from "./settings"
+
+export { billingAvailability } from "./settings"
 
 export interface Agreement {
   id: string; organization_id: string; plan_id: string; created_by: string; provider: "paypal" | "efi";
@@ -13,16 +16,6 @@ export interface Agreement {
 }
 export interface Charge { id: string; agreement_id: string; organization_id: string; txid: string; kind: "immediate" | "recurring"; due_date: string; period_end: string; pix_code: string | null; status: string; expires_at?: string | null }
 
-export function billingAvailability() {
-  const enabled = process.env.BILLING_V2_ENABLED === "true"
-  const live = process.env.BILLING_LIVE_ENABLED === "true"
-  const pixMode = process.env.EFI_PIX_MODE === "manual" ? "manual" as const : "automatic" as const
-  return {
-    paypal: { configured: enabled && !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET && process.env.PAYPAL_WEBHOOK_ID) && (process.env.PAYPAL_ENVIRONMENT !== "production" || live) },
-    efi: { configured: enabled && !!(process.env.EFI_CLIENT_ID && process.env.EFI_CLIENT_SECRET && process.env.EFI_CERTIFICATE_BASE64 && process.env.EFI_PIX_KEY && process.env.EFI_WEBHOOK_TOKEN) && (pixMode === "manual" || !!process.env.EFI_ACCOUNT_NUMBER) && (process.env.EFI_ENVIRONMENT !== "production" || live) },
-    pixMode,
-  }
-}
 function appOrigin() {
   const url = new URL(process.env.APP_URL || "http://localhost:3000")
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error("Endereço da aplicação inválido")
@@ -35,7 +28,7 @@ async function updateAgreement(id: string, values: Record<string, unknown>) {
 }
 
 export async function startAgreement(orgId: string, userId: string, planId: string, provider: "paypal" | "efi") {
-  const availability = billingAvailability()
+  const availability = await billingAvailability()
   if (!availability[provider].configured) throw new Error("Esta forma de pagamento ainda não está disponível")
   const admin = createAdminClient()
   const { data: plan, error: planError } = await admin.from("plans").select("*").eq("id", planId).eq("active", true).single()
@@ -66,6 +59,16 @@ export async function startAgreement(orgId: string, userId: string, planId: stri
     }
   }
   if (agreement.checkout_url || (agreement.pix_code && agreement.pix_mode === "automatic")) return agreement
+  let pixProfile: { name: string; cpf_cnpj: string | null } | null = null
+  let pixDocument = ""
+  if (provider === "efi" && agreement.pix_mode === "automatic" && !agreement.external_id) {
+    const { data: profile, error: profileError } = await admin.from("profiles").select("name, cpf_cnpj").eq("id", userId).single()
+    pixDocument = (profile?.cpf_cnpj || "").replace(/\D/g, "")
+    if (profileError || !profile?.name?.trim() || ![11, 14].includes(pixDocument.length)) {
+      throw new Error("Preencha nome e CPF ou CNPJ no perfil para autorizar o Pix Automático")
+    }
+    pixProfile = profile
+  }
   if (provider === "paypal") {
     let remotePlan = plan.paypal_plan_id as string | null
     if (remotePlan) {
@@ -105,13 +108,12 @@ export async function startAgreement(orgId: string, userId: string, planId: stri
   // Efí recurrence creation has no caller-supplied ID. Do not blindly retry an uncertain POST.
   const { data: claim } = await admin.from("billing_agreements").update({ setup_stage: "creating_recurrence" }).eq("id", agreement.id).eq("setup_stage", "new").select("id").maybeSingle()
   if (!claim) throw new Error("A autorização Pix está em preparação. Caso persista, a administração precisa conferir a operação na Efí.")
-  const { data: profile } = await admin.from("profiles").select("name, cpf_cnpj").eq("id", userId).single()
-  const document = (profile?.cpf_cnpj || "").replace(/\D/g, "")
-  if (![11, 14].includes(document.length)) { await updateAgreement(agreement.id, { setup_stage: "new" }); throw new Error("Preencha seu CPF ou CNPJ no perfil para autorizar o Pix Automático") }
+  const document = pixDocument
+  const profile = pixProfile!
   const loc = await efiRequest<{ id: number }>("/v2/locrec", "POST", {})
   await updateAgreement(agreement.id, { setup_loc: loc.id })
   const remote = await efiRequest<PixRecurrence>("/v2/rec", "POST", {
-    vinculo: { contrato: agreement.id, devedor: { [document.length === 11 ? "cpf" : "cnpj"]: document, nome: profile!.name }, objeto: `Assinatura ${plan.name}` },
+    vinculo: { contrato: agreement.id, devedor: { [document.length === 11 ? "cpf" : "cnpj"]: document, nome: profile.name }, objeto: `Assinatura ${plan.name}` },
     calendario: { dataInicial: charge.period_end.slice(0, 10), periodicidade: agreement.billing_cycle === "yearly" ? "ANUAL" : "MENSAL" },
     valor: { valorRec: (agreement.amount_cents / 100).toFixed(2) }, politicaRetentativa: "NAO_PERMITE", loc: loc.id,
     ativacao: { dadosJornada: { txid: charge.txid } },
@@ -171,6 +173,7 @@ export async function settle(agreement: Agreement, externalId: string, amount: s
 export async function reconcilePixCharge(charge: Charge, agreement: Agreement) {
   const remote = await efiRequest<PixCharge>(`/v2/${charge.kind === "recurring" ? "cobr" : "cob"}/${encodeURIComponent(charge.txid)}`)
   if (remote.txid !== charge.txid || amountInCents(remote.valor.original) !== agreement.amount_cents) throw new Error("Cobrança Pix divergente")
+  if (charge.kind === "recurring" && (!agreement.external_id || remote.idRec !== agreement.external_id)) throw new Error("Recorrência Pix divergente")
   for (const received of remote.pix ?? []) {
     if (received.devolucoes?.some((refund) => refund.status === "DEVOLVIDO" && amountInCents(refund.valor) >= agreement.amount_cents)) {
       await reversePayment("efi", received.endToEndId)
@@ -184,6 +187,15 @@ export async function reconcilePixCharge(charge: Charge, agreement: Agreement) {
   if (!payment || amountInCents(payment.valor) !== agreement.amount_cents) return
   const periodEnd = new Date(charge.period_end) <= new Date(payment.horario) ? advanceBillingPeriod(payment.horario, agreement.billing_cycle) : charge.period_end
   await settle(agreement, payment.endToEndId, payment.valor, payment.horario, periodEnd, charge.txid)
+}
+
+export async function reconcilePixRecurrence(agreement: Agreement) {
+  if (!agreement.external_id || agreement.provider !== "efi" || agreement.pix_mode !== "automatic") return null
+  const remote = await efiRequest<PixRecurrence>(`/v2/rec/${encodeURIComponent(agreement.external_id)}`)
+  if (remote.idRec !== agreement.external_id || (remote.vinculo?.contrato && remote.vinculo.contrato !== agreement.id)) throw new Error("Autorização Pix divergente")
+  if (["CANCELADA", "REJEITADA", "EXPIRADA"].includes(remote.status)) await markCanceled(agreement)
+  else if (remote.status === "APROVADA" && agreement.setup_stage !== "authorized") await updateAgreement(agreement.id, { setup_stage: "authorized" })
+  return remote
 }
 
 export async function reconcilePayPal(agreement: Agreement) {

@@ -44,6 +44,7 @@ export async function efiRequest<T>(path: string, method = "GET", body?: unknown
   }
   const { client, secret } = config()
   const token = await transport<{ access_token: string }>("/oauth/token", "POST", { grant_type: "client_credentials" }, `Basic ${Buffer.from(`${client}:${secret}`).toString("base64")}`)
+  if (!token || typeof token.access_token !== "string") throw new Error("Resposta de autenticação Efí inválida")
   return transport<T>(path, method, body, `Bearer ${token.access_token}`, headers)
 }
 

@@ -1,15 +1,18 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Scan, Video, Box, Smartphone, Palette, Share2 } from "lucide-react"
+import { Scan, Video, Box, Smartphone, Palette, Share2, MapPin, ScanFace, Layers3 } from "lucide-react"
 
 const resources = [
-  { icon: Scan, title: "Marcador de Imagem", description: "Use qualquer imagem como marcador AR. Seu cartão de visita vira portal." },
+  { icon: Scan, title: "AR com marcadores", description: "Associe uma imagem à experiência e exiba conteúdo quando a câmera reconhecer o marcador." },
+  { icon: MapPin, title: "Experiências por GPS", description: "Posicione objetos por latitude e longitude, com direção e distância acompanhando o deslocamento do visitante." },
+  { icon: ScanFace, title: "Superfícies sem marcador", description: "Posicione a cena em chão ou mesa com WebXR em aparelhos compatíveis; outros navegadores oferecem posicionamento manual." },
   { icon: Box, title: "Modelos 3D", description: "Importe modelos GLB/GLTF e posicione na cena com precisão." },
-  { icon: Video, title: "Vídeos MP4 e Chromakey", description: "Adicione vídeos com fundo removido automaticamente." },
+  { icon: Video, title: "Vídeo e streaming HLS", description: "Combine vídeos MP4, chromakey e transmissões HLS por URL pública HTTPS .m3u8." },
+  { icon: Layers3, title: "Coleções de projetos", description: "Reúna vários projetos GPS ou vários marcadores em um único link, respeitando as permissões do plano." },
   { icon: Palette, title: "Botões Interativos", description: "WhatsApp, site, Instagram, ligação e e-mail com um clique." },
-  { icon: Smartphone, title: "Preview em Tempo Real", description: "Veja como fica no celular antes de publicar." },
-  { icon: Share2, title: "QR Code Automático", description: "Gere QR Code para compartilhar a experiência AR." },
+  { icon: Smartphone, title: "VR e instalação PWA", description: "Use a visualização dividida em óculos para smartphone e instale atalhos das experiências quando o navegador permitir." },
+  { icon: Share2, title: "Links e QR Codes", description: "Compartilhe experiências individuais ou coleções por link e QR Code." },
 ]
 
 const containerVariants = {

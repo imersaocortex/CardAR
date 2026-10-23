@@ -15,12 +15,12 @@ export function HeroSection() {
   return <section ref={section} className="relative isolate overflow-hidden px-5 pt-32 pb-20 sm:px-8 lg:pt-44 lg:pb-28">
     <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_25%,rgba(124,58,237,0.22),transparent_50%)]" />
     <div className="mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-[1.05fr_1fr]">
-      <motion.div initial={reduced ? false : { opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65 }}>
+      <motion.div initial={false} animate={reduced ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.65 }}>
         <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-cyan-200"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_#67e8f9]" />Do digital para o seu mundo</div>
-        <h1 className="max-w-3xl text-5xl font-medium leading-[1.04] tracking-[-0.06em] sm:text-7xl xl:text-[88px]">O mundo é<br />seu próximo<br /><span className="bg-gradient-to-r from-violet-300 via-cyan-200 to-white bg-clip-text text-transparent">canvas.</span></h1>
-        <p className="mt-7 max-w-md text-base leading-relaxed text-slate-400 sm:text-lg">Transforme ideias em experiências de realidade aumentada. Crie no editor visual, publique e leve sua marca para além da tela.</p>
+        <h1 className="max-w-3xl text-5xl font-medium leading-[1.04] tracking-[-0.06em] sm:text-7xl xl:text-[88px]">Crie sua<br />realidade<br /><span className="bg-gradient-to-r from-violet-300 via-cyan-200 to-white bg-clip-text text-transparent">aumentada.</span></h1>
+        <p className="mt-7 max-w-md text-base leading-relaxed text-slate-400 sm:text-lg">Crie experiências AR com marcador, localização GPS ou detecção de superfícies. Combine modelos 3D, imagens, vídeos e streaming em um editor visual e compartilhe por link.</p>
         <div className="mt-9 flex flex-wrap items-center gap-4"><Button size="xl" asChild className="rounded-full bg-white text-slate-950 hover:bg-cyan-100"><Link href="/login">Criar uma experiência <ArrowUpRight className="ml-2 h-5 w-5" /></Link></Button><Link href="#como-funciona" className="flex items-center gap-2 rounded-full px-3 py-3 text-sm text-slate-300 hover:text-white">Explore a plataforma <ArrowDown className="h-4 w-4" /></Link></div>
-        <div className="mt-12 flex flex-wrap gap-6 border-t border-white/10 pt-6 text-xs text-slate-400"><span>Editor visual</span><span>Compartilhamento por link</span><span>Experiências no navegador</span></div>
+        <div className="mt-12 flex flex-wrap gap-6 border-t border-white/10 pt-6 text-xs text-slate-400"><span>Marcadores e GPS</span><span>Superfícies sem marcador</span><span>Experiências no navegador</span></div>
       </motion.div>
       <motion.div style={reduced ? undefined : { y, rotateZ: rotate }} className="relative mx-auto w-full max-w-[520px]" aria-label="Ilustração de uma cena de realidade aumentada">
         <div className="absolute -inset-8 rounded-full bg-violet-600/10 blur-3xl" />

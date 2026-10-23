@@ -1,15 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import { Check, ArrowRight, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { planFeatureLabels } from "@/lib/plans/feature-labels"
 
-interface Plan {
+export interface Plan {
   id: string
   name: string
   slug: string
@@ -20,43 +19,15 @@ interface Plan {
   has_watermark?: boolean
   multi_project_enabled?: boolean
   billing_cycle: string
-  trial_days: number
   highlight?: boolean
 }
 
-export function PlansSection() {
-  const [plans, setPlans] = useState<Plan[]>([])
-  const [loading, setLoading] = useState(true)
+export function PlansSection({ plans, billingEnabled }: { plans: Plan[]; billingEnabled: boolean }) {
   const [isAnnual, setIsAnnual] = useState(false)
-  const [hasYearlyPlans, setHasYearlyPlans] = useState(false)
-  const [billingEnabled, setBillingEnabled] = useState(false)
+  const paidPlans = plans.filter((plan) => Number(plan.price) > 0)
+  const hasYearlyPlans = paidPlans.some((plan) => plan.billing_cycle === "yearly")
 
-  useEffect(() => {
-    const supabase = createClient()
-    const plansRequest = supabase
-      .from("plans")
-      .select("*")
-      .eq("active", true)
-      .order("price")
-    const availabilityRequest = fetch("/api/billing/settings").then((response) => response.ok ? response.json() : null).catch(() => null)
-    Promise.all([plansRequest, availabilityRequest]).then(([{ data }, availability]) => {
-        if (data) {
-          const normalized = data.map((p) => ({
-            ...p,
-            billing_cycle: p.billing_cycle || "monthly",
-            highlight: p.highlight === true,
-          }))
-          setPlans(normalized)
-          setHasYearlyPlans(normalized.some((p: Plan) => p.billing_cycle === "yearly"))
-        }
-        setBillingEnabled(!!availability?.asaas?.configured)
-        setLoading(false)
-      }).catch(() => setLoading(false))
-  }, [])
-
-  if (loading) return null
-
-  const filteredPlans = plans.filter((p) => {
+  const filteredPlans = paidPlans.filter((p) => {
     if (!hasYearlyPlans) return true
     return isAnnual ? p.billing_cycle === "yearly" : p.billing_cycle === "monthly"
   })
@@ -97,8 +68,7 @@ export function PlansSection() {
                   isAnnual ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
                 )}
               >
-                Anual{" "}
-                <span className="text-emerald-400 text-xs ml-1">-20%</span>
+                Anual
               </button>
             </div>
           )}
@@ -125,16 +95,7 @@ export function PlansSection() {
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-primary to-secondary text-white text-xs font-medium">
                       <Sparkles className="h-3 w-3" />
-                      Mais Popular
-                    </span>
-                  </div>
-                )}
-
-                {billingEnabled && plan.trial_days > 0 && (
-                  <div className="mb-4">
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
-                      <Sparkles className="h-3 w-3" />
-                      {plan.trial_days} dias grátis
+                      Em destaque
                     </span>
                   </div>
                 )}
@@ -142,15 +103,8 @@ export function PlansSection() {
                 <div className="mb-6">
                   <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
                   <p className="text-3xl font-bold">
-                    {Number(plan.price) === 0
-                      ? "Grátis"
-                      : `R$ ${Number(plan.price).toFixed(2).replace('.', ',')}`
-                    }
-                    {Number(plan.price) > 0 && (
-                      <span className="text-sm font-normal text-muted-foreground">
-                        {plan.billing_cycle === "yearly" ? "/ano" : "/mês"}
-                      </span>
-                    )}
+                    {`R$ ${Number(plan.price).toFixed(2).replace('.', ',')}`}
+                    <span className="text-sm font-normal text-muted-foreground">{plan.billing_cycle === "yearly" ? "/ano" : "/mês"}</span>
                   </p>
                 </div>
 
@@ -163,11 +117,12 @@ export function PlansSection() {
                   ))}
                 </div>
 
-                {billingEnabled || Number(plan.price) === 0 ? <Button variant={isHighlighted ? "gradient" : "outline"} className="w-full" asChild><Link href="/login">{Number(plan.price) === 0 ? "Começar grátis" : "Assinar agora"}<ArrowRight className="h-4 w-4" /></Link></Button> : <Button className="w-full" variant="outline" disabled>Assinaturas em breve</Button>}
+                {billingEnabled ? <Button variant={isHighlighted ? "gradient" : "outline"} className="w-full" asChild><Link href="/login">Assinar agora<ArrowRight className="h-4 w-4" /></Link></Button> : <Button className="w-full" variant="outline" disabled>Assinaturas em breve</Button>}
               </motion.div>
             )
           })}
         </div>
+        {paidPlans.length === 0 && <p className="text-center text-sm text-muted-foreground">Os planos serão publicados em breve.</p>}
       </div>
     </section>
   )

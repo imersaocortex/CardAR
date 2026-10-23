@@ -35,11 +35,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: metaTitle,
     description: metaDescription,
+    metadataBase: new URL("https://www.cortexar.space"),
+    robots: { index: false, follow: false },
+    verification: process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : undefined,
     openGraph: {
       title: metaTitle,
       description: metaDescription,
       siteName,
-      images: ogImageUrl ? [{ url: ogImageUrl, width: 1200, height: 630 }] : [],
+      locale: "pt_BR",
+      type: "website",
+      images: ogImageUrl ? [{ url: ogImageUrl }] : [],
     },
     twitter: {
       card: "summary_large_image",

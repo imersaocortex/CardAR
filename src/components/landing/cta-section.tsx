@@ -20,7 +20,7 @@ export function CtaSection() {
         <div className="mb-6">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-sm text-primary">
             <Sparkles className="h-3.5 w-3.5" />
-            Comece gratuitamente · Sem cartão
+            Sua próxima experiência AR começa aqui
           </span>
         </div>
 
@@ -29,13 +29,13 @@ export function CtaSection() {
           <span className="text-gradient">materiais</span>?
         </h2>
         <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-8">
-          Crie sua primeira experiência AR em minutos. Não precisa de cartão de crédito.
+          Explore os recursos, escolha o plano adequado e crie experiências de realidade aumentada para sua marca.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button variant="gradient" size="xl" asChild>
             <Link href="/login">
-              Começar Grátis Agora
+              Conhecer a plataforma
               <ArrowRight className="h-5 w-5" />
             </Link>
           </Button>

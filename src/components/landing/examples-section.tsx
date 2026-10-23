@@ -1,25 +1,25 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { CreditCard, FileText, Image } from "lucide-react"
+import { CreditCard, MapPin, ScanFace } from "lucide-react"
 
 const examples = [
   {
     icon: CreditCard,
     title: "Cartão de Visita",
-    description: "Aponte a câmera para o cartão e veja o modelo 3D do produto, vídeo de apresentação e botões de contato.",
+    description: "Use o cartão como marcador para apresentar modelos 3D, vídeos e botões de contato no navegador.",
     gradient: "from-primary to-purple-600",
   },
   {
-    icon: FileText,
-    title: "Panfleto A4",
-    description: "Panfletos ganham vida com vídeos explicativos, tours virtuais e links diretos para compra.",
+    icon: MapPin,
+    title: "Ponto de interesse GPS",
+    description: "Associe uma experiência a coordenadas e mostre objetos na direção do local configurado.",
     gradient: "from-secondary to-cyan-500",
   },
   {
-    icon: Image,
-    title: "Post 1x1",
-    description: "Posts de redes sociais se transformam em experiências interativas com AR.",
+    icon: ScanFace,
+    title: "Produto em uma superfície",
+    description: "Apresente uma cena sobre chão ou mesa em dispositivos com WebXR AR compatível.",
     gradient: "from-emerald-500 to-teal-500",
   },
 ]
@@ -39,7 +39,7 @@ export function ExamplesSection() {
             <span className="text-gradient">funcionam</span>
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Três formatos otimizados para diferentes necessidades de marketing.
+            Exemplos de uso para marcadores, localização e superfícies.
           </p>
         </motion.div>
 

@@ -74,10 +74,10 @@ export const mockLayers: Layer[] = [
 ]
 
 export const faqItems = [
-  { q: "O que é CortexAR?", a: "É uma plataforma SaaS que permite criar experiências de realidade aumentada para materiais impressos como cartões de visita, panfletos e posts. Sem precisar de programação." },
-  { q: "Como funciona o marcador de imagem?", a: "Você faz upload de uma imagem (como seu cartão de visita). Nosso sistema gera um marcador que, quando escaneado pelo celular, dispara a experiência AR." },
-  { q: "Preciso de aplicativo para visualizar?", a: "Não! A experiência roda direto no navegador do celular via WebAR. Basta apontar a câmera para o marcador." },
-  { q: "Quais formatos de mídia são suportados?", a: "Modelos 3D (GLB/GLTF), vídeos MP4, vídeos com chromakey, imagens PNG/JPG e botões interativos (WhatsApp, site, Instagram, ligação, e-mail)." },
-  { q: "Posso usar meu próprio domínio?", a: "Sim! Nos planos Pro e Agency você pode usar domínio próprio para as experiências AR." },
-  { q: "Como funciona o período de teste?", a: "Oferecemos 7 dias grátis no plano Pro. Sem compromisso, sem cartão de crédito." },
+  { q: "O que é a CortexAR?", a: "É uma plataforma para criar e publicar experiências de realidade aumentada com marcador de imagem, localização GPS ou posicionamento em superfícies, usando um editor visual." },
+  { q: "É preciso instalar um aplicativo para visualizar?", a: "As experiências abrem pelo navegador em um link. Quando o navegador oferece suporte, também é possível instalar um atalho PWA para uma experiência." },
+  { q: "Como funciona uma experiência por GPS?", a: "O criador informa latitude, longitude e um raio de visibilidade. Em dispositivos com câmera e localização, o objeto aparece na direção do ponto e muda de tamanho conforme a distância." },
+  { q: "O que preciso para posicionar objetos em uma mesa ou no chão?", a: "Um dispositivo e navegador com WebXR AR e hit-test permitem detectar superfícies. Quando esse recurso não está disponível, a experiência oferece posicionamento manual." },
+  { q: "Quais mídias posso adicionar?", a: "O editor aceita modelos 3D GLB/GLTF, imagens, vídeos MP4, chromakey e streaming HLS por playlist .m3u8 pública com HTTPS e CORS habilitado." },
+  { q: "Posso reunir vários projetos em um link?", a: "Sim, quando o plano permite coleções. É possível combinar projetos do mesmo tipo, como vários marcadores ou vários pontos GPS, em uma URL." },
 ]

@@ -4,10 +4,10 @@ import { motion } from "framer-motion"
 import { Upload, Edit, Smartphone, Share2 } from "lucide-react"
 
 const steps = [
-  { icon: Upload, title: "Upload do Marcador", description: "Envie a imagem do seu cartão, panfleto ou post. Nosso sistema processa automaticamente." },
+  { icon: Upload, title: "Escolha o modo AR", description: "Comece com um marcador de imagem, uma localização GPS ou uma experiência de superfície." },
   { icon: Edit, title: "Monte a Experiência", description: "Adicione modelos 3D, vídeos, botões interativos. Posicione, escale e anime." },
-  { icon: Smartphone, title: "Preview no Celular", description: "Escaneie o QR Code com seu celular e veja a experiência AR em tempo real." },
-  { icon: Share2, title: "Publique e Compartilhe", description: "Compartilhe o link ou QR Code. Clientes apontam a câmera e pronto." },
+  { icon: Smartphone, title: "Confira no celular", description: "Teste a experiência no dispositivo compatível antes de publicar." },
+  { icon: Share2, title: "Publique e compartilhe", description: "Compartilhe o link ou QR Code da experiência; projetos do mesmo modo podem formar uma coleção." },
 ]
 
 export function HowItWorksSection() {
@@ -25,7 +25,7 @@ export function HowItWorksSection() {
             <span className="text-gradient">funciona</span>
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Em apenas 4 passos você transforma materiais impressos em experiências interativas.
+            Da configuração à publicação, crie experiências interativas para materiais impressos, espaços físicos ou pontos no mapa.
           </p>
         </motion.div>
 

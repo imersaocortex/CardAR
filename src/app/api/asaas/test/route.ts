@@ -1,4 +1,4 @@
 import { NextResponse } from "next/server"
 export async function POST() {
-  return NextResponse.json({ error: "Esta integração foi encerrada. Utilize PayPal ou Efí." }, { status: 410 })
+  return NextResponse.json({ error: "Endpoint antigo encerrado. Gerencie o Pix Automático em Minha assinatura." }, { status: 410 })
 }

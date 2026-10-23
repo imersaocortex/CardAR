@@ -49,7 +49,7 @@ export function PlansSection() {
           setPlans(normalized)
           setHasYearlyPlans(normalized.some((p: Plan) => p.billing_cycle === "yearly"))
         }
-        setBillingEnabled(!!(availability?.paypal?.configured || availability?.efi?.configured))
+        setBillingEnabled(!!availability?.asaas?.configured)
         setLoading(false)
       }).catch(() => setLoading(false))
   }, [])

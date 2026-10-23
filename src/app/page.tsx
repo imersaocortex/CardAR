@@ -19,13 +19,13 @@ export async function generateMetadata(): Promise<Metadata> {
     ? brand.meta_title : `${siteName} | Plataforma de realidade aumentada com GPS, WebAR e vídeo`
   const description = brand.meta_description && /GPS|superfície|streaming|HLS/i.test(brand.meta_description)
     ? brand.meta_description : fallbackDescription
-  const image = `${url}cortexar-share-v3.png`
+  const image = `${url}cortexar-share-v4.jpg`
   return {
     title, description,
     alternates: { canonical: url },
     robots: { index: true, follow: true },
     openGraph: { title, description, type: "website", url, siteName, locale: "pt_BR",
-      images: [{ url: image, secureUrl: image, type: "image/png", width: 1734, height: 907,
+      images: [{ url: image, secureUrl: image, type: "image/jpeg", width: 1200, height: 630,
         alt: `${siteName}: criação de experiências de realidade aumentada` }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   }

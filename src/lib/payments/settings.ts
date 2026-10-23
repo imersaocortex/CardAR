@@ -1,46 +1,29 @@
 import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { canStoreAsaasKey } from "./asaas-secret"
 
-export type BillingProvider = "efi" | "paypal"
-
-export function billingEnvironment() {
-  const globalEnabled = process.env.BILLING_V2_ENABLED === "true"
-  const liveEnabled = process.env.BILLING_LIVE_ENABLED === "true"
-  const pixMode = process.env.EFI_PIX_MODE === "manual" ? "manual" as const : "automatic" as const
-  const efiProduction = process.env.EFI_ENVIRONMENT === "production"
-  const paypalProduction = process.env.PAYPAL_ENVIRONMENT === "production"
-  const efiMissing = [
-    "EFI_ENVIRONMENT", "EFI_CLIENT_ID", "EFI_CLIENT_SECRET", "EFI_CERTIFICATE_BASE64",
-    "EFI_PIX_KEY", "EFI_WEBHOOK_TOKEN", "EFI_ACCOUNT_NUMBER", "APP_URL", "CRON_SECRET",
-  ].filter((key) => !process.env[key])
-  const paypalMissing = [
-    "PAYPAL_ENVIRONMENT", "PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID", "APP_URL", "CRON_SECRET",
-  ].filter((key) => !process.env[key])
-  if (process.env.EFI_ENVIRONMENT && !["production", "sandbox"].includes(process.env.EFI_ENVIRONMENT)) efiMissing.push("EFI_ENVIRONMENT=production|sandbox")
-  if (process.env.PAYPAL_ENVIRONMENT && !["production", "sandbox"].includes(process.env.PAYPAL_ENVIRONMENT)) paypalMissing.push("PAYPAL_ENVIRONMENT=production|sandbox")
-  const appUrl = process.env.APP_URL
-  if (appUrl) {
-    try { if (new URL(appUrl).protocol !== "https:") { efiMissing.push("APP_URL HTTPS"); paypalMissing.push("APP_URL HTTPS") } }
-    catch { efiMissing.push("APP_URL válido"); paypalMissing.push("APP_URL válido") }
+export function billingEnvironment(hasStoredKey = false) {
+  const production = process.env.ASAAS_ENVIRONMENT === "production"
+  const missing = ["ASAAS_ENVIRONMENT", "ASAAS_WEBHOOK_TOKEN", "ASAAS_WEBHOOK_EMAIL", "APP_URL", "CRON_SECRET"]
+    .filter((key) => !process.env[key])
+  if (!hasStoredKey && !process.env.ASAAS_API_KEY) missing.push("Chave de API da Asaas")
+  if (hasStoredKey && !canStoreAsaasKey()) missing.push("ASAAS_SECRETS_KEY")
+  if (process.env.ASAAS_ENVIRONMENT && !["production", "sandbox"].includes(process.env.ASAAS_ENVIRONMENT)) missing.push("ASAAS_ENVIRONMENT=production|sandbox")
+  if (process.env.ASAAS_WEBHOOK_TOKEN && (process.env.ASAAS_WEBHOOK_TOKEN.length < 32 || /\s/.test(process.env.ASAAS_WEBHOOK_TOKEN))) missing.push("ASAAS_WEBHOOK_TOKEN com 32+ caracteres sem espaços")
+  if (process.env.APP_URL) {
+    try { if (new URL(process.env.APP_URL).protocol !== "https:") missing.push("APP_URL HTTPS") }
+    catch { missing.push("APP_URL válido") }
   }
-  if (pixMode !== "automatic") efiMissing.push("EFI_PIX_MODE=automatic")
-  if (!efiProduction && process.env.BILLING_SANDBOX_DB_ISOLATED !== "true") efiMissing.push("BILLING_SANDBOX_DB_ISOLATED=true")
-  if (!paypalProduction && process.env.BILLING_SANDBOX_DB_ISOLATED !== "true") paypalMissing.push("BILLING_SANDBOX_DB_ISOLATED=true")
-  if (process.env.EFI_WEBHOOK_TOKEN && !/^[A-Za-z0-9_-]{24,}$/.test(process.env.EFI_WEBHOOK_TOKEN)) efiMissing.push("EFI_WEBHOOK_TOKEN URL-safe com 24+ caracteres")
-  if (efiProduction && !liveEnabled) efiMissing.push("BILLING_LIVE_ENABLED=true")
-  if (paypalProduction && !liveEnabled) paypalMissing.push("BILLING_LIVE_ENABLED=true")
-  if (!globalEnabled) { efiMissing.push("BILLING_V2_ENABLED=true"); paypalMissing.push("BILLING_V2_ENABLED=true") }
-  return { globalEnabled, liveEnabled, pixMode, efiProduction, paypalProduction, efiMissing, paypalMissing }
+  if (!production && process.env.BILLING_SANDBOX_DB_ISOLATED !== "true") missing.push("BILLING_SANDBOX_DB_ISOLATED=true")
+  if (production && process.env.BILLING_LIVE_ENABLED !== "true") missing.push("BILLING_LIVE_ENABLED=true")
+  if (process.env.BILLING_V2_ENABLED !== "true") missing.push("BILLING_V2_ENABLED=true")
+  return { production, missing, liveEnabled: process.env.BILLING_LIVE_ENABLED === "true" }
 }
 
 export async function billingAvailability() {
-  const env = billingEnvironment()
   const { data, error } = await createAdminClient().from("billing_provider_settings")
-    .select("efi_enabled, paypal_enabled").eq("id", 1).maybeSingle()
-  if (error || !data) throw new Error("Configuração dos meios de pagamento indisponível")
-  return {
-    paypal: { enabled: data.paypal_enabled, configured: data.paypal_enabled && env.paypalMissing.length === 0 },
-    efi: { enabled: data.efi_enabled, configured: data.efi_enabled && env.efiMissing.length === 0 },
-    pixMode: env.pixMode,
-  }
+    .select("asaas_enabled, asaas_api_key_ciphertext").eq("id", 1).maybeSingle()
+  if (error || !data) throw new Error("Aplique a migração 028 para configurar os pagamentos")
+  const environment = billingEnvironment(!!data.asaas_api_key_ciphertext)
+  return { asaas: { enabled: data.asaas_enabled, configured: data.asaas_enabled && environment.missing.length === 0 } }
 }

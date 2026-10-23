@@ -77,7 +77,6 @@ export async function POST(request: Request) {
     has_watermark: parsed.data.has_watermark,
     multi_project_enabled: parsed.data.multi_project_enabled,
     allowed_media_types: parsed.data.allowed_media_types,
-    paypal_plan_id: parsed.data.paypal_plan_id || null,
   }
 
   // highlight column may not exist yet if migration hasn't been run

@@ -3,76 +3,92 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 
-type Provider = "efi" | "paypal"
 type Data = {
-  settings: { efi_enabled: boolean; paypal_enabled: boolean }
-  environment: { pixMode: string; efiProduction: boolean; paypalProduction: boolean; efiMissing: string[]; paypalMissing: string[] }
+  settings: { asaas_enabled: boolean; asaas_pix_key: string | null; has_api_key: boolean }
+  environment: { production: boolean; missing: string[] }
+  canStoreKey: boolean
 }
-type Webhooks = { pix: boolean; rec: boolean; cobr: boolean }
+type Webhook = { configured: boolean; enabled: boolean; interrupted: boolean; missingEvents: string[] }
 
 export function PaymentsTab() {
   const [data, setData] = useState<Data | null>(null)
-  const [webhooks, setWebhooks] = useState<Webhooks | null>(null)
-  const [busy, setBusy] = useState("")
+  const [webhook, setWebhook] = useState<Webhook | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
-
+  const [pixKey, setPixKey] = useState("")
+  const [apiKey, setApiKey] = useState("")
   useEffect(() => {
     fetch("/api/admin/billing-providers", { cache: "no-store" }).then(async (response) => {
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || "Não foi possível consultar os pagamentos")
       setData(result)
+      setPixKey(result.settings.asaas_pix_key || "")
     }).catch((reason) => setError(reason.message))
   }, [])
-
-  async function change(provider: Provider, enabled: boolean) {
-    setBusy(provider); setError(""); setNotice("")
+  async function change(enabled: boolean) {
+    setBusy(true); setError(""); setNotice("")
     try {
-      const response = await fetch("/api/admin/billing-providers", {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, enabled }),
-      })
+      const response = await fetch("/api/admin/billing-providers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || "Não foi possível salvar")
       setData((current) => current ? { ...current, settings: result.settings } : current)
-      setNotice(`${provider === "efi" ? "Pix Automático Efí" : "PayPal"} ${enabled ? "ativado" : "desativado"} para novas assinaturas. Assinaturas existentes continuam sendo conciliadas.`)
+      setNotice(enabled ? "Pix Automático ativado para novas assinaturas." : "Novas assinaturas desativadas. O histórico permanece disponível.")
     } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy("") }
+    finally { setBusy(false) }
   }
-
-  async function handleWebhooks(action: "verify_webhooks" | "register_webhooks") {
-    setBusy(action); setError(""); setNotice("")
+  async function handleWebhook(action: "verify_webhook" | "register_webhook") {
+    setBusy(true); setError(""); setNotice("")
     try {
-      const response = await fetch("/api/admin/billing-providers", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
-      })
+      const response = await fetch("/api/admin/billing-providers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) })
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível consultar a Efí")
-      setWebhooks(result.webhooks)
-      setNotice(Object.values(result.webhooks as Webhooks).every(Boolean) ? "Os três webhooks estão vinculados a esta aplicação." : "Ainda há webhooks ausentes ou apontando para outro endereço.")
+      if (!response.ok) throw new Error(result.error || "Não foi possível consultar a Asaas")
+      setWebhook(result.webhook)
+      setNotice(result.webhook.configured ? "Webhook da Asaas configurado." : "Webhook incompleto ou desativado.")
     } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy("") }
+    finally { setBusy(false) }
   }
-
+  async function savePixKey() {
+    setBusy(true); setError(""); setNotice("")
+    try {
+      const response = await fetch("/api/admin/billing-providers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pix_key: pixKey }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Não foi possível salvar a chave Pix")
+      setData((current) => current ? { ...current, settings: result.settings } : current)
+      setNotice("Chave Pix de referência salva.")
+    } catch (reason) { setError((reason as Error).message) }
+    finally { setBusy(false) }
+  }
+  async function saveApiKey() {
+    setBusy(true); setError(""); setNotice("")
+    try {
+      const response = await fetch("/api/admin/billing-providers", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: apiKey }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Não foi possível salvar a chave de API")
+      setApiKey("")
+      setData((current) => current ? { ...current, settings: { ...current.settings, has_api_key: true }, environment: {
+        ...current.environment, missing: current.environment.missing.filter((item) => item !== "Chave de API da Asaas"),
+      } } : current)
+      setNotice("Chave de API criptografada e salva. Confira o webhook antes de ativar cobranças.")
+    } catch (reason) { setError((reason as Error).message) }
+    finally { setBusy(false) }
+  }
   return <div className="space-y-5">
-    <div><h2 className="text-xl font-semibold">Meios de pagamento</h2><p className="mt-2 text-sm text-muted-foreground">Ative cada provedor separadamente. As credenciais ficam nas variáveis seguras da Vercel e não são exibidas aqui.</p></div>
+    <div><h2 className="text-xl font-semibold">Meios de pagamento</h2><p className="mt-2 text-sm text-muted-foreground">A única forma de pagamento para novas assinaturas é Pix Automático pela Asaas.</p></div>
     {error && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm">{notice}</p>}
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card><CardHeader><CardTitle>Pix Automático · Efí Bank</CardTitle></CardHeader><CardContent className="space-y-4">
-        <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.environment.efiProduction ? "Ambiente de produção" : "Ambiente de homologação"}</p></div><Switch aria-label="Ativar Pix Automático Efí" checked={!!data?.settings.efi_enabled} disabled={!data || !!busy || (!data.settings.efi_enabled && data.environment.efiMissing.length > 0)} onCheckedChange={(checked) => change("efi", checked)} /></div>
-        <p className="text-sm text-muted-foreground">Primeiro Pix por QR Code com autorização das cobranças seguintes. Modo atual: {data?.environment.pixMode === "automatic" ? "automático" : "manual"}.</p>
-        {data?.environment.efiMissing.length ? <p className="text-xs text-amber-600">Para ativar, configure: {data.environment.efiMissing.join(", ")}.</p> : <p className="text-xs text-emerald-600">Variáveis obrigatórias presentes. Verifique os webhooks antes de ativar.</p>}
-        <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={!data || !!busy || data.environment.efiMissing.length > 0} onClick={() => handleWebhooks("verify_webhooks")}>Verificar webhooks</Button><Button type="button" variant="outline" size="sm" disabled={!data || !!busy || data.environment.efiMissing.length > 0} onClick={() => handleWebhooks("register_webhooks")}>Configurar webhooks</Button></div>
-        {webhooks && <p className="text-xs text-muted-foreground">Pix inicial: {webhooks.pix ? "ok" : "pendente"} · Autorização: {webhooks.rec ? "ok" : "pendente"} · Renovação: {webhooks.cobr ? "ok" : "pendente"}</p>}
-      </CardContent></Card>
-      <Card><CardHeader><CardTitle>PayPal</CardTitle></CardHeader><CardContent className="space-y-4">
-        <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.environment.paypalProduction ? "Ambiente de produção" : "Ambiente de homologação"}</p></div><Switch aria-label="Ativar PayPal" checked={!!data?.settings.paypal_enabled} disabled={!data || !!busy || (!data.settings.paypal_enabled && data.environment.paypalMissing.length > 0)} onCheckedChange={(checked) => change("paypal", checked)} /></div>
-        <p className="text-sm text-muted-foreground">Fica desligado até você configurar as credenciais e o webhook do PayPal.</p>
-        {!!data?.environment.paypalMissing.length && <p className="text-xs text-amber-600">Para ativar, configure: {data.environment.paypalMissing.join(", ")}.</p>}
-      </CardContent></Card>
-    </div>
-    <p className="text-sm text-muted-foreground">Desativar um provedor impede novas contratações. Pagamentos, cancelamentos e renovações já existentes continuam sendo tratados pela rotina de conciliação.</p>
+    <Card><CardHeader><CardTitle>Pix Automático · Asaas</CardTitle></CardHeader><CardContent className="space-y-4">
+      <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.environment.production ? "Produção" : "Homologação"}</p></div><Switch aria-label="Ativar Pix Automático Asaas" checked={!!data?.settings.asaas_enabled} disabled={!data || busy || (!data.settings.asaas_enabled && data.environment.missing.length > 0)} onCheckedChange={change} /></div>
+      <p className="text-sm text-muted-foreground">O primeiro QR Code autoriza a recorrência. A Asaas gera as cobranças futuras, e o sistema confirma cada pagamento antes de liberar o acesso.</p>
+      <div className="space-y-2 rounded-lg border p-3"><label htmlFor="asaas-pix-key" className="text-sm font-medium">Chave Pix recebedora</label><Input id="asaas-pix-key" autoComplete="off" value={pixKey} onChange={(event) => setPixKey(event.target.value)} placeholder="Informe sua chave Pix" maxLength={255} disabled={!data || busy} /><p className="text-xs text-muted-foreground">Referência administrativa opcional. O Pix Automático usa o QR Code gerado pela Asaas; esta chave não é enviada nas cobranças.</p><Button type="button" variant="outline" size="sm" disabled={!data || busy || pixKey === (data.settings.asaas_pix_key || "")} onClick={savePixKey}>Salvar chave Pix</Button></div>
+      <div className="space-y-2 rounded-lg border p-3"><label htmlFor="asaas-api-key" className="text-sm font-medium">Chave de API da Asaas</label><Input id="asaas-api-key" type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={data?.settings.has_api_key ? "Chave configurada — informe outra para substituir" : "Cole a chave de API"} maxLength={1000} disabled={!data || busy || !data.canStoreKey} /><p className="text-xs text-muted-foreground">{data?.settings.has_api_key ? "Configurada. O valor não pode ser visualizado após salvar." : "Ainda não configurada."} A chave é criptografada antes de ser armazenada.</p>{data && !data.canStoreKey && <p className="text-xs text-amber-600">Configure ASAAS_SECRETS_KEY na Vercel para habilitar o armazenamento seguro.</p>}<Button type="button" variant="outline" size="sm" disabled={!data || busy || !data.canStoreKey || apiKey.trim().length < 20} onClick={saveApiKey}>Salvar chave de API</Button></div>
+      {!!data?.environment.missing.length && <p className="text-xs text-amber-600">Para ativar, configure: {data.environment.missing.join(", ")}.</p>}
+      <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={!data || busy} onClick={() => handleWebhook("verify_webhook")}>Verificar webhook</Button><Button type="button" variant="outline" size="sm" disabled={!data || busy} onClick={() => handleWebhook("register_webhook")}>Configurar webhook</Button></div>
+      {webhook && <p className="text-xs text-muted-foreground">{webhook.configured ? "Recebimento pronto" : webhook.interrupted ? "Fila interrompida" : `${webhook.missingEvents.length} eventos pendentes`}</p>}
+    </CardContent></Card>
+    <p className="text-sm text-muted-foreground">Os pagamentos históricos dos provedores anteriores continuam disponíveis para auditoria. O WhatsApp usa a conexão Evolution já configurada no sistema.</p>
   </div>
 }

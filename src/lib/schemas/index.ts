@@ -116,7 +116,6 @@ export const createPlanSchema = z.object({
   multi_project_enabled: z.boolean().default(false),
   allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
   highlight: z.boolean().default(false),
-  paypal_plan_id: z.string().nullable().optional(),
 })
 
 export const updatePlanSchema = createPlanSchema.partial()

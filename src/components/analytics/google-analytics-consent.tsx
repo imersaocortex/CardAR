@@ -75,12 +75,12 @@ export function GoogleAnalyticsConsent() {
       {(choice === null || showPreferences) && (
         <section
           role="dialog"
-          aria-label="Preferências de métricas"
+          aria-label="Preferências de cookies"
           className="fixed inset-x-4 bottom-4 z-[100] mx-auto max-w-xl rounded-2xl border border-border bg-background p-5 text-foreground shadow-2xl"
         >
-          <p className="text-sm font-semibold">Métricas de navegação</p>
+          <p className="text-sm font-semibold">Uma experiência melhor para você</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Podemos usar o Google Analytics para entender como a plataforma é visitada. A análise é opcional e só começa se você aceitar.
+            Com sua permissão, usamos cookies opcionais para entender como o site é usado e encontrar maneiras de deixar a navegação mais simples e rápida. Você pode recusar; o site continua funcionando.
           </p>
           <div className="mt-4 flex flex-wrap justify-end gap-2">
             <button
@@ -88,14 +88,14 @@ export function GoogleAnalyticsConsent() {
               onClick={() => choose("rejected")}
               className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
             >
-              Recusar
+              Não, obrigado
             </button>
             <button
               type="button"
               onClick={() => choose("accepted")}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
-              Aceitar métricas
+              Aceitar cookies
             </button>
           </div>
         </section>

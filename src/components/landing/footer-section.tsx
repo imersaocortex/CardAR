@@ -63,7 +63,7 @@ export function FooterSection() {
               onClick={() => window.dispatchEvent(new Event("cortexar:analytics-preferences"))}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              Preferências de métricas
+              Preferências de cookies
             </button>
           </div>
 

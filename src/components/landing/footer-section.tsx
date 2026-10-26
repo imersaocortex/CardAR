@@ -48,7 +48,7 @@ export function FooterSection() {
             )}
           </Link>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center justify-center gap-6">
             {footerLinks.map((link) => (
               <Link
                 key={link.href}
@@ -58,6 +58,13 @@ export function FooterSection() {
                 {link.label}
               </Link>
             ))}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("cortexar:analytics-preferences"))}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Preferências de métricas
+            </button>
           </div>
 
           <p className="text-xs text-muted-foreground">

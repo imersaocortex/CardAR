@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import Script from "next/script"
 import "./globals.css"
 import { Providers } from "@/components/providers"
+import { GoogleAnalyticsConsent } from "@/components/analytics/google-analytics-consent"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { cookies } from "next/headers"
 
@@ -73,6 +74,7 @@ export default function RootLayout({
           });
         `}</Script>
         <Providers>{children}</Providers>
+        <GoogleAnalyticsConsent />
       </body>
     </html>
   )

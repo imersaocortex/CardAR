@@ -11,6 +11,8 @@ export async function PUT(request: Request, { params }: Context) {
     return NextResponse.json({ error: "Este plano não permite editar experiências com vários projetos" }, { status: 403 })
   const parsed = collectionInput.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+  if (parsed.data.tracking_mode === "gps" && !access.gpsEnabled)
+    return NextResponse.json({ error: "Este plano não permite experiências por GPS" }, { status: 403 })
   const invalid = await validateMembers(access.admin, access.organizationId, parsed.data)
   if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
   const { id } = await params

@@ -30,6 +30,8 @@ interface Plan {
   assets_limit_label: string
   features: string[]
   multi_project_enabled?: boolean
+  gps_enabled?: boolean
+  surface_enabled?: boolean
   active: boolean
   created_at: string
   subscriptions?: { count: number }[]
@@ -64,6 +66,8 @@ export function PlansTab() {
     trial_days: 0,
     has_watermark: true,
     multi_project_enabled: false,
+    gps_enabled: false,
+    surface_enabled: false,
     allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
     highlight: false,
   })
@@ -99,6 +103,8 @@ export function PlansTab() {
       trial_days: 0,
       has_watermark: true,
       multi_project_enabled: false,
+      gps_enabled: false,
+      surface_enabled: false,
       allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
       highlight: false,
     })
@@ -120,6 +126,8 @@ export function PlansTab() {
       trial_days: (plan as any).trial_days || 0,
       has_watermark: (plan as any).has_watermark !== false,
       multi_project_enabled: plan.multi_project_enabled === true,
+      gps_enabled: plan.gps_enabled === true,
+      surface_enabled: plan.surface_enabled === true,
       allowed_media_types: Array.isArray((plan as any).allowed_media_types)
         ? (plan as any).allowed_media_types.join(", ")
         : "image/png,image/jpeg,model/gltf-binary",
@@ -171,6 +179,8 @@ export function PlansTab() {
         trial_days: form.trial_days,
         has_watermark: form.has_watermark,
         multi_project_enabled: form.multi_project_enabled,
+        gps_enabled: form.gps_enabled,
+        surface_enabled: form.surface_enabled,
         allowed_media_types: form.allowed_media_types.split(",").map((t) => t.trim()).filter(Boolean),
         highlight: form.highlight,
       }
@@ -465,6 +475,14 @@ export function PlansTab() {
             <div className="flex items-center gap-3">
               <Switch id="plan-multi-project" checked={form.multi_project_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, multi_project_enabled: value }))} />
               <Label htmlFor="plan-multi-project">Permitir experiências com vários projetos</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch id="plan-gps" checked={form.gps_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, gps_enabled: value }))} />
+              <Label htmlFor="plan-gps">Permitir projetos por GPS</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch id="plan-surface" checked={form.surface_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, surface_enabled: value }))} />
+              <Label htmlFor="plan-surface">Permitir AR sem marcador (superfície)</Label>
             </div>
 
             <div className="space-y-2">

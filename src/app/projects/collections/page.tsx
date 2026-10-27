@@ -16,6 +16,7 @@ export default function CollectionsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [enabled, setEnabled] = useState(false)
+  const [gpsEnabled, setGpsEnabled] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -30,10 +31,11 @@ export default function CollectionsPage() {
     const [projectData, collectionData] = await Promise.all([projectsResponse.json(), collectionsResponse.json()])
     return { projectData, collectionData }
   }, [])
-  const applyData = useCallback(({ projectData, collectionData }: { projectData: Project[]; collectionData: { collections: Collection[]; enabled: boolean; canEdit: boolean } }) => {
+  const applyData = useCallback(({ projectData, collectionData }: { projectData: Project[]; collectionData: { collections: Collection[]; enabled: boolean; gpsEnabled: boolean; canEdit: boolean } }) => {
     setProjects(projectData)
     setCollections(collectionData.collections)
     setEnabled(collectionData.enabled)
+    setGpsEnabled(collectionData.gpsEnabled)
     setCanEdit(collectionData.canEdit)
     setLoading(false)
   }, [])
@@ -96,7 +98,7 @@ export default function CollectionsPage() {
     {!loading && enabled && canEdit && <section className="space-y-5 rounded-2xl border bg-card p-6">
       <h2 className="text-lg font-semibold">{editing ? "Editar experiência" : "Nova experiência"}</h2>
       <div className="space-y-2"><Label htmlFor="collection-name">Nome da experiência</Label><Input id="collection-name" maxLength={100} value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Coleção de cartões" /></div>
-      <div className="space-y-2"><Label htmlFor="collection-mode">Tecnologia</Label><select id="collection-mode" value={mode} onChange={(event) => { setMode(event.target.value as Mode); setSelected([]) }} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="marker">Vários marcadores</option><option value="gps">Vários pontos GPS</option></select></div>
+      <div className="space-y-2"><Label htmlFor="collection-mode">Tecnologia</Label><select id="collection-mode" value={mode} onChange={(event) => { setMode(event.target.value as Mode); setSelected([]) }} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="marker">Vários marcadores</option><option value="gps" disabled={!gpsEnabled}>Vários pontos GPS{gpsEnabled ? "" : " · indisponível no plano"}</option></select></div>
       <div className="space-y-2"><Label>Projetos publicados ({selected.length} selecionados)</Label>
         <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border p-3">{choices.length === 0 ? <p className="text-sm text-muted-foreground">Publique pelo menos dois projetos deste tipo para criar a experiência.</p> : choices.map((project) => <label key={project.id} className="flex cursor-pointer items-center gap-3 rounded-lg p-2 hover:bg-muted/50"><input type="checkbox" checked={selected.includes(project.id)} onChange={() => toggle(project.id)} /><span className="text-sm">{project.name}</span></label>)}</div>
         <p className="text-xs text-muted-foreground">Máximo de {mode === "marker" ? "10 marcadores" : "20 pontos GPS"}. Projetos de tecnologias diferentes não podem ser combinados.</p>

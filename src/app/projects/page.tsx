@@ -50,6 +50,7 @@ export default function ProjectsPage() {
   const [markerFile, setMarkerFile] = useState<File | null>(null)
   const [markerPreview, setMarkerPreview] = useState<string | null>(null)
   const [subSuspended, setSubSuspended] = useState(false)
+  const [trackingAccess, setTrackingAccess] = useState({ gps: false, surface: false })
   const markerInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -80,11 +81,13 @@ export default function ProjectsPage() {
       // Check subscription status
       const { data: sub } = await supabase
         .from("subscriptions")
-        .select("status")
+        .select("status, plans(gps_enabled, surface_enabled)")
         .eq("organization_id", memberships.organization_id)
         .single()
 
       setSubSuspended(sub ? (sub.status === "past_due" || sub.status === "canceled") : false)
+      const plan = Array.isArray(sub?.plans) ? sub.plans[0] : sub?.plans
+      setTrackingAccess({ gps: plan?.gps_enabled === true, surface: plan?.surface_enabled === true })
     }
     setLoading(false)
   }
@@ -362,8 +365,8 @@ export default function ProjectsPage() {
                     onChange={(event) => setNewProject({ ...newProject, trackingMode: event.target.value })}
                   >
                     <option value="marker">Imagem / marcador</option>
-                    <option value="surface">Superfície: chão ou mesa</option>
-                    <option value="gps">GPS: direção das coordenadas</option>
+                    <option value="surface" disabled={!trackingAccess.surface}>Superfície: chão ou mesa{trackingAccess.surface ? "" : " · indisponível no plano"}</option>
+                    <option value="gps" disabled={!trackingAccess.gps}>GPS: direção das coordenadas{trackingAccess.gps ? "" : " · indisponível no plano"}</option>
                   </select>
                   {newProject.trackingMode === "surface" && <p className="text-xs text-muted-foreground">Posicione a cena em uma superfície plana. Requer celular compatível com WebXR AR.</p>}
                   {newProject.trackingMode === "gps" && <p className="text-xs text-muted-foreground">O objeto aparecerá na direção do ponto configurado. GPS e bússola são necessários.</p>}

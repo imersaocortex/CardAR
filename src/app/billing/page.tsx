@@ -10,7 +10,7 @@ import Image from "next/image"
 import QRCode from "qrcode"
 import { planFeatureLabels } from "@/lib/plans/feature-labels"
 
-type Plan = { id: string; name: string; price: number; billing_cycle: string; projects_limit: number; features: string[]; has_watermark?: boolean; multi_project_enabled?: boolean }
+type Plan = { id: string; name: string; price: number; billing_cycle: string; projects_limit: number; features: string[]; has_watermark?: boolean; multi_project_enabled?: boolean; gps_enabled?: boolean; surface_enabled?: boolean }
 type Agreement = { id: string; provider: string; status: string; pix_code: string | null; qr_expires_at: string | null; setup_stage: string }
 type Billing = { plans: Plan[]; subscription: { status: string; current_period_end: string; trial_ends_at: string | null; cancel_at_period_end: boolean; plans: Plan }; agreement: Agreement | null; invoices: { id: string; provider: string; status: string; amount_cents: number; due_date: string; invoice_url: string | null; pix_code: string | null; qr_expires_at: string | null }[]; payments: { id: string; provider: string; value: number; status: string; due_date: string; paid_date: string | null }[]; usage: { projects_used: number; projects_limit: number }; canManage: boolean }
 type Availability = { asaas: { configured: boolean }; mercado_pago: { configured: boolean } }

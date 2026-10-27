@@ -76,6 +76,8 @@ export async function POST(request: Request) {
     trial_days: parsed.data.trial_days,
     has_watermark: parsed.data.has_watermark,
     multi_project_enabled: parsed.data.multi_project_enabled,
+    gps_enabled: parsed.data.gps_enabled,
+    surface_enabled: parsed.data.surface_enabled,
     allowed_media_types: parsed.data.allowed_media_types,
   }
 

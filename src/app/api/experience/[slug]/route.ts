@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { selectPrimaryScene } from "@/lib/scenes"
 import { subscriptionGrantsAccess } from "@/lib/payments/access"
+import { planAllowsTrackingMode } from "@/lib/plans/tracking"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
@@ -35,16 +36,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     // Check plan for watermark feature
     let hasWatermark = true
+    let trackingPlan: { gps_enabled: boolean; surface_enabled: boolean } | null = null
     if (subscription?.plan_id) {
       const { data: plan } = await admin
         .from("plans")
-        .select("has_watermark")
+        .select("has_watermark, gps_enabled, surface_enabled")
         .eq("id", subscription.plan_id)
         .single()
       if (plan) {
+        trackingPlan = plan
         hasWatermark = plan.has_watermark
       }
     }
+    if (!planAllowsTrackingMode(trackingPlan, project.tracking_mode || "marker"))
+      return NextResponse.json({ error: "Tecnologia indisponível neste plano" }, { status: 404 })
 
     // Get system name from settings
     const { data: settings } = await admin

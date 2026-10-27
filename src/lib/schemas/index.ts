@@ -114,6 +114,8 @@ export const createPlanSchema = z.object({
   trial_days: z.number().int().min(0).default(0),
   has_watermark: z.boolean().default(true),
   multi_project_enabled: z.boolean().default(false),
+  gps_enabled: z.boolean().default(false),
+  surface_enabled: z.boolean().default(false),
   allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
   highlight: z.boolean().default(false),
 })

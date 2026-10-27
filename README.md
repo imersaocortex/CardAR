@@ -68,9 +68,14 @@ Configure em **Suas integrações → Webhooks** o evento **Pagamentos** para `h
 | `MERCADO_PAGO_ENVIRONMENT` | `production` ou `sandbox` |
 | `MERCADO_PAGO_ACCESS_TOKEN` | Access Token privado da aplicação Mercado Pago |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | Chave secreta de assinatura dos Webhooks da aplicação |
+
 | `APP_URL`, `CRON_SECRET` | Origem HTTPS e conciliação agendada já utilizadas pelo faturamento |
 | `BILLING_V2_ENABLED`, `BILLING_LIVE_ENABLED` | Habilitam contratações e cobranças reais; a conciliação de contratos existentes continua quando desligados |
 | `BILLING_SANDBOX_DB_ISOLATED` | `true` apenas se o banco de homologação for separado do de produção |
+
+### Permissões de GPS e AR por superfície nos planos
+
+Após a migração 030, aplique manualmente `supabase/migrations/031_plan_tracking_modes.sql` e execute `supabase/verify_031.sql` antes de publicar o código correspondente. A migração mantém GPS e superfície habilitados em todos os planos já existentes para preservar experiências publicadas. Na criação de novos planos, ambos começam desligados e podem ser habilitados separadamente no painel **Administrativo → Planos**, junto da permissão para vários projetos. Ao desligar uma tecnologia em um plano, suas experiências existentes deixam de abrir até que a permissão seja reativada; os projetos não são apagados.
 
 O programa de afiliados paga 10% do primeiro pagamento e de cada renovação confirmada, com liberação após 30 dias. O saque é solicitado pelo afiliado e o Pix é transferido manualmente pela administração; marque como pago apenas após conferir a transferência e guardar o comprovante. Estornos revertem a comissão quando possível e apresentam pendência administrativa se ela já tiver sido paga.
 

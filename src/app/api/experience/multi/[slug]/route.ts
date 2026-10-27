@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { subscriptionGrantsAccess } from "@/lib/payments/access"
+import { planAllowsTrackingMode } from "@/lib/plans/tracking"
 import { serializeExperience, type ExperienceProjectRow } from "@/lib/ar/serialize-experience"
 import type { ArExperienceData } from "@/lib/mindar"
 
@@ -11,11 +12,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     .select("*").eq("slug", slug).maybeSingle()
   if (!collection) return NextResponse.json({ error: "Experiência não encontrada" }, { status: 404 })
   const { data: subscription } = await admin.from("subscriptions")
-    .select("status, trial_ends_at, current_period_end, plans(has_watermark, multi_project_enabled)")
+    .select("status, trial_ends_at, current_period_end, plans(has_watermark, multi_project_enabled, gps_enabled, surface_enabled)")
     .eq("organization_id", collection.organization_id).maybeSingle()
   const plan = Array.isArray(subscription?.plans) ? subscription.plans[0] : subscription?.plans
   const active = subscriptionGrantsAccess(subscription)
-  if (!active || plan?.multi_project_enabled !== true)
+  if (!active || plan?.multi_project_enabled !== true || !planAllowsTrackingMode(plan, collection.tracking_mode))
     return NextResponse.json({ error: "Experiência indisponível neste plano" }, { status: 404 })
   const { data: projects, error } = await admin.from("projects")
     .select("*, scenes(*, scene_objects(*, scene_buttons(*))), project_markers(*)")

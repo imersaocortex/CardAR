@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server"
 import { createProjectSchema } from "@/lib/schemas"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { generateSlug } from "@/lib/utils"
+import { planAllowsTrackingMode } from "@/lib/plans/tracking"
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -70,6 +71,13 @@ export async function POST(request: Request) {
   const orgId = membership.organization_id
 
   const admin = createAdminClient()
+  if (parsed.data.tracking_mode !== "marker") {
+    const { data: entitlement, error: entitlementError } = await admin.from("subscriptions")
+      .select("plans(gps_enabled, surface_enabled)").eq("organization_id", orgId).maybeSingle()
+    const plan = Array.isArray(entitlement?.plans) ? entitlement.plans[0] : entitlement?.plans
+    if (entitlementError || !planAllowsTrackingMode(plan, parsed.data.tracking_mode))
+      return NextResponse.json({ error: "Esta tecnologia não está disponível no seu plano." }, { status: 403 })
+  }
 
   // Check if user is a platform admin (super_admin or admin) — unlimited access
   const { data: profile } = await admin

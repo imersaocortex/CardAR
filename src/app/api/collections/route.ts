@@ -29,7 +29,7 @@ export async function GET() {
   const { data, error } = await access.admin.from("experience_collections")
     .select("*").eq("organization_id", access.organizationId).order("updated_at", { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ enabled: access.enabled, canEdit: access.canEdit, collections: data ?? [] })
+  return NextResponse.json({ enabled: access.enabled, gpsEnabled: access.gpsEnabled, canEdit: access.canEdit, collections: data ?? [] })
 }
 
 export async function POST(request: Request) {
@@ -39,6 +39,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Este plano não permite criar experiências com vários projetos" }, { status: 403 })
   const parsed = collectionInput.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+  if (parsed.data.tracking_mode === "gps" && !access.gpsEnabled)
+    return NextResponse.json({ error: "Este plano não permite experiências por GPS" }, { status: 403 })
   const invalid = await validateMembers(access.admin, access.organizationId, parsed.data)
   if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
   const { data, error } = await access.admin.from("experience_collections").insert({

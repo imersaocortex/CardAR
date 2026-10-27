@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { selectPrimaryScene } from "@/lib/scenes"
+import { subscriptionGrantsAccess } from "@/lib/payments/access"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
@@ -24,11 +25,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     const { data: subscription } = await admin
       .from("subscriptions")
-      .select("status, plan_id")
+      .select("status, plan_id, current_period_end, trial_ends_at")
       .eq("organization_id", project.organization_id)
       .maybeSingle()
 
-    if (subscription && (subscription.status === "canceled" || subscription.status === "past_due")) {
+    if (!subscriptionGrantsAccess(subscription)) {
       return NextResponse.json({ error: "Projeto não disponível" }, { status: 404 })
     }
 

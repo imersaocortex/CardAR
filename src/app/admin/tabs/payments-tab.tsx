@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 
 type Data = {
-  settings: { asaas_enabled: boolean; asaas_pix_key: string | null; has_api_key: boolean }
+  settings: { asaas_enabled: boolean; asaas_pix_key: string | null; has_api_key: boolean; mercado_pago_enabled: boolean }
   environment: { production: boolean; missing: string[] }
+  mercadoPagoEnvironment: { production: boolean; missing: string[] }
   canStoreKey: boolean
 }
 type Webhook = { configured: boolean; enabled: boolean; interrupted: boolean; missingEvents: string[] }
@@ -37,6 +38,17 @@ export function PaymentsTab() {
       if (!response.ok) throw new Error(result.error || "Não foi possível salvar")
       setData((current) => current ? { ...current, settings: result.settings } : current)
       setNotice(enabled ? "Pix Automático ativado para novas assinaturas." : "Novas assinaturas desativadas. O histórico permanece disponível.")
+    } catch (reason) { setError((reason as Error).message) }
+    finally { setBusy(false) }
+  }
+  async function changeMercadoPago(enabled: boolean) {
+    setBusy(true); setError(""); setNotice("")
+    try {
+      const response = await fetch("/api/admin/billing-providers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mercado_pago_enabled: enabled }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || "Não foi possível salvar")
+      setData((current) => current ? { ...current, settings: result.settings } : current)
+      setNotice(enabled ? "Pix Mercado Pago ativado para novas assinaturas." : "Pix Mercado Pago desativado para novas assinaturas.")
     } catch (reason) { setError((reason as Error).message) }
     finally { setBusy(false) }
   }
@@ -77,7 +89,7 @@ export function PaymentsTab() {
     finally { setBusy(false) }
   }
   return <div className="space-y-5">
-    <div><h2 className="text-xl font-semibold">Meios de pagamento</h2><p className="mt-2 text-sm text-muted-foreground">A única forma de pagamento para novas assinaturas é Pix Automático pela Asaas.</p></div>
+    <div><h2 className="text-xl font-semibold">Meios de pagamento</h2><p className="mt-2 text-sm text-muted-foreground">Ative os provedores que deseja oferecer para novas assinaturas.</p></div>
     {error && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm">{notice}</p>}
     <Card><CardHeader><CardTitle>Pix Automático · Asaas</CardTitle></CardHeader><CardContent className="space-y-4">
@@ -88,6 +100,12 @@ export function PaymentsTab() {
       {!!data?.environment.missing.length && <p className="text-xs text-amber-600">Para ativar, configure: {data.environment.missing.join(", ")}.</p>}
       <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={!data || busy} onClick={() => handleWebhook("verify_webhook")}>Verificar webhook</Button><Button type="button" variant="outline" size="sm" disabled={!data || busy} onClick={() => handleWebhook("register_webhook")}>Configurar webhook</Button></div>
       {webhook && <p className="text-xs text-muted-foreground">{webhook.configured ? "Recebimento pronto" : webhook.interrupted ? "Fila interrompida" : `${webhook.missingEvents.length} eventos pendentes`}</p>}
+    </CardContent></Card>
+    <Card><CardHeader><CardTitle>Pix por fatura · Mercado Pago</CardTitle></CardHeader><CardContent className="space-y-4">
+      <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.mercadoPagoEnvironment.production ? "Produção" : "Homologação"}</p></div><Switch aria-label="Ativar Pix Mercado Pago" checked={!!data?.settings.mercado_pago_enabled} disabled={!data || busy || (!data.settings.mercado_pago_enabled && data.mercadoPagoEnvironment.missing.length > 0)} onCheckedChange={changeMercadoPago} /></div>
+      <p className="text-sm text-muted-foreground">Cada ciclo gera um novo Pix. O cliente precisa pagá-lo no app do banco. Ao vencer sem pagamento confirmado, os projetos são bloqueados até a quitação.</p>
+      {!!data?.mercadoPagoEnvironment.missing.length && <p className="text-xs text-amber-600">Para ativar, configure: {data.mercadoPagoEnvironment.missing.join(", ")}.</p>}
+      <p className="text-xs text-muted-foreground">Configure o webhook de Pagamentos em Suas integrações do Mercado Pago para /api/webhooks/mercado-pago. Cadastre o Access Token e a chave secreta do webhook como variáveis protegidas na Vercel.</p>
     </CardContent></Card>
     <p className="text-sm text-muted-foreground">Os pagamentos históricos dos provedores anteriores continuam disponíveis para auditoria. O WhatsApp usa a conexão Evolution já configurada no sistema.</p>
   </div>

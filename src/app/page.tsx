@@ -54,6 +54,6 @@ export default async function HomePage() {
   }
   return <>
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(graph).replace(/</g, "\\u003c") }} />
-    <LandingPageClient plans={plans} billingEnabled={!!availability?.asaas.configured} />
+    <LandingPageClient plans={plans} billingEnabled={!!(availability?.asaas.configured || availability?.mercado_pago.configured)} />
   </>
 }

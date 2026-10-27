@@ -2,10 +2,15 @@ import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendOverdueNotification, sendUpcomingPaymentNotification } from "@/lib/evolution"
 import { reconcileAsaasPayment } from "./service"
+import { reconcileMercadoPagoPayment } from "./mercado-pago"
 
 interface Invoice {
-  id: string; external_id: string; organization_id: string; agreement_id: string
+  id: string; external_id: string; organization_id: string; agreement_id: string; provider: string
   amount_cents: number; due_date: string; status: string
+}
+async function reconcileInvoice(invoice: Invoice) {
+  if (invoice.provider === "asaas") await reconcileAsaasPayment(invoice.external_id)
+  else if (invoice.provider === "mercado_pago" && /^\d+$/.test(invoice.external_id)) await reconcileMercadoPagoPayment(invoice.external_id)
 }
 async function claim(id: string, field: "upcoming" | "overdue") {
   const column = `${field}_claimed_at`
@@ -27,13 +32,13 @@ export async function sendBillingNotifications() {
   const admin = createAdminClient()
   const today = new Date().toISOString().slice(0, 10)
   const next = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
-  const { data, error } = await admin.from("billing_invoices").select("id, external_id, organization_id, agreement_id, amount_cents, due_date, status")
-    .eq("provider", "asaas").gte("due_date", today).lte("due_date", next).is("upcoming_sent_at", null).limit(100)
+  const { data, error } = await admin.from("billing_invoices").select("id, external_id, organization_id, agreement_id, amount_cents, due_date, status, provider")
+    .in("provider", ["asaas", "mercado_pago"]).gte("due_date", today).lte("due_date", next).is("upcoming_sent_at", null).limit(100)
   if (error) throw new Error("Não foi possível consultar faturas próximas")
   let upcoming = 0
   for (const invoice of (data || []) as Invoice[]) {
-    if (["paid", "refunded", "CONFIRMED", "RECEIVED"].includes(invoice.status)) continue
-    await reconcileAsaasPayment(invoice.external_id)
+    if (["paid", "refunded", "expired", "cancelled", "creating", "CONFIRMED", "RECEIVED"].includes(invoice.status)) continue
+    await reconcileInvoice(invoice)
     const { data: current } = await admin.from("billing_invoices").select("status").eq("id", invoice.id).single()
     if (!current || ["paid", "refunded"].includes(current.status) || !await claim(invoice.id, "upcoming")) continue
     try {
@@ -45,13 +50,13 @@ export async function sendBillingNotifications() {
     } catch (cause) { await finish(invoice.id, "upcoming", false); throw cause }
   }
   const { data: overdueRows, error: overdueError } = await admin.from("billing_invoices")
-    .select("id, external_id, organization_id, agreement_id, amount_cents, due_date, status")
-    .eq("provider", "asaas").lt("due_date", today).is("overdue_sent_at", null).limit(100)
+    .select("id, external_id, organization_id, agreement_id, amount_cents, due_date, status, provider")
+    .in("provider", ["asaas", "mercado_pago"]).lt("due_date", today).is("overdue_sent_at", null).limit(100)
   if (overdueError) throw new Error("Não foi possível consultar faturas vencidas")
   let overdue = 0
   for (const invoice of (overdueRows || []) as Invoice[]) {
-    if (["paid", "refunded", "CONFIRMED", "RECEIVED"].includes(invoice.status)) continue
-    await reconcileAsaasPayment(invoice.external_id)
+    if (["paid", "refunded", "expired", "cancelled", "creating", "CONFIRMED", "RECEIVED"].includes(invoice.status)) continue
+    await reconcileInvoice(invoice)
     const { data: current } = await admin.from("billing_invoices").select("status").eq("id", invoice.id).single()
     if (!current || ["paid", "refunded"].includes(current.status)) continue
     const { data: subscription } = await admin.from("subscriptions").select("status")

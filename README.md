@@ -55,6 +55,23 @@ A rotina diária de `/api/billing/renewals` concilia cobranças, envia pelo What
 
 **O Supabase local é de produção.** Não crie assinaturas ou cobranças sandbox nele. Sem chave Asaas e banco de homologação separado, mantenha `BILLING_LIVE_ENABLED=false` e o interruptor Asaas desligado. A migração SQL não envia cobranças. Não reutilize as variáveis ou os certificados Efí para Asaas; remova segredos aposentados da Vercel apenas depois de confirmar que nenhum contrato externo depende deles.
 
+### Pix por fatura no Mercado Pago
+
+Depois da migração 029, aplique manualmente `supabase/migrations/030_mercado_pago_pix_manual.sql` e execute `supabase/verify_030.sql` no SQL Editor. O novo provedor começa desligado e a migração não cria cobranças. **Aplique a migração antes de publicar o código**, pois a consulta de provedores passa a ler suas novas colunas. Não use o banco de produção com credenciais de teste.
+
+O Pix do Mercado Pago nesta integração **não é Pix Automático**: o cliente paga cada mensalidade ou anuidade com um novo QR Code. O cron prepara a próxima cobrança até três dias antes do fim do período e envia o aviso pelo WhatsApp configurado; o cliente também pode consultar ou renovar a fatura em **Minha assinatura**. A experiência deixa de abrir quando `current_period_end` vence, mesmo antes do cron diário. A liquidação só reativa os projetos depois de uma consulta autenticada à API do Mercado Pago confirmar valor, moeda, Pix e vínculo à fatura. O webhook apenas inicia essa consulta. Estornos revertem o pagamento e a comissão pelas funções existentes. Contratos Asaas em andamento permanecem na Asaas; a troca de provedor exige encerrar o contrato anterior.
+
+Configure em **Suas integrações → Webhooks** o evento **Pagamentos** para `https://www.cortexar.space/api/webhooks/mercado-pago`. Copie a chave secreta gerada pelo Mercado Pago para a variável `MERCADO_PAGO_WEBHOOK_SECRET`; ela não é o Access Token. Após testar em banco separado, ative **Pix por fatura · Mercado Pago** no painel administrativo. Não marque o provedor como ativo nem anuncie cobrança real antes de validar criação, pagamento, renovação, atraso, cancelamento e estorno com credenciais do ambiente correspondente.
+
+| Variável | Uso |
+| --- | --- |
+| `MERCADO_PAGO_ENVIRONMENT` | `production` ou `sandbox` |
+| `MERCADO_PAGO_ACCESS_TOKEN` | Access Token privado da aplicação Mercado Pago |
+| `MERCADO_PAGO_WEBHOOK_SECRET` | Chave secreta de assinatura dos Webhooks da aplicação |
+| `APP_URL`, `CRON_SECRET` | Origem HTTPS e conciliação agendada já utilizadas pelo faturamento |
+| `BILLING_V2_ENABLED`, `BILLING_LIVE_ENABLED` | Habilitam contratações e cobranças reais; a conciliação de contratos existentes continua quando desligados |
+| `BILLING_SANDBOX_DB_ISOLATED` | `true` apenas se o banco de homologação for separado do de produção |
+
 O programa de afiliados paga 10% do primeiro pagamento e de cada renovação confirmada, com liberação após 30 dias. O saque é solicitado pelo afiliado e o Pix é transferido manualmente pela administração; marque como pago apenas após conferir a transferência e guardar o comprovante. Estornos revertem a comissão quando possível e apresentam pendência administrativa se ela já tiver sido paga.
 
 ### Landing page e SEO

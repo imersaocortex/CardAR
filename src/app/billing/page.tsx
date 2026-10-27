@@ -12,11 +12,15 @@ import { planFeatureLabels } from "@/lib/plans/feature-labels"
 
 type Plan = { id: string; name: string; price: number; billing_cycle: string; projects_limit: number; features: string[]; has_watermark?: boolean; multi_project_enabled?: boolean }
 type Agreement = { id: string; provider: string; status: string; pix_code: string | null; qr_expires_at: string | null; setup_stage: string }
-type Billing = { plans: Plan[]; subscription: { status: string; current_period_end: string; trial_ends_at: string | null; cancel_at_period_end: boolean; plans: Plan }; agreement: Agreement | null; invoices: { id: string; status: string; amount_cents: number; due_date: string; invoice_url: string | null }[]; payments: { id: string; provider: string; value: number; status: string; due_date: string; paid_date: string | null }[]; usage: { projects_used: number; projects_limit: number }; canManage: boolean }
-type Availability = { asaas: { configured: boolean } }
+type Billing = { plans: Plan[]; subscription: { status: string; current_period_end: string; trial_ends_at: string | null; cancel_at_period_end: boolean; plans: Plan }; agreement: Agreement | null; invoices: { id: string; provider: string; status: string; amount_cents: number; due_date: string; invoice_url: string | null; pix_code: string | null; qr_expires_at: string | null }[]; payments: { id: string; provider: string; value: number; status: string; due_date: string; paid_date: string | null }[]; usage: { projects_used: number; projects_limit: number }; canManage: boolean }
+type Availability = { asaas: { configured: boolean }; mercado_pago: { configured: boolean } }
 const money = (value: number | string) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 const statuses: Record<string, string> = { active: "Ativa", pending: "Aguardando pagamento", trialing: "Período de teste", past_due: "Pagamento em atraso", canceled: "Cancelada", paid: "Pago", refunded: "Reembolsado", CONFIRMED: "Pago", RECEIVED: "Pago", PENDING: "Pendente" }
 function isInitialExpired(billing: Billing) { return !!(billing.agreement?.qr_expires_at && billing.agreement.status === "pending" && Date.parse(billing.agreement.qr_expires_at) <= Date.now()) }
+function isMpExpired(billing: Billing) {
+  const invoice = billing.agreement?.provider === "mercado_pago" ? billing.invoices.find((item) => item.provider === "mercado_pago" && ["pending", "in_process", "creating"].includes(item.status)) : null
+  return !!(invoice?.qr_expires_at && Date.parse(invoice.qr_expires_at) <= Date.now())
+}
 
 export default function BillingPage() {
   const [data, setData] = useState<Billing | null>(null)
@@ -27,12 +31,14 @@ export default function BillingPage() {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [qr, setQr] = useState("")
   const [initialExpired, setInitialExpired] = useState(false)
+  const [mpExpired, setMpExpired] = useState(false)
   async function load() {
     const [billing, settings] = await Promise.all([fetch("/api/billing"), fetch("/api/billing/settings")])
     const body = await billing.json()
     if (!billing.ok) throw new Error(body.error)
     setData(body)
     setInitialExpired(isInitialExpired(body))
+    setMpExpired(isMpExpired(body))
     if (settings.ok) setAvailable(await settings.json())
   }
   useEffect(() => {
@@ -41,28 +47,30 @@ export default function BillingPage() {
       const body = await billing.json()
       if (!billing.ok) throw new Error(body.error)
       const options = settings.ok ? await settings.json() : null
-      if (!cancelled) { setData(body); setAvailable(options); setInitialExpired(isInitialExpired(body)) }
+      if (!cancelled) { setData(body); setAvailable(options); setInitialExpired(isInitialExpired(body)); setMpExpired(isMpExpired(body)) }
     }).catch((error) => { if (!cancelled) setMessage(error instanceof Error ? error.message : "Falha ao carregar") })
     void refresh()
     const timer = window.setInterval(refresh, 30000)
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [])
-  const paymentsAvailable = !!available?.asaas.configured
-  const pixCode = data?.agreement?.provider === "asaas" && data.agreement.status === "pending" && !initialExpired ? data.agreement.pix_code : null
+  const paymentsAvailable = !!(available?.asaas.configured || available?.mercado_pago.configured)
+  const mpInvoice = data?.agreement?.provider === "mercado_pago" ? data.invoices.find((invoice) => invoice.provider === "mercado_pago" && ["pending", "in_process", "creating"].includes(invoice.status)) : null
+  const pixCode = (data?.agreement?.provider === "asaas" && data.agreement.status === "pending" && !initialExpired ? data.agreement.pix_code : null)
+    || (mpInvoice && !mpExpired ? mpInvoice.pix_code : null)
   useEffect(() => {
     let cancelled = false
     if (pixCode) QRCode.toDataURL(pixCode, { width: 256, margin: 2 }).then((url) => { if (!cancelled) setQr(url) }).catch(() => {})
     return () => { cancelled = true }
   }, [pixCode])
-  async function act(action: string) {
+  async function act(action: string, provider?: "asaas" | "mercado_pago") {
     setBusy(true); setMessage("")
     try {
-      const response = await fetch("/api/billing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, plan_id: selected?.id, payment_provider: action === "upgrade" ? "asaas" : undefined }) })
+      const response = await fetch("/api/billing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, plan_id: selected?.id, payment_provider: action === "upgrade" ? provider : undefined }) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error)
       setSelected(null); setCancelOpen(false)
       await load()
-      setMessage(action === "cancel" ? "Renovação cancelada. O acesso continua até o fim do período já pago." : action === "sync" ? "Situação consultada na Asaas. O acesso depende da confirmação do pagamento." : "Autorização preparada. Conclua o primeiro pagamento abaixo.")
+      setMessage(action === "cancel" ? "Renovação cancelada. O acesso continua até o fim do período já pago." : action === "sync" ? "Pagamento consultado no provedor. O acesso depende da confirmação do Pix." : "Cobrança preparada. Conclua o pagamento abaixo.")
     } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível concluir a operação") }
     finally { setBusy(false) }
   }
@@ -73,14 +81,15 @@ export default function BillingPage() {
     {data && <>
       {!paymentsAvailable && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-100">Novas assinaturas estão temporariamente indisponíveis. Seus projetos e o plano atual continuam acessíveis.</p>}
       <Card><CardContent className="flex flex-wrap items-center justify-between gap-5 pt-6"><div><p className="text-sm text-muted-foreground">Plano atual</p><h2 className="text-xl font-medium">{data.subscription.plans?.name} · {statuses[data.subscription.status] || data.subscription.status}</h2><p className="mt-2 text-sm text-muted-foreground">{data.usage.projects_used} de {data.usage.projects_limit} projetos · {data.subscription.status === "trialing" ? `Teste até ${formatDate(data.subscription.trial_ends_at)}` : `Período até ${formatDate(data.subscription.current_period_end)}`}</p>{data.subscription.cancel_at_period_end && <p className="mt-2 text-sm text-amber-300">Renovação cancelada.</p>}</div>{data.agreement?.status !== "canceled" && data.agreement && data.canManage && <Button variant="outline" disabled={busy} onClick={() => setCancelOpen(true)}>Cancelar renovação</Button>}</CardContent></Card>
-      {pixCode && <Card><CardHeader><CardTitle>Autorize o Pix Automático</CardTitle></CardHeader><CardContent className="flex flex-col items-start gap-4 sm:flex-row">{qr && <Image unoptimized src={qr} width={220} height={220} alt="QR Code Pix para pagamento" className="rounded-xl" />}<div className="min-w-0 flex-1 space-y-4"><p className="text-sm text-muted-foreground">No aplicativo do seu banco, confira o primeiro pagamento e autorize as cobranças futuras. O acesso é liberado quando a Asaas confirma o pagamento.</p><textarea aria-label="Código Pix copia e cola" readOnly value={pixCode} className="h-24 w-full rounded-lg border bg-background p-3 text-xs" /><Button onClick={() => navigator.clipboard.writeText(pixCode).then(() => setMessage("Código Pix copiado")).catch(() => setMessage("Selecione e copie o código acima"))}>Copiar código Pix</Button></div></CardContent></Card>}
+      {pixCode && <Card><CardHeader><CardTitle>{data.agreement?.provider === "mercado_pago" ? "Pague a fatura com Pix" : "Autorize o Pix Automático"}</CardTitle></CardHeader><CardContent className="flex flex-col items-start gap-4 sm:flex-row">{qr && <Image unoptimized src={qr} width={220} height={220} alt="QR Code Pix para pagamento" className="rounded-xl" />}<div className="min-w-0 flex-1 space-y-4"><p className="text-sm text-muted-foreground">{data.agreement?.provider === "mercado_pago" ? "Este Pix paga apenas esta mensalidade ou anuidade. A cada renovação, abra uma nova fatura e confirme o pagamento. Projetos vencidos voltam após a confirmação do Mercado Pago." : "No aplicativo do seu banco, confira o primeiro pagamento e autorize as cobranças futuras. O acesso é liberado quando a Asaas confirma o pagamento."}</p><textarea aria-label="Código Pix copia e cola" readOnly value={pixCode} className="h-24 w-full rounded-lg border bg-background p-3 text-xs" /><Button onClick={() => navigator.clipboard.writeText(pixCode).then(() => setMessage("Código Pix copiado")).catch(() => setMessage("Selecione e copie o código acima"))}>Copiar código Pix</Button>{mpInvoice?.invoice_url && <a href={mpInvoice.invoice_url} target="_blank" rel="noopener noreferrer" className="block text-sm text-primary underline">Abrir cobrança no Mercado Pago</a>}</div></CardContent></Card>}
+      {mpExpired && data.agreement?.status !== "canceled" && data.canManage && <p className="rounded-xl border border-amber-500/30 p-4 text-sm">Este QR Code expirou. Use “Verificar pagamento” para conferir e gerar outro Pix, se necessário.</p>}
       {initialExpired && data.agreement?.provider === "asaas" && data.agreement.status === "pending" && <p className="rounded-xl border border-amber-500/30 p-4 text-sm">O QR Code expirou. Verifique o pagamento. Uma nova autorização poderá ser iniciada quando a Asaas confirmar o encerramento da anterior.</p>}
       <div className="grid gap-5 md:grid-cols-3">{data.plans.map((plan) => <Card key={plan.id} className="flex flex-col"><CardHeader><CardTitle>{plan.name}</CardTitle><p className="pt-3 text-3xl font-semibold">{money(plan.price)}<span className="text-sm font-normal text-muted-foreground">/{plan.billing_cycle === "yearly" ? "ano" : "mês"}</span></p></CardHeader><CardContent className="flex flex-1 flex-col"><ul className="mb-6 flex-1 space-y-3">{planFeatureLabels(plan).map((feature) => <li key={feature} className="flex gap-2 text-sm"><Check className="h-4 w-4 shrink-0 text-cyan-400" />{feature}</li>)}</ul><Button disabled={busy || !paymentsAvailable || !data.canManage || plan.price <= 0 || (!!data.agreement && data.agreement.status !== "canceled")} onClick={() => setSelected(plan)}>Assinar {plan.name}</Button></CardContent></Card>)}</div>
       {!data.canManage && <p className="text-sm text-muted-foreground">Peça ao responsável pela organização para gerenciar a assinatura.</p>}
-      <Card><CardHeader><CardTitle>Próximas faturas</CardTitle></CardHeader><CardContent className="space-y-2">{data.invoices.filter((invoice) => !["paid", "refunded"].includes(invoice.status)).map((invoice) => <div key={invoice.id} className="flex flex-wrap justify-between gap-2 border-b py-3 text-sm"><span>{formatDate(invoice.due_date)} · {money(invoice.amount_cents / 100)}</span><span>{invoice.status}</span></div>)}{!data.invoices.some((invoice) => !["paid", "refunded"].includes(invoice.status)) && <p className="text-sm text-muted-foreground">Nenhuma fatura pendente.</p>}</CardContent></Card>
-      <Card><CardHeader><CardTitle>Histórico de pagamentos</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="py-3">Data</th><th>Provedor</th><th>Valor</th><th>Situação</th></tr></thead><tbody>{data.payments.map((payment) => <tr key={payment.id} className="border-b border-border/40"><td className="py-4">{formatDate(payment.paid_date || payment.due_date)}</td><td>{({ paypal: "PayPal (histórico)", efi: "Efí (histórico)", asaas: "Asaas", stripe: "Stripe (histórico)" })[payment.provider] || payment.provider}</td><td>{money(payment.value)}</td><td>{statuses[payment.status] || payment.status}</td></tr>)}</tbody></table>{!data.payments.length && <p className="py-5 text-muted-foreground">Nenhum pagamento registrado.</p>}</CardContent></Card>
+      <Card><CardHeader><CardTitle>Próximas faturas</CardTitle></CardHeader><CardContent className="space-y-2">{data.invoices.filter((invoice) => !["paid", "refunded", "expired", "cancelled"].includes(invoice.status)).map((invoice) => <div key={invoice.id} className="flex flex-wrap justify-between gap-2 border-b py-3 text-sm"><span>{formatDate(invoice.due_date)} · {money(invoice.amount_cents / 100)}</span><span>{statuses[invoice.status] || invoice.status}</span></div>)}{!data.invoices.some((invoice) => !["paid", "refunded", "expired", "cancelled"].includes(invoice.status)) && <p className="text-sm text-muted-foreground">Nenhuma fatura pendente.</p>}</CardContent></Card>
+      <Card><CardHeader><CardTitle>Histórico de pagamentos</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="py-3">Data</th><th>Provedor</th><th>Valor</th><th>Situação</th></tr></thead><tbody>{data.payments.map((payment) => <tr key={payment.id} className="border-b border-border/40"><td className="py-4">{formatDate(payment.paid_date || payment.due_date)}</td><td>{({ paypal: "PayPal (histórico)", efi: "Efí (histórico)", asaas: "Asaas", mercado_pago: "Mercado Pago", stripe: "Stripe (histórico)" })[payment.provider] || payment.provider}</td><td>{money(payment.value)}</td><td>{statuses[payment.status] || payment.status}</td></tr>)}</tbody></table>{!data.payments.length && <p className="py-5 text-muted-foreground">Nenhum pagamento registrado.</p>}</CardContent></Card>
     </>}
-    <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null) }}><DialogContent><DialogHeader><DialogTitle>Assinar {selected?.name}</DialogTitle><DialogDescription>O pagamento inicial é cobrado agora pelo Pix Automático. O período gratuito já utilizado não é reiniciado.</DialogDescription></DialogHeader><Button disabled={busy || !available?.asaas.configured} onClick={() => act("upgrade")}><CreditCard className="mr-2 h-4 w-4" />Autorizar Pix Automático · Asaas</Button>{!available?.asaas.configured && <p className="text-sm text-muted-foreground">Os pagamentos estão sendo configurados.</p>}</DialogContent></Dialog>
+    <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null) }}><DialogContent><DialogHeader><DialogTitle>Assinar {selected?.name}</DialogTitle><DialogDescription>Escolha como pagar o primeiro período. No Mercado Pago, cada renovação exige um novo Pix. O acesso começa após a confirmação.</DialogDescription></DialogHeader>{available?.mercado_pago.configured && <Button disabled={busy} onClick={() => act("upgrade", "mercado_pago")}><CreditCard className="mr-2 h-4 w-4" />Pagar com Pix · Mercado Pago</Button>}{available?.asaas.configured && <Button variant="outline" disabled={busy} onClick={() => act("upgrade", "asaas")}><CreditCard className="mr-2 h-4 w-4" />Autorizar Pix Automático · Asaas</Button>}{!paymentsAvailable && <p className="text-sm text-muted-foreground">Os pagamentos estão sendo configurados.</p>}</DialogContent></Dialog>
     <Dialog open={cancelOpen} onOpenChange={setCancelOpen}><DialogContent><DialogHeader><DialogTitle>Cancelar a renovação?</DialogTitle><DialogDescription>As próximas cobranças serão interrompidas. Seu acesso continua pelo período já pago.</DialogDescription></DialogHeader><Button variant="destructive" disabled={busy} onClick={() => act("cancel")}>Confirmar cancelamento</Button><Button variant="outline" onClick={() => setCancelOpen(false)}>Manter assinatura</Button></DialogContent></Dialog>
   </div></AppShell>
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { billingEnvironment } from "@/lib/payments/settings"
+import { billingEnvironment, mercadoPagoEnvironment } from "@/lib/payments/settings"
 import { asaasWebhookStatus, registerAsaasWebhook } from "@/lib/payments/asaas-webhooks"
 import { canStoreAsaasKey, encryptAsaasKey } from "@/lib/payments/asaas-secret"
 
@@ -15,7 +15,7 @@ async function authorize() {
 }
 async function settings() {
   const { data, error } = await createAdminClient().from("billing_provider_settings")
-    .select("asaas_enabled, asaas_pix_key, asaas_api_key_ciphertext, updated_at").eq("id", 1).single()
+    .select("asaas_enabled, asaas_pix_key, asaas_api_key_ciphertext, mercado_pago_enabled, updated_at").eq("id", 1).single()
   if (error || !data) throw new Error("Aplique a migração 028 antes de configurar os pagamentos")
   return data
 }
@@ -24,7 +24,9 @@ export async function GET() {
   try {
     const row = await settings()
     return NextResponse.json({ settings: { asaas_enabled: row.asaas_enabled, asaas_pix_key: row.asaas_pix_key,
-      has_api_key: !!row.asaas_api_key_ciphertext || !!process.env.ASAAS_API_KEY }, environment: billingEnvironment(!!row.asaas_api_key_ciphertext), canStoreKey: canStoreAsaasKey() })
+      has_api_key: !!row.asaas_api_key_ciphertext || !!process.env.ASAAS_API_KEY,
+      mercado_pago_enabled: row.mercado_pago_enabled }, environment: billingEnvironment(!!row.asaas_api_key_ciphertext),
+      mercadoPagoEnvironment: mercadoPagoEnvironment(), canStoreKey: canStoreAsaasKey() })
   }
   catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 503 }) }
 }
@@ -33,11 +35,16 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 403 })
   const parsed = z.union([
     z.object({ enabled: z.boolean() }),
+    z.object({ mercado_pago_enabled: z.boolean() }),
     z.object({ pix_key: z.string().trim().max(255) }),
   ]).safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: "Opção inválida" }, { status: 400 })
   try {
     const row = await settings()
+    if ("mercado_pago_enabled" in parsed.data && parsed.data.mercado_pago_enabled) {
+      const missing = mercadoPagoEnvironment().missing
+      if (missing.length) return NextResponse.json({ error: `Faltam configurações: ${missing.join(", ")}` }, { status: 409 })
+    }
     if ("enabled" in parsed.data && parsed.data.enabled) {
       const missing = billingEnvironment(!!row.asaas_api_key_ciphertext).missing
       if (missing.length) return NextResponse.json({ error: `Faltam configurações: ${missing.join(", ")}` }, { status: 409 })
@@ -46,13 +53,15 @@ export async function PATCH(request: Request) {
     }
     const values = "enabled" in parsed.data
       ? { asaas_enabled: parsed.data.enabled }
+      : "mercado_pago_enabled" in parsed.data ? { mercado_pago_enabled: parsed.data.mercado_pago_enabled }
       : { asaas_pix_key: parsed.data.pix_key || null }
     const { data, error } = await createAdminClient().from("billing_provider_settings")
       .update({ ...values, updated_at: new Date().toISOString(), updated_by: user.id })
-      .eq("id", 1).select("asaas_enabled, asaas_pix_key, asaas_api_key_ciphertext, updated_at").single()
+      .eq("id", 1).select("asaas_enabled, asaas_pix_key, asaas_api_key_ciphertext, mercado_pago_enabled, updated_at").single()
     if (error || !data) throw new Error("Não foi possível salvar")
     return NextResponse.json({ settings: { asaas_enabled: data.asaas_enabled, asaas_pix_key: data.asaas_pix_key,
-      has_api_key: !!data.asaas_api_key_ciphertext || !!process.env.ASAAS_API_KEY } })
+      has_api_key: !!data.asaas_api_key_ciphertext || !!process.env.ASAAS_API_KEY,
+      mercado_pago_enabled: data.mercado_pago_enabled } })
   } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 503 }) }
 }
 export async function PUT(request: Request) {

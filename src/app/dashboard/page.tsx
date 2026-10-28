@@ -16,6 +16,8 @@ import Link from "next/link"
 import { useAuthStore } from "@/store/auth-store"
 import { createClient } from "@/lib/supabase/client"
 import { cn, mapProjectType, mapProjectStatus, formatBytes } from "@/lib/utils"
+import { dashboardBillingNotice } from "@/lib/payments/dashboard-notice"
+import { subscriptionGrantsAccess } from "@/lib/payments/access"
 
 interface DashboardProject {
   id: string
@@ -38,11 +40,14 @@ interface AnalyticsData {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { organization } = useAuthStore()
+  const { profile } = useAuthStore()
   const [projects, setProjects] = useState<DashboardProject[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>("todos")
   const [subscription, setSubscription] = useState<any>(null)
+  const [subscriptionLoaded, setSubscriptionLoaded] = useState(false)
+  const [membershipRole, setMembershipRole] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const [usage, setUsage] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "reports">("overview")
 
@@ -60,7 +65,7 @@ export default function DashboardPage() {
 
       const { data: memberships } = await supabase
         .from("organization_members")
-        .select("organization_id")
+        .select("organization_id, role")
         .eq("user_id", user.id)
         .limit(1)
         .single()
@@ -68,6 +73,7 @@ export default function DashboardPage() {
       if (!memberships) { setLoading(false); return }
 
       const orgId = memberships.organization_id
+      setMembershipRole(memberships.role)
 
       const [projectsRes, subRes, usageRes] = await Promise.all([
         supabase
@@ -79,7 +85,7 @@ export default function DashboardPage() {
           .from("subscriptions")
           .select("*, plans(*)")
           .eq("organization_id", orgId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from("usage_limits")
           .select("*")
@@ -89,10 +95,16 @@ export default function DashboardPage() {
 
       setProjects(projectsRes.data || [])
       setSubscription(subRes.data)
+      setSubscriptionLoaded(!subRes.error)
       setUsage(usageRes.data)
       setLoading(false)
     }
     load()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const loadAnalytics = async (projectId: string) => {
@@ -133,6 +145,12 @@ export default function DashboardPage() {
 
   const filtered = filter === "todos" ? projects : projects.filter((p) => p.type === filter)
   const totalViews = projects.reduce((s, p) => s + p.views, 0)
+  const superAdminOwned = profile?.role === "super_admin" && membershipRole === "owner"
+  const billingNotice = subscriptionLoaded && membershipRole
+    ? dashboardBillingNotice(subscription, superAdminOwned, now) : null
+  const subscriptionExpired = !superAdminOwned && subscription && ["active", "trialing"].includes(subscription.status)
+    && !subscriptionGrantsAccess(subscription, now)
+  const canManageBilling = membershipRole === "owner" || membershipRole === "admin"
   // Use the real project count (authoritative) instead of usage_limits.projects_used,
   // which can drift out of sync.
   const projectsUsed = projects.length || 0
@@ -190,6 +208,33 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {billingNotice && (
+          <section
+            role={billingNotice.kind === "expired" ? "alert" : "status"}
+            aria-label="Aviso sobre sua assinatura"
+            className={cn(
+              "mb-6 flex flex-col gap-4 rounded-2xl border p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between",
+              billingNotice.kind === "expired"
+                ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-amber-500/5"
+                : "border-amber-500/35 bg-gradient-to-r from-amber-500/15 to-primary/5",
+            )}
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", billingNotice.kind === "expired" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400")}>
+                {billingNotice.kind === "upcoming" ? <Clock className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              </span>
+              <div>
+                <h2 className="font-semibold">{billingNotice.title}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{billingNotice.description}</p>
+                {!canManageBilling && <p className="mt-2 text-xs text-muted-foreground">Peça ao responsável pela organização para gerenciar o pagamento.</p>}
+              </div>
+            </div>
+            <Button asChild className="shrink-0 self-start sm:self-center">
+              <Link href="/billing">{billingNotice.action}<ArrowRight className="ml-2 h-4 w-4" /></Link>
+            </Button>
+          </section>
+        )}
+
         {activeTab === "overview" && (
           <>
             {/* Plan & Usage Widget */}
@@ -238,12 +283,13 @@ export default function DashboardPage() {
                       Status
                     </p>
                     <p className="text-xl font-bold capitalize">
-                      {subscription?.status === "active" ? "Ativo" :
+                      {subscriptionExpired ? "Vencido" :
+                       subscription?.status === "active" ? "Ativo" :
                        subscription?.status === "trialing" ? "Trial" :
                        subscription?.status === "past_due" ? "Vencido" :
                        subscription?.status === "canceled" ? "Cancelado" : "Inativo"}
                     </p>
-                    {subscription?.status !== "active" && subscription?.status !== "trialing" && (
+                    {billingNotice?.kind === "expired" && (
                       <Link href="/billing" className="text-[10px] text-primary underline mt-1 block">
                         Regularizar
                       </Link>

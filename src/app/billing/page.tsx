@@ -9,6 +9,8 @@ import { Check, CreditCard, RefreshCw } from "lucide-react"
 import Image from "next/image"
 import QRCode from "qrcode"
 import { planFeatureLabels } from "@/lib/plans/feature-labels"
+import { subscriptionGrantsAccess } from "@/lib/payments/access"
+import { useAuthStore } from "@/store/auth-store"
 
 type Plan = { id: string; name: string; price: number; billing_cycle: string; projects_limit: number; features: string[]; has_watermark?: boolean; multi_project_enabled?: boolean; gps_enabled?: boolean; surface_enabled?: boolean }
 type Agreement = { id: string; provider: string; status: string; pix_code: string | null; qr_expires_at: string | null; setup_stage: string }
@@ -23,6 +25,7 @@ function isMpExpired(billing: Billing) {
 }
 
 export default function BillingPage() {
+  const { profile, organization } = useAuthStore()
   const [data, setData] = useState<Billing | null>(null)
   const [available, setAvailable] = useState<Availability | null>(null)
   const [busy, setBusy] = useState(false)
@@ -54,6 +57,9 @@ export default function BillingPage() {
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [])
   const paymentsAvailable = !!(available?.asaas.configured || available?.mercado_pago.configured)
+  const superAdminOwned = profile?.role === "super_admin" && organization?.role === "owner"
+  const periodExpired = !!data && !superAdminOwned && ["active", "trialing"].includes(data.subscription.status)
+    && !subscriptionGrantsAccess(data.subscription)
   const mpInvoice = data?.agreement?.provider === "mercado_pago" ? data.invoices.find((invoice) => invoice.provider === "mercado_pago" && ["pending", "in_process", "creating"].includes(invoice.status)) : null
   const pixCode = (data?.agreement?.provider === "asaas" && data.agreement.status === "pending" && !initialExpired ? data.agreement.pix_code : null)
     || (mpInvoice && !mpExpired ? mpInvoice.pix_code : null)
@@ -79,8 +85,9 @@ export default function BillingPage() {
     {message && <p role="status" className="rounded-xl border bg-card p-4 text-sm">{message}</p>}
     {!data && !message && <p>Carregando faturamento…</p>}
     {data && <>
-      {!paymentsAvailable && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-100">Novas assinaturas estão temporariamente indisponíveis. Seus projetos e o plano atual continuam acessíveis.</p>}
-      <Card><CardContent className="flex flex-wrap items-center justify-between gap-5 pt-6"><div><p className="text-sm text-muted-foreground">Plano atual</p><h2 className="text-xl font-medium">{data.subscription.plans?.name} · {statuses[data.subscription.status] || data.subscription.status}</h2><p className="mt-2 text-sm text-muted-foreground">{data.usage.projects_used} de {data.usage.projects_limit} projetos · {data.subscription.status === "trialing" ? `Teste até ${formatDate(data.subscription.trial_ends_at)}` : `Período até ${formatDate(data.subscription.current_period_end)}`}</p>{data.subscription.cancel_at_period_end && <p className="mt-2 text-sm text-amber-300">Renovação cancelada.</p>}</div>{data.agreement?.status !== "canceled" && data.agreement && data.canManage && <Button variant="outline" disabled={busy} onClick={() => setCancelOpen(true)}>Cancelar renovação</Button>}</CardContent></Card>
+      {!paymentsAvailable && <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-100">Novas assinaturas estão temporariamente indisponíveis. Se seu plano venceu, entre em contato com o suporte para regularizar o acesso.</p>}
+      {periodExpired && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm">Seu período terminou. {data.agreement && data.agreement.status !== "canceled" ? "Use “Verificar pagamento” para conferir ou preparar a próxima cobrança." : "Escolha um plano abaixo para gerar uma nova cobrança."} Os projetos voltam a ficar visíveis após a confirmação do pagamento.</p>}
+      <Card><CardContent className="flex flex-wrap items-center justify-between gap-5 pt-6"><div><p className="text-sm text-muted-foreground">Plano atual</p><h2 className="text-xl font-medium">{data.subscription.plans?.name} · {periodExpired ? "Vencida" : statuses[data.subscription.status] || data.subscription.status}</h2><p className="mt-2 text-sm text-muted-foreground">{data.usage.projects_used} de {data.usage.projects_limit} projetos · {data.subscription.status === "trialing" ? `Teste até ${formatDate(data.subscription.trial_ends_at)}` : `Período até ${formatDate(data.subscription.current_period_end)}`}</p>{data.subscription.cancel_at_period_end && <p className="mt-2 text-sm text-amber-300">Renovação cancelada.</p>}</div>{data.agreement?.status !== "canceled" && data.agreement && data.canManage && <Button variant="outline" disabled={busy} onClick={() => setCancelOpen(true)}>Cancelar renovação</Button>}</CardContent></Card>
       {pixCode && <Card><CardHeader><CardTitle>{data.agreement?.provider === "mercado_pago" ? "Pague a fatura com Pix" : "Autorize o Pix Automático"}</CardTitle></CardHeader><CardContent className="flex flex-col items-start gap-4 sm:flex-row">{qr && <Image unoptimized src={qr} width={220} height={220} alt="QR Code Pix para pagamento" className="rounded-xl" />}<div className="min-w-0 flex-1 space-y-4"><p className="text-sm text-muted-foreground">{data.agreement?.provider === "mercado_pago" ? "Este Pix paga apenas esta mensalidade ou anuidade. A cada renovação, abra uma nova fatura e confirme o pagamento. Projetos vencidos voltam após a confirmação do Mercado Pago." : "No aplicativo do seu banco, confira o primeiro pagamento e autorize as cobranças futuras. O acesso é liberado quando a Asaas confirma o pagamento."}</p><textarea aria-label="Código Pix copia e cola" readOnly value={pixCode} className="h-24 w-full rounded-lg border bg-background p-3 text-xs" /><Button onClick={() => navigator.clipboard.writeText(pixCode).then(() => setMessage("Código Pix copiado")).catch(() => setMessage("Selecione e copie o código acima"))}>Copiar código Pix</Button>{mpInvoice?.invoice_url && <a href={mpInvoice.invoice_url} target="_blank" rel="noopener noreferrer" className="block text-sm text-primary underline">Abrir cobrança no Mercado Pago</a>}</div></CardContent></Card>}
       {mpExpired && data.agreement?.status !== "canceled" && data.canManage && <p className="rounded-xl border border-amber-500/30 p-4 text-sm">Este QR Code expirou. Use “Verificar pagamento” para conferir e gerar outro Pix, se necessário.</p>}
       {initialExpired && data.agreement?.provider === "asaas" && data.agreement.status === "pending" && <p className="rounded-xl border border-amber-500/30 p-4 text-sm">O QR Code expirou. Verifique o pagamento. Uma nova autorização poderá ser iniciada quando a Asaas confirmar o encerramento da anterior.</p>}

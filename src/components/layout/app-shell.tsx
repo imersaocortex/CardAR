@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { DashboardHeader } from "./dashboard-header"
@@ -9,13 +9,15 @@ import { useAuthStore } from "@/store/auth-store"
 import { createClient } from "@/lib/supabase/client"
 import { AlertTriangle, Crown, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { subscriptionGrantsAccess } from "@/lib/payments/access"
 
-type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "pending" | "none"
+type SubscriptionStatus = "checking" | "active" | "trialing" | "past_due" | "canceled" | "pending" | "none"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const { initialize, isAuthenticated, isLoading } = useAuthStore()
-  const [subStatus, setSubStatus] = useState<SubscriptionStatus>("none")
+  const pathname = usePathname()
+  const { initialize, isAuthenticated, isLoading, profile, organization } = useAuthStore()
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus>("checking")
   const [dismissed, setDismissed] = useState(false)
   const [trialDaysLeft, setTrialDaysLeft] = useState(0)
 
@@ -64,9 +66,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
 
       if (sub.status === "active") {
-        setSubStatus("active")
+        setSubStatus(subscriptionGrantsAccess(sub) ? "active" : "past_due")
       } else if (sub.status === "trialing") {
-        setSubStatus("trialing")
+        setSubStatus(subscriptionGrantsAccess(sub) ? "trialing" : "past_due")
         if (sub.trial_ends_at) {
           const end = new Date(sub.trial_ends_at)
           const now = new Date()
@@ -95,7 +97,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) return null
 
-  const showBanner = !dismissed && subStatus !== "active"
+  const superAdminOwned = profile?.role === "super_admin" && organization?.role === "owner"
+  const showBanner = pathname !== "/dashboard" && !dismissed && !superAdminOwned && subStatus !== "active" && subStatus !== "checking"
 
   return (
     <div className="min-h-screen bg-background">
@@ -140,17 +143,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="flex items-center gap-2">
                   <Crown className="h-4 w-4 text-amber-400 shrink-0" />
                   <span>
-                    Você está no plano <strong>Starter</strong>. Assine um plano para criar projetos ilimitados.
+                    Escolha um plano para criar e publicar suas experiências.
                   </span>
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button variant="gradient" size="sm" asChild>
-                <Link href="/billing">Ver Planos</Link>
+                <Link href="/billing">{subStatus === "past_due" ? "Regularizar plano" : subStatus === "pending" ? "Ver pagamento" : "Ver planos"}</Link>
               </Button>
               <button
                 onClick={() => setDismissed(true)}
+                aria-label="Dispensar aviso da assinatura"
                 className="p-1 rounded-full hover:bg-muted/50 transition-colors"
               >
                 <X className="h-4 w-4" />

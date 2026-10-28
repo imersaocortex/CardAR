@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin"
-import { subscriptionGrantsAccess } from "@/lib/payments/access"
+import { experienceAccessGranted } from "@/lib/payments/access"
+import { organizationOwnedBySuperAdmin } from "@/lib/payments/platform-admin"
 import { manifestResponse } from "@/lib/pwa/experience-manifest"
 
 export const dynamic = "force-dynamic"
@@ -13,7 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
   const { data: subscription } = await admin.from("subscriptions")
     .select("status, current_period_end, trial_ends_at").eq("organization_id", project.organization_id).maybeSingle()
-  if (!subscriptionGrantsAccess(subscription))
+  const superAdminOwned = await organizationOwnedBySuperAdmin(admin, project.organization_id)
+  if (!experienceAccessGranted(subscription, superAdminOwned))
     return new Response(null, { status: 404 })
 
   return manifestResponse(project.name, `/experience/${encodeURIComponent(slug)}`, new URL(request.url).origin)

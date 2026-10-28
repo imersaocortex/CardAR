@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { validateMercadoPagoPayment } from "../src/lib/payments/mercado-pago-rules.ts"
-import { subscriptionGrantsAccess } from "../src/lib/payments/access.ts"
+import { experienceAccessGranted, subscriptionGrantsAccess } from "../src/lib/payments/access.ts"
 import { verifyMercadoPagoSignature } from "../src/lib/payments/mercado-pago-signature.ts"
 import { createHmac } from "node:crypto"
 
@@ -31,6 +31,15 @@ test("a project stops at the exact paid-period deadline before the daily renewal
   assert.equal(subscriptionGrantsAccess({ status: "active", current_period_end: end }, Date.parse(end)), false)
   assert.equal(subscriptionGrantsAccess({ status: "past_due", current_period_end: end }, Date.parse(end) - 1), false)
   assert.equal(subscriptionGrantsAccess({ status: "trialing", trial_ends_at: end }, Date.parse(end)), false)
+})
+
+test("only a verified super-admin-owned organization bypasses an expired subscription", () => {
+  const expired = { status: "active", current_period_end: "2026-07-03T19:35:03Z" }
+  const now = Date.parse("2026-10-28T12:00:00Z")
+  assert.equal(experienceAccessGranted(expired, false, now), false)
+  assert.equal(experienceAccessGranted(expired, true, now), true)
+  assert.equal(experienceAccessGranted({ status: "past_due" }, false, now), false)
+  assert.equal(experienceAccessGranted(null, false, now), false)
 })
 
 test("webhook requires a valid Mercado Pago HMAC over payment, request and timestamp", () => {

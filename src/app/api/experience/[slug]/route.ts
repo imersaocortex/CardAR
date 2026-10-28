@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { selectPrimaryScene } from "@/lib/scenes"
-import { subscriptionGrantsAccess } from "@/lib/payments/access"
+import { experienceAccessGranted } from "@/lib/payments/access"
+import { organizationOwnedBySuperAdmin } from "@/lib/payments/platform-admin"
 import { planAllowsTrackingMode } from "@/lib/plans/tracking"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -30,7 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       .eq("organization_id", project.organization_id)
       .maybeSingle()
 
-    if (!subscriptionGrantsAccess(subscription)) {
+    const superAdminOwned = await organizationOwnedBySuperAdmin(admin, project.organization_id)
+    if (!experienceAccessGranted(subscription, superAdminOwned)) {
       return NextResponse.json({ error: "Projeto não disponível" }, { status: 404 })
     }
 
@@ -48,7 +50,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
         hasWatermark = plan.has_watermark
       }
     }
-    if (!planAllowsTrackingMode(trackingPlan, project.tracking_mode || "marker"))
+    if (superAdminOwned) hasWatermark = false
+    if (!superAdminOwned && !planAllowsTrackingMode(trackingPlan, project.tracking_mode || "marker"))
       return NextResponse.json({ error: "Tecnologia indisponível neste plano" }, { status: 404 })
 
     // Get system name from settings

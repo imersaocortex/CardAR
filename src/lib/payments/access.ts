@@ -6,3 +6,11 @@ export function subscriptionGrantsAccess(subscription: {
   if (subscription.status === "trialing") return !subscription.trial_ends_at || Date.parse(subscription.trial_ends_at) > now
   return false
 }
+
+export function experienceAccessGranted(
+  subscription: Parameters<typeof subscriptionGrantsAccess>[0],
+  superAdminOwned: boolean,
+  now = Date.now(),
+) {
+  return superAdminOwned || subscriptionGrantsAccess(subscription, now)
+}

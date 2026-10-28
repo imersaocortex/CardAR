@@ -57,8 +57,8 @@ export default function ExperiencePage() {
       try {
         const res = await fetch(`/api/experience/${params.slug}`)
         if (!res.ok) {
-          const text = await res.text()
-          setError(text.includes("não") ? "Experiência não encontrada" : "Erro ao carregar")
+          const body = await res.json().catch(() => null)
+          setError(typeof body?.error === "string" ? body.error : "Erro ao carregar experiência")
           setLoading(false)
           return
         }
@@ -113,7 +113,7 @@ export default function ExperiencePage() {
           <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-4">
             <X className="h-8 w-8 text-destructive" />
           </div>
-          <h2 className="text-lg font-bold text-white mb-2">Experiência não encontrada</h2>
+          <h2 className="text-lg font-bold text-white mb-2">{error === "Projeto não encontrado" || error === "Experiência não encontrada" ? "Experiência não encontrada" : "Experiência indisponível"}</h2>
           <p className="text-sm text-white/60">{error}</p>
         </div>
       </div>

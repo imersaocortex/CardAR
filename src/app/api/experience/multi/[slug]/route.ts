@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { subscriptionGrantsAccess } from "@/lib/payments/access"
+import { experienceAccessGranted } from "@/lib/payments/access"
+import { organizationOwnedBySuperAdmin } from "@/lib/payments/platform-admin"
 import { planAllowsTrackingMode } from "@/lib/plans/tracking"
 import { serializeExperience, type ExperienceProjectRow } from "@/lib/ar/serialize-experience"
 import type { ArExperienceData } from "@/lib/mindar"
@@ -15,8 +16,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     .select("status, trial_ends_at, current_period_end, plans(has_watermark, multi_project_enabled, gps_enabled, surface_enabled)")
     .eq("organization_id", collection.organization_id).maybeSingle()
   const plan = Array.isArray(subscription?.plans) ? subscription.plans[0] : subscription?.plans
-  const active = subscriptionGrantsAccess(subscription)
-  if (!active || plan?.multi_project_enabled !== true || !planAllowsTrackingMode(plan, collection.tracking_mode))
+  const superAdminOwned = await organizationOwnedBySuperAdmin(admin, collection.organization_id)
+  const active = experienceAccessGranted(subscription, superAdminOwned)
+  if (!active || (!superAdminOwned && (plan?.multi_project_enabled !== true || !planAllowsTrackingMode(plan, collection.tracking_mode))))
     return NextResponse.json({ error: "Experiência indisponível neste plano" }, { status: 404 })
   const { data: projects, error } = await admin.from("projects")
     .select("*, scenes(*, scene_objects(*, scene_buttons(*))), project_markers(*)")
@@ -38,6 +40,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   await Promise.all(projects.map((project: ExperienceProjectRow) => admin.rpc("increment_project_views", { p_project_id: project.id })))
   return NextResponse.json({
     collection: { id: collection.id, name: collection.name, trackingMode: collection.tracking_mode },
-    projects: experiences, hasWatermark: plan.has_watermark !== false, siteName,
+    projects: experiences, hasWatermark: !superAdminOwned && plan?.has_watermark !== false, siteName,
   }, { headers: { "Cache-Control": "no-store" } })
 }

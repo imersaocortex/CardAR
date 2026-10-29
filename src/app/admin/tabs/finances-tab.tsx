@@ -315,7 +315,7 @@ export function FinancesTab() {
                     <tr key={payment.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="py-3 px-4">
                         <Badge variant={gateway === "stripe" ? "secondary" : "outline"} className="text-[10px]">
-                          {({ paypal: "PayPal (histórico)", efi: "Efí (histórico)", stripe: "Stripe (histórico)", asaas: "Asaas" } as Record<string, string>)[gateway] || gateway}
+                          {({ paypal: "PayPal (histórico)", efi: "Efí (histórico)", stripe: "Stripe (histórico)", asaas: "Asaas (histórico)", syncpay: "Sync Pay", mercado_pago: "Mercado Pago" } as Record<string, string>)[gateway] || gateway}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 font-medium">{payment.organizations?.name || "-"}</td>

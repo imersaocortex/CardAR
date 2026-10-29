@@ -1,112 +1,85 @@
 "use client"
-
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 
+type Method = "pix_automatico" | "credit_card"
+type Module = "syncpay_pix_enabled" | "syncpay_card_enabled" | "mercado_pago_enabled"
+type Environment = { missing: string[] }
 type Data = {
-  settings: { asaas_enabled: boolean; asaas_pix_key: string | null; has_api_key: boolean; mercado_pago_enabled: boolean }
-  environment: { production: boolean; missing: string[] }
-  mercadoPagoEnvironment: { production: boolean; missing: string[] }
-  canStoreKey: boolean
+  settings: Record<Module, boolean>
+  syncPayEnvironment: Environment; syncPayCardEnvironment: Environment; mercadoPagoEnvironment: Environment
+  plans: { id: string; name: string; price: number; billing_cycle: string }[]
+  links: { plan_id: string; method: Method; external_token: string }[]
+  pending: { id: string; plan_id: string }[]
+  events: { id: string; event: string; last_error: string | null }[]
 }
-type Webhook = { configured: boolean; enabled: boolean; interrupted: boolean; missingEvents: string[] }
-
+const modules: { key: Module; name: string; detail: string; environment: "syncPayEnvironment" | "syncPayCardEnvironment" | "mercadoPagoEnvironment" }[] = [
+  { key: "syncpay_pix_enabled", name: "Pix Automático · Sync Pay", detail: "O cliente autoriza no banco uma vez. A Sync Pay processa as próximas cobranças.", environment: "syncPayEnvironment" },
+  { key: "syncpay_card_enabled", name: "Cartão recorrente · Sync Pay", detail: "O cliente cadastra o cartão no formulário seguro da Sync Pay, com cobrança a cada ciclo.", environment: "syncPayCardEnvironment" },
+  { key: "mercado_pago_enabled", name: "Pix por fatura · Mercado Pago", detail: "Cada mensalidade ou anuidade exige o pagamento de um novo Pix.", environment: "mercadoPagoEnvironment" },
+]
 export function PaymentsTab() {
   const [data, setData] = useState<Data | null>(null)
-  const [webhook, setWebhook] = useState<Webhook | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
-  const [pixKey, setPixKey] = useState("")
-  const [apiKey, setApiKey] = useState("")
+  const [tokens, setTokens] = useState<Record<string, string>>({})
+  const [recovery, setRecovery] = useState<Record<string, string>>({})
+  async function load() {
+    const response = await fetch("/api/admin/billing-providers", { cache: "no-store" })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error)
+    setData(result)
+    setTokens(Object.fromEntries(result.links.map((link: Data["links"][number]) => [`${link.plan_id}:${link.method}`, link.external_token])))
+  }
   useEffect(() => {
-    fetch("/api/admin/billing-providers", { cache: "no-store" }).then(async (response) => {
+    const controller = new AbortController()
+    fetch("/api/admin/billing-providers", { cache: "no-store", signal: controller.signal }).then(async response => {
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível consultar os pagamentos")
-      setData(result)
-      setPixKey(result.settings.asaas_pix_key || "")
-    }).catch((reason) => setError(reason.message))
+      if (!response.ok) throw new Error(result.error)
+      if (!controller.signal.aborted) {
+        setData(result)
+        setTokens(Object.fromEntries(result.links.map((link: Data["links"][number]) => [`${link.plan_id}:${link.method}`, link.external_token])))
+      }
+    }).catch(reason => { if (!controller.signal.aborted) setError(reason.message) })
+    return () => controller.abort()
   }, [])
-  async function change(enabled: boolean) {
+  async function save(method: string, body: unknown) {
     setBusy(true); setError(""); setNotice("")
     try {
-      const response = await fetch("/api/admin/billing-providers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) })
+      const response = await fetch("/api/admin/billing-providers", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível salvar")
-      setData((current) => current ? { ...current, settings: result.settings } : current)
-      setNotice(enabled ? "Pix Automático ativado para novas assinaturas." : "Novas assinaturas desativadas. O histórico permanece disponível.")
-    } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy(false) }
-  }
-  async function changeMercadoPago(enabled: boolean) {
-    setBusy(true); setError(""); setNotice("")
-    try {
-      const response = await fetch("/api/admin/billing-providers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mercado_pago_enabled: enabled }) })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível salvar")
-      setData((current) => current ? { ...current, settings: result.settings } : current)
-      setNotice(enabled ? "Pix Mercado Pago ativado para novas assinaturas." : "Pix Mercado Pago desativado para novas assinaturas.")
-    } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy(false) }
-  }
-  async function handleWebhook(action: "verify_webhook" | "register_webhook") {
-    setBusy(true); setError(""); setNotice("")
-    try {
-      const response = await fetch("/api/admin/billing-providers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível consultar a Asaas")
-      setWebhook(result.webhook)
-      setNotice(result.webhook.configured ? "Webhook da Asaas configurado." : "Webhook incompleto ou desativado.")
-    } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy(false) }
-  }
-  async function savePixKey() {
-    setBusy(true); setError(""); setNotice("")
-    try {
-      const response = await fetch("/api/admin/billing-providers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pix_key: pixKey }) })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível salvar a chave Pix")
-      setData((current) => current ? { ...current, settings: result.settings } : current)
-      setNotice("Chave Pix de referência salva.")
-    } catch (reason) { setError((reason as Error).message) }
-    finally { setBusy(false) }
-  }
-  async function saveApiKey() {
-    setBusy(true); setError(""); setNotice("")
-    try {
-      const response = await fetch("/api/admin/billing-providers", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_key: apiKey }) })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || "Não foi possível salvar a chave de API")
-      setApiKey("")
-      setData((current) => current ? { ...current, settings: { ...current.settings, has_api_key: true }, environment: {
-        ...current.environment, missing: current.environment.missing.filter((item) => item !== "Chave de API da Asaas"),
-      } } : current)
-      setNotice("Chave de API criptografada e salva. Confira o webhook antes de ativar cobranças.")
+      if (!response.ok) throw new Error(result.error)
+      await load()
+      setNotice("Configuração salva e conferida.")
     } catch (reason) { setError((reason as Error).message) }
     finally { setBusy(false) }
   }
   return <div className="space-y-5">
-    <div><h2 className="text-xl font-semibold">Meios de pagamento</h2><p className="mt-2 text-sm text-muted-foreground">Ative os provedores que deseja oferecer para novas assinaturas.</p></div>
+    <div><h2 className="text-xl font-semibold">Módulos de recebimento</h2><p className="mt-2 text-sm text-muted-foreground">Escolha quais opções serão oferecidas para novas assinaturas. Ao desligar um módulo, os contratos existentes continuam sendo conciliados.</p></div>
     {error && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm">{notice}</p>}
-    <Card><CardHeader><CardTitle>Pix Automático · Asaas</CardTitle></CardHeader><CardContent className="space-y-4">
-      <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.environment.production ? "Produção" : "Homologação"}</p></div><Switch aria-label="Ativar Pix Automático Asaas" checked={!!data?.settings.asaas_enabled} disabled={!data || busy || (!data.settings.asaas_enabled && data.environment.missing.length > 0)} onCheckedChange={change} /></div>
-      <p className="text-sm text-muted-foreground">O primeiro QR Code autoriza a recorrência. A Asaas gera as cobranças futuras, e o sistema confirma cada pagamento antes de liberar o acesso.</p>
-      <div className="space-y-2 rounded-lg border p-3"><label htmlFor="asaas-pix-key" className="text-sm font-medium">Chave Pix recebedora</label><Input id="asaas-pix-key" autoComplete="off" value={pixKey} onChange={(event) => setPixKey(event.target.value)} placeholder="Informe sua chave Pix" maxLength={255} disabled={!data || busy} /><p className="text-xs text-muted-foreground">Referência administrativa opcional. O Pix Automático usa o QR Code gerado pela Asaas; esta chave não é enviada nas cobranças.</p><Button type="button" variant="outline" size="sm" disabled={!data || busy || pixKey === (data.settings.asaas_pix_key || "")} onClick={savePixKey}>Salvar chave Pix</Button></div>
-      <div className="space-y-2 rounded-lg border p-3"><label htmlFor="asaas-api-key" className="text-sm font-medium">Chave de API da Asaas</label><Input id="asaas-api-key" type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={data?.settings.has_api_key ? "Chave configurada — informe outra para substituir" : "Cole a chave de API"} maxLength={1000} disabled={!data || busy || !data.canStoreKey} /><p className="text-xs text-muted-foreground">{data?.settings.has_api_key ? "Configurada. O valor não pode ser visualizado após salvar." : "Ainda não configurada."} A chave é criptografada antes de ser armazenada.</p>{data && !data.canStoreKey && <p className="text-xs text-amber-600">Configure ASAAS_SECRETS_KEY na Vercel para habilitar o armazenamento seguro.</p>}<Button type="button" variant="outline" size="sm" disabled={!data || busy || !data.canStoreKey || apiKey.trim().length < 20} onClick={saveApiKey}>Salvar chave de API</Button></div>
-      {!!data?.environment.missing.length && <p className="text-xs text-amber-600">Para ativar, configure: {data.environment.missing.join(", ")}.</p>}
-      <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={!data || busy} onClick={() => handleWebhook("verify_webhook")}>Verificar webhook</Button><Button type="button" variant="outline" size="sm" disabled={!data || busy} onClick={() => handleWebhook("register_webhook")}>Configurar webhook</Button></div>
-      {webhook && <p className="text-xs text-muted-foreground">{webhook.configured ? "Recebimento pronto" : webhook.interrupted ? "Fila interrompida" : `${webhook.missingEvents.length} eventos pendentes`}</p>}
+    {modules.map(module => <Card key={module.key}><CardHeader><CardTitle>{module.name}</CardTitle></CardHeader><CardContent className="space-y-4">
+      <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.settings[module.key] ? "Ativado" : "Desativado"}</p></div><Switch aria-label={`Ativar ${module.name}`} checked={!!data?.settings[module.key]} disabled={!data || busy || (!data.settings[module.key] && data[module.environment].missing.length > 0)} onCheckedChange={enabled => save("PATCH", { module: module.key, enabled })} /></div>
+      <p className="text-sm text-muted-foreground">{module.detail} O acesso depende da confirmação do pagamento.</p>
+      {!!data?.[module.environment].missing.length && <p className="text-xs text-amber-600">Configure na Vercel: {data[module.environment].missing.join(", ")}.</p>}
+    </CardContent></Card>)}
+    <Card><CardHeader><CardTitle>Vincular planos à Sync Pay</CardTitle></CardHeader><CardContent className="space-y-5">
+      <p className="text-sm text-muted-foreground">Crie os planos na Sync Pay com o mesmo preço e informe o token de cada modalidade abaixo. A recorrência é de 30 dias para mensal e 365 dias para anual. Valor, modalidade e intervalo serão conferidos na API antes de salvar.</p>
+      {data?.plans.map(plan => <div key={plan.id} className="space-y-3 rounded-xl border p-4"><p className="font-medium">{plan.name} · {Number(plan.price).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} / {plan.billing_cycle === "yearly" ? "365 dias" : "30 dias"}</p>
+        {(["pix_automatico", "credit_card"] as Method[]).map(method => { const key = `${plan.id}:${method}`; return <div key={method} className="space-y-2"><label className="text-sm" htmlFor={key}>{method === "credit_card" ? "Cartão recorrente" : "Pix Automático"} — token do plano</label><div className="flex flex-col gap-2 sm:flex-row"><Input id={key} value={tokens[key] || ""} onChange={event => setTokens(current => ({ ...current, [key]: event.target.value }))} placeholder="UUID do plano na Sync Pay" disabled={busy} /><Button variant="outline" disabled={busy} onClick={() => save("PUT", { plan_id: plan.id, method, external_token: (tokens[key] || "").trim() })}>Validar e salvar</Button></div></div> })}
+      </div>)}
     </CardContent></Card>
-    <Card><CardHeader><CardTitle>Pix por fatura · Mercado Pago</CardTitle></CardHeader><CardContent className="space-y-4">
-      <div className="flex items-center justify-between gap-4 rounded-lg border p-3"><div><p className="font-medium">Aceitar novas assinaturas</p><p className="text-xs text-muted-foreground">{data?.mercadoPagoEnvironment.production ? "Produção" : "Homologação"}</p></div><Switch aria-label="Ativar Pix Mercado Pago" checked={!!data?.settings.mercado_pago_enabled} disabled={!data || busy || (!data.settings.mercado_pago_enabled && data.mercadoPagoEnvironment.missing.length > 0)} onCheckedChange={changeMercadoPago} /></div>
-      <p className="text-sm text-muted-foreground">Cada ciclo gera um novo Pix. O cliente precisa pagá-lo no app do banco. Ao vencer sem pagamento confirmado, os projetos são bloqueados até a quitação.</p>
-      {!!data?.mercadoPagoEnvironment.missing.length && <p className="text-xs text-amber-600">Para ativar, configure: {data.mercadoPagoEnvironment.missing.join(", ")}.</p>}
-      <p className="text-xs text-muted-foreground">Configure o webhook de Pagamentos em Suas integrações do Mercado Pago para /api/webhooks/mercado-pago. Cadastre o Access Token e a chave secreta do webhook como variáveis protegidas na Vercel.</p>
+    <Card><CardHeader><CardTitle>Conferência de adesões</CardTitle></CardHeader><CardContent className="space-y-4">
+      <p className="text-sm text-muted-foreground">Se uma conexão falhar durante a adesão, confira a assinatura no painel Sync Pay e informe seu token para recuperá-la sem repetir a cobrança.</p>
+      {data?.pending.map(item => <div className="space-y-2 rounded-lg border p-3" key={item.id}><p className="break-all text-xs">Adesão: {item.id}</p><Input aria-label={`Token da assinatura para ${item.id}`} placeholder="Token da assinatura criada na Sync Pay" value={recovery[item.id] || ""} onChange={event => setRecovery(current => ({ ...current, [item.id]: event.target.value }))} /><Button variant="outline" disabled={busy || !recovery[item.id]} onClick={() => save("POST", { action: "recover", agreement_id: item.id, subscription_token: recovery[item.id].trim() })}>Conferir e recuperar</Button></div>)}
+      {!data?.pending.length && <p className="text-sm text-muted-foreground">Nenhuma adesão aguardando recuperação.</p>}
+      {!!data?.events.length && <p className="text-sm text-amber-600">{data.events.length} notificações aguardam conciliação. A rotina agendada tenta novamente; confira as credenciais e as assinaturas no provedor.</p>}
     </CardContent></Card>
-    <p className="text-sm text-muted-foreground">Os pagamentos históricos dos provedores anteriores continuam disponíveis para auditoria. O WhatsApp usa a conexão Evolution já configurada no sistema.</p>
+    <p className="text-sm text-muted-foreground">Webhook Sync Pay: <code>/api/webhooks/syncpay</code>. Use os eventos de assinaturas e cobranças com o segredo em SYNC_PAY_WEBHOOK_SECRET, ou a lista JSON em SYNC_PAY_WEBHOOK_SECRETS quando os eventos tiverem segredos diferentes. Libere Pix Automático, cartão, iFrame e o domínio com a Sync Pay antes de ativar. Os dados completos do cartão ficam no formulário do provedor.</p>
+    <p className="text-sm text-muted-foreground">Asaas foi substituída para novas contratações. O histórico e a conciliação dos contratos anteriores foram preservados. Os avisos WhatsApp continuam usando a Evolution configurada.</p>
   </div>
 }

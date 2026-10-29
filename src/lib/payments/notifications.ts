@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendOverdueNotification, sendUpcomingPaymentNotification } from "@/lib/evolution"
 import { reconcileAsaasPayment } from "./service"
 import { reconcileMercadoPagoPayment } from "./mercado-pago"
+import { reconcileSyncPayAgreement, type SyncPayAgreement } from "./syncpay"
 
 interface Invoice {
   id: string; external_id: string; organization_id: string; agreement_id: string; provider: string
@@ -11,6 +12,11 @@ interface Invoice {
 async function reconcileInvoice(invoice: Invoice) {
   if (invoice.provider === "asaas") await reconcileAsaasPayment(invoice.external_id)
   else if (invoice.provider === "mercado_pago" && /^\d+$/.test(invoice.external_id)) await reconcileMercadoPagoPayment(invoice.external_id)
+  else if (invoice.provider === "syncpay") {
+    const { data } = await createAdminClient().from("billing_agreements").select("*").eq("id", invoice.agreement_id).eq("provider", "syncpay").single()
+    if (!data) throw new Error("Assinatura Sync Pay não encontrada")
+    await reconcileSyncPayAgreement(data as SyncPayAgreement)
+  }
 }
 async function claim(id: string, field: "upcoming" | "overdue") {
   const column = `${field}_claimed_at`
@@ -33,7 +39,7 @@ export async function sendBillingNotifications() {
   const today = new Date().toISOString().slice(0, 10)
   const next = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
   const { data, error } = await admin.from("billing_invoices").select("id, external_id, organization_id, agreement_id, amount_cents, due_date, status, provider")
-    .in("provider", ["asaas", "mercado_pago"]).gte("due_date", today).lte("due_date", next).is("upcoming_sent_at", null).limit(100)
+    .in("provider", ["asaas", "mercado_pago", "syncpay"]).gte("due_date", today).lte("due_date", next).is("upcoming_sent_at", null).limit(100)
   if (error) throw new Error("Não foi possível consultar faturas próximas")
   let upcoming = 0
   for (const invoice of (data || []) as Invoice[]) {
@@ -51,7 +57,7 @@ export async function sendBillingNotifications() {
   }
   const { data: overdueRows, error: overdueError } = await admin.from("billing_invoices")
     .select("id, external_id, organization_id, agreement_id, amount_cents, due_date, status, provider")
-    .in("provider", ["asaas", "mercado_pago"]).lt("due_date", today).is("overdue_sent_at", null).limit(100)
+    .in("provider", ["asaas", "mercado_pago", "syncpay"]).lt("due_date", today).is("overdue_sent_at", null).limit(100)
   if (overdueError) throw new Error("Não foi possível consultar faturas vencidas")
   let overdue = 0
   for (const invoice of (overdueRows || []) as Invoice[]) {

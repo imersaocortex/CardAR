@@ -1,11 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 
 export type SyncPayMethod = "pix_automatico" | "credit_card"
-export interface SyncPayPlan { token: string; amount: string | number; periodicity_days: number; billing_method: string; status: string }
+export interface SyncPayPlan { token: string; amount: string | number; periodicity_days: number; billing_method: string | null; billing_methods?: string[]; status: string }
 export interface SyncPayCharge { cycle_number: number; amount: string | number; status: string; due_date: string; paid_at?: string | null; expires_at?: string | null; payment?: { pix_code?: string | null } }
 export interface SyncPaySubscription {
   token: string; status: string; subscriber_email: string; subscriber_document: string
-  started_at: string | null; plan: SyncPayPlan; charges: SyncPayCharge[] | null
+  started_at: string | null; billing_method?: string; plan: SyncPayPlan; charges: SyncPayCharge[] | null
 }
 export const syncPayUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function syncPayWebhookSecrets(single: string | undefined, list: string | undefined): string[] {
@@ -24,12 +24,19 @@ function cents(value: string | number) {
   return Math.round(number * 100)
 }
 export function validateSyncPayPlan(plan: SyncPayPlan, expected: { token: string; amount_cents: number; method: SyncPayMethod; days: number }, requireActive = true) {
-  if (plan.token !== expected.token || cents(plan.amount) !== expected.amount_cents || plan.billing_method !== expected.method ||
-      plan.periodicity_days !== expected.days || (requireActive && plan.status !== "active")) throw new Error("Plano Sync Pay divergente: confira valor, modalidade e periodicidade (30 ou 365 dias)")
+  // Current plans expose accepted methods separately from their default. An empty
+  // list is authoritative: never fall back to a disabled legacy default.
+  const acceptsMethod = plan.billing_methods === undefined ? plan.billing_method === expected.method
+    : Array.isArray(plan.billing_methods) && plan.billing_methods.includes(expected.method)
+  if (plan.token !== expected.token || cents(plan.amount) !== expected.amount_cents ||
+      plan.periodicity_days !== expected.days || (requireActive && (plan.status !== "active" || !acceptsMethod))) throw new Error("Plano Sync Pay divergente: confira valor, modalidade e periodicidade (30 ou 365 dias)")
 }
 export function validateSyncPaySubscription(remote: SyncPaySubscription, expected: { token: string; plan_token: string; amount_cents: number; method: SyncPayMethod; days: number; identity: string }) {
+  // Existing contracts retain the method selected at enrollment, independently
+  // of a plan's current default/availability. Legacy responses used the plan.
+  const method = remote.billing_method ?? remote.plan.billing_method
   if (remote.token !== expected.token || !remote.subscriber_email || !remote.subscriber_document ||
-      syncPayIdentity(remote.subscriber_email, remote.subscriber_document) !== expected.identity || (remote.charges !== null && !Array.isArray(remote.charges))) throw new Error("Assinatura Sync Pay divergente")
+      method !== expected.method || syncPayIdentity(remote.subscriber_email, remote.subscriber_document) !== expected.identity || (remote.charges !== null && !Array.isArray(remote.charges))) throw new Error("Assinatura Sync Pay divergente")
   validateSyncPayPlan(remote.plan, { token: expected.plan_token, amount_cents: expected.amount_cents, method: expected.method, days: expected.days }, false)
 }
 export function syncPayChargeSettlement(charge: SyncPayCharge, startedAt: string | null, days: number, amount: number, now = Date.now()) {

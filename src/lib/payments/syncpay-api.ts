@@ -24,11 +24,12 @@ async function accessToken() {
   })()
   try { return await obtaining } finally { obtaining = null }
 }
-export async function syncPayRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function syncPayRequest<T>(path: string, method = "GET", body?: unknown, options?: { idempotencyKey: string }): Promise<T> {
   const token = await accessToken()
   const response = await fetch(`https://api.syncpayments.com.br/api/partner/v1${path}`, {
     method, cache: "no-store", signal: AbortSignal.timeout(12000),
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json",
+      ...(options ? { "Idempotency-Key": options.idempotencyKey } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   if (response.status === 401) cached = null

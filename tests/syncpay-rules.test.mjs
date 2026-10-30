@@ -1,10 +1,26 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createHmac } from "node:crypto"
-import { syncPayIdentity, validateSyncPayPlan, validateSyncPaySubscription, syncPayChargeSettlement, verifySyncPayWebhook } from "../src/lib/payments/syncpay-rules.ts"
+import { syncPayIdentity, syncPayPhone, validateSyncPayPlan, validateSyncPaySubscription, syncPayChargeSettlement, verifySyncPayWebhook } from "../src/lib/payments/syncpay-rules.ts"
 
 const expected = { token: "plan-1", amount_cents: 2990, method: "pix_automatico", days: 30 }
 const plan = { token: "plan-1", amount: "29.90", billing_method: "pix_automatico", periodicity_days: 30, status: "active" }
+
+test("Sync Pay receives national digits, stripping country prefixes without corrupting DDD 55", () => {
+  for (const [input, expectedPhone] of [
+    ["+55 (81) 99999-1234", "81999991234"], ["5581999991234", "81999991234"],
+    ["0055 (81) 99999-1234", "81999991234"], ["(81) 99999-1234", "81999991234"],
+    ["+55 (81) 3333-1234", "8133331234"], ["(81) 3333-1234", "8133331234"],
+    ["(55) 99999-1234", "55999991234"], ["(55) 3333-1234", "5533331234"],
+    ["+55 (55) 99999-1234", "55999991234"], ["0055 (55) 99999-1234", "55999991234"],
+    [undefined, ""], [null, ""], ["  ", ""],
+  ]) assert.equal(syncPayPhone(input), expectedPhone, String(input))
+})
+
+test("Sync Pay rejects malformed or foreign international numbers before enrollment", () => {
+  for (const input of ["999991234", "+55 99999-1234", "+1 (212) 555-1234", "+44 20 7946 0958", "0055 99999-1234", "551234567890123", "telefone inválido"])
+    assert.throws(() => syncPayPhone(input), /DDD/, input)
+})
 test("Sync Pay rejects a mismatched amount, modality, interval or plan before enrollment", () => {
   assert.doesNotThrow(() => validateSyncPayPlan(plan, expected))
   for (const change of [{ amount: "2.99" }, { amount: "29.901" }, { token: "other" }, { billing_method: "qr_code" }, { periodicity_days: 365 }, { status: "inactive" }])

@@ -13,13 +13,13 @@ function load(path, mocks) {
   return loaded.exports
 }
 class ApiError extends Error { constructor(status) { super(`HTTP ${status}`); this.status = status } }
-function harness(enrollmentError) {
+function harness(enrollmentError, billingMethod = "credit_card") {
   const token = "00000000-0000-4000-8000-000000000003"
   const subToken = "00000000-0000-4000-8000-000000000004"
   const profile = { id: "user", name: "Test Buyer", email: "buyer@example.test", cpf_cnpj: "12345678900", phone: "81999999999" }
-  const plan = { token, amount: "29.90", billing_method: "credit_card", periodicity_days: 30, status: "active" }
+  const plan = { token, amount: "29.90", billing_method: billingMethod, periodicity_days: 30, status: "active" }
   const tables = { plans: [{ id: "plan", price: "29.90", billing_cycle: "monthly", active: true }], subscriptions: [{ organization_id: "org", status: "past_due" }],
-    profiles: [profile], syncpay_plan_links: [{ plan_id: "plan", method: "credit_card", external_token: token }], billing_agreements: [], billing_invoices: [] }
+    profiles: [profile], syncpay_plan_links: [{ plan_id: "plan", method: billingMethod, external_token: token }], billing_agreements: [], billing_invoices: [] }
   const calls = []; const rpcs = []
   const remote = { token: subToken, status: "pending_first_payment", subscriber_email: profile.email, subscriber_document: profile.cpf_cnpj, started_at: null, plan, charges: null }
   const admin = {
@@ -43,7 +43,7 @@ function harness(enrollmentError) {
     calls.push({ path, method, body, options })
     if (path.endsWith("/enroll")) {
       if (enrollmentError) throw enrollmentError
-      return { subscription_token: subToken, billing_method: "credit_card", payment: { status: "approved" } }
+      return { subscription_token: subToken, billing_method: billingMethod, payment: { status: "approved" } }
     }
     if (path.startsWith("/subscriptions/")) return { data: remote }
     return { data: plan }
@@ -53,7 +53,7 @@ function harness(enrollmentError) {
     "./money": { amountInCents: value => Math.round(Number(value)*100) }, "./settings": { billingAvailability: async () => ({ syncpay: { card_configured: true, pix_configured: true } }) },
     "./syncpay-rules": rules, "./syncpay-api": { syncPayRequest: api, SyncPayApiError: ApiError },
   })
-  const start = () => service.startSyncPayAgreement("org","user","plan","credit_card","card_token.test-sealed-token", "203.0.113.42")
+  const start = () => service.startSyncPayAgreement("org","user","plan",billingMethod,billingMethod === "credit_card" ? "card_token.test-sealed-token" : undefined, "203.0.113.42")
   return { start, service, calls, rpcs, tables, remote }
 }
 test("a timeout after enrollment is never retried and leaves an administratively recoverable attempt", async () => {
@@ -105,4 +105,39 @@ test("missing buyer IP cannot leave a failed card attempt or call the provider",
   await assert.rejects(h.service.startSyncPayAgreement("org", "user", "plan", "credit_card", "card_token.test"), /conexão/)
   assert.equal(h.tables.billing_agreements.length, 0)
   assert.equal(h.calls.filter(call => call.method === "POST").length, 0)
+})
+
+test("card and Pix enrollment payloads send only DDD and number, never the country prefix", async () => {
+  for (const method of ["credit_card", "pix_automatico"]) {
+    for (const [input, expectedPhone] of [["+55 (81) 99999-1234", "81999991234"], ["0055 (81) 3333-1234", "8133331234"], ["(55) 99999-1234", "55999991234"]]) {
+      const h = harness(undefined, method)
+      h.tables.profiles[0].phone = input
+      await h.start()
+      const request = h.calls.find(call => call.path.endsWith("/enroll"))
+      assert.equal(request.body.phone, expectedPhone)
+      assert.equal(request.body.billing_method, method)
+    }
+  }
+})
+
+test("invalid supplied phone blocks both methods before creating a local attempt or calling enrollment", async () => {
+  for (const method of ["credit_card", "pix_automatico"]) {
+    const h = harness(undefined, method)
+    h.tables.profiles[0].phone = "+55 99999-1234"
+    await assert.rejects(h.start(), /DDD/)
+    assert.equal(h.tables.billing_agreements.length, 0)
+    assert.equal(h.calls.filter(call => call.method === "POST").length, 0)
+  }
+})
+
+test("Pix keeps phone optional while card requires it", async () => {
+  const pix = harness(undefined, "pix_automatico")
+  pix.tables.profiles[0].phone = ""
+  await pix.start()
+  assert.equal(Object.hasOwn(pix.calls.find(call => call.path.endsWith("/enroll")).body, "phone"), false)
+  const card = harness()
+  card.tables.profiles[0].phone = ""
+  await assert.rejects(card.start(), /telefone com DDD/)
+  assert.equal(card.tables.billing_agreements.length, 0)
+  assert.equal(card.calls.filter(call => call.method === "POST").length, 0)
 })

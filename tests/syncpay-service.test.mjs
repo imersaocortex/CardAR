@@ -39,8 +39,8 @@ function harness(enrollmentError) {
     },
     async rpc(name, args) { rpcs.push({ name, args }); return { data: true, error: null } },
   }
-  const api = async (path, method="GET", body) => {
-    calls.push({ path, method, body })
+  const api = async (path, method="GET", body, options) => {
+    calls.push({ path, method, body, options })
     if (path.endsWith("/enroll")) {
       if (enrollmentError) throw enrollmentError
       return { subscription_token: subToken, billing_method: "credit_card", payment: { status: "approved" } }
@@ -53,7 +53,7 @@ function harness(enrollmentError) {
     "./money": { amountInCents: value => Math.round(Number(value)*100) }, "./settings": { billingAvailability: async () => ({ syncpay: { card_configured: true, pix_configured: true } }) },
     "./syncpay-rules": rules, "./syncpay-api": { syncPayRequest: api, SyncPayApiError: ApiError },
   })
-  const start = () => service.startSyncPayAgreement("org","user","plan","credit_card","card_token.test-sealed-token")
+  const start = () => service.startSyncPayAgreement("org","user","plan","credit_card","card_token.test-sealed-token", "203.0.113.42")
   return { start, service, calls, rpcs, tables, remote }
 }
 test("a timeout after enrollment is never retried and leaves an administratively recoverable attempt", async () => {
@@ -87,4 +87,22 @@ test("card approved does not grant access until the authenticated subscription r
   h.remote.subscriber_document = "99999999999"
   await assert.rejects(h.service.reconcileSyncPayAgreement(agreement), /divergente/)
   assert.equal(h.rpcs.length, 1)
+})
+
+test("card enrollment explicitly selects the method and sends the buyer IP and a stable attempt key", async () => {
+  const h = harness()
+  await h.start()
+  const request = h.calls.find(call => call.method === "POST")
+  assert.equal(request.body.billing_method, "credit_card")
+  assert.equal(request.body.customer_ip, "203.0.113.42")
+  assert.equal(request.body.card.token, "card_token.test-sealed-token")
+  assert.equal(request.options.idempotencyKey, h.tables.billing_agreements[0].id)
+  assert.equal(request.body.charge_now, undefined)
+})
+
+test("missing buyer IP cannot leave a failed card attempt or call the provider", async () => {
+  const h = harness()
+  await assert.rejects(h.service.startSyncPayAgreement("org", "user", "plan", "credit_card", "card_token.test"), /conexão/)
+  assert.equal(h.tables.billing_agreements.length, 0)
+  assert.equal(h.calls.filter(call => call.method === "POST").length, 0)
 })

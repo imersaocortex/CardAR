@@ -1,4 +1,5 @@
 import "server-only"
+import { isIP } from "node:net"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { amountInCents } from "./money"
 import { billingAvailability } from "./settings"
@@ -63,9 +64,10 @@ export async function startSyncPayAgreement(orgId: string, userId: string, planI
   if (phone.startsWith("55") && phone.length > 11) phone = phone.slice(2)
   if (!profile?.name || !profile.email || ![11, 14].includes(document.length) || (method === "credit_card" && ![10, 11].includes(phone.length))) throw new Error("Preencha nome, e-mail, CPF/CNPJ e telefone com DDD no perfil")
   if (method === "credit_card" && (!cardToken || !/^card_token\.[A-Za-z0-9_\-\.]+$/.test(cardToken))) throw new Error("Preencha o cartão no formulário seguro da Sync Pay")
+  if (method === "credit_card" && (!customerIp || !isIP(customerIp))) throw new Error("Não foi possível identificar a conexão para a análise segura do cartão. Atualize a página e tente novamente.")
   await verifySyncPayPlanLink(planId, method, linkResult.data.external_token)
-  // No documented idempotency key exists for enroll. Persist a single attempt before POST;
-  // an ambiguous timeout must be recovered by attaching the verified remote token, never retrying.
+  // Persist one attempt and use its ID as the provider's documented idempotency
+  // key. Still recover ambiguous responses administratively; never auto-retry.
   const { data, error } = await admin.from("billing_agreements").insert({
     organization_id: orgId, created_by: userId, plan_id: planId, provider: "syncpay",
     pix_mode: method === "pix_automatico" ? "automatic" : null,
@@ -78,9 +80,9 @@ export async function startSyncPayAgreement(orgId: string, userId: string, planI
   let enrolled: { subscription_token: string; billing_method: string; payment?: { qr_code?: string; status?: string } }
   try { enrolled = await syncPayRequest<typeof enrolled>(
     `/subscription-plans/${agreement.syncpay_plan_token}/enroll`, "POST", {
-      name: profile.name, email: profile.email, document, ...(phone ? { phone } : {}),
+      name: profile.name, email: profile.email, document, billing_method: method, ...(phone ? { phone } : {}),
       ...(method === "credit_card" ? { card: { token: cardToken }, ...(customerIp ? { customer_ip: customerIp } : {}) } : {}),
-    }) } catch (error) {
+    }, { idempotencyKey: agreement.id }) } catch (error) {
     // A documented rejection means no enrollment exists; an ambiguous response stays locked.
     if (error instanceof SyncPayApiError && [400, 401, 403, 404, 422, 429].includes(error.status))
       await updateAgreement(agreement.id, { status: "canceled", setup_stage: "rejected" })

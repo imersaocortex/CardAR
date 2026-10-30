@@ -18,6 +18,23 @@ test("Sync Pay verifies the subscriber and remote subscription rather than trust
   assert.throws(() => validateSyncPaySubscription({ ...remote, subscriber_document: "99999999999" }, check))
   assert.throws(() => validateSyncPaySubscription({ ...remote, token: "other" }, check))
 })
+
+test("multi-method plans accept the chosen method instead of requiring it to be the default", () => {
+  const multi = { ...plan, billing_methods: ["pix_automatico", "credit_card"] }
+  assert.doesNotThrow(() => validateSyncPayPlan(multi, { ...expected, method: "credit_card" }))
+  assert.doesNotThrow(() => validateSyncPayPlan({ ...multi, billing_method: null }, { ...expected, method: "credit_card" }))
+  assert.throws(() => validateSyncPayPlan({ ...multi, billing_methods: [] }, expected))
+  assert.throws(() => validateSyncPayPlan({ ...multi, billing_methods: ["qr_code"] }, expected))
+})
+
+test("settlement verifies the subscription's actual method even when the plan default changes", () => {
+  const remote = { token: "subscription-1", subscriber_email: "buyer@example.com", subscriber_document: "12345678900", billing_method: "credit_card",
+    plan: { ...plan, billing_methods: ["pix_automatico"], status: "inactive" }, charges: [] }
+  const check = { token: remote.token, plan_token: plan.token, amount_cents: 2990, method: "credit_card", days: 30, identity: syncPayIdentity(remote.subscriber_email, remote.subscriber_document) }
+  assert.doesNotThrow(() => validateSyncPaySubscription(remote, check))
+  assert.throws(() => validateSyncPaySubscription({ ...remote, billing_method: "pix_automatico" }, check))
+  assert.throws(() => validateSyncPaySubscription({ ...remote, plan: { ...remote.plan, amount: "1.00" } }, check))
+})
 test("only a paid cycle grants a fixed period, without extending it on repeated reconciliation", () => {
   const charge = { cycle_number: 2, amount: "29.90", status: "paid", due_date: "2026-10-01", paid_at: "2026-10-01T10:05:00Z" }
   const now = Date.parse("2026-10-02T00:00:00Z")

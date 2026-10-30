@@ -17,6 +17,8 @@ A integração Sync Pay substitui a Asaas **para novas contratações**. Os cont
 
 A API atual informa as modalidades aceitas em `billing_methods`; `billing_method` indica o padrão do plano. A validação aceita o método escolhido quando ele consta na lista, inclusive se não for o padrão, e preserva compatibilidade com respostas anteriores. A conciliação confere a modalidade efetiva da assinatura, sem confundi-la com mudanças posteriores no padrão do plano. No cartão, o IP do comprador é obrigatório e vem do cabeçalho da Vercel, nunca do formulário ou do IP do servidor.
 
+O campo `phone` enviado à Sync Pay contém somente DDD e número, com 10 ou 11 dígitos. Na preparação da adesão, o servidor remove a formatação e os prefixos internacionais brasileiros `55`, `+55` ou `0055` quando presentes; um número nacional com DDD `55` é preservado. Telefones preenchidos em formato inválido são rejeitados antes de criar a tentativa de adesão, tanto no cartão quanto no Pix. O telefone permanece obrigatório no cartão e opcional no Pix; o cadastro original do perfil não é alterado.
+
 O arquivo público de associação do domínio Apple Pay fornecido pela Sync Pay está em `public/.well-known/apple-developer-merchantid-domain-association`, servido em `https://www.cortexar.space/.well-known/apple-developer-merchantid-domain-association`. Seu conteúdo hexadecimal deve ser preservado exatamente como recebido, sem convertê-lo em JSON nem substituí-lo pela chave de API. A publicação prepara a verificação do domínio pelo provedor; ela não adiciona Apple Pay à adesão recorrente, que continua usando cartão tokenizado ou Pix Automático.
 
 ### Validação operacional ainda necessária

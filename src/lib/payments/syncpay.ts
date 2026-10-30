@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { amountInCents } from "./money"
 import { billingAvailability } from "./settings"
 import { syncPayRequest, SyncPayApiError } from "./syncpay-api"
-import { syncPayUuid, syncPayIdentity, validateSyncPayPlan, validateSyncPaySubscription, syncPayChargeSettlement,
+import { syncPayUuid, syncPayIdentity, syncPayPhone, validateSyncPayPlan, validateSyncPaySubscription, syncPayChargeSettlement,
   type SyncPayMethod, type SyncPayPlan, type SyncPaySubscription } from "./syncpay-rules"
 import type { Agreement } from "./service"
 
@@ -60,8 +60,7 @@ export async function startSyncPayAgreement(orgId: string, userId: string, planI
   }
   if (subscription.status === "active" && subscription.current_period_end && Date.parse(subscription.current_period_end) > Date.now()) throw new Error("O período atual já está pago. Aguarde o vencimento antes de contratar novamente.")
   const document = (profile?.cpf_cnpj || "").replace(/\D/g, "")
-  let phone = (profile?.phone || "").replace(/\D/g, "")
-  if (phone.startsWith("55") && phone.length > 11) phone = phone.slice(2)
+  const phone = syncPayPhone(profile?.phone)
   if (!profile?.name || !profile.email || ![11, 14].includes(document.length) || (method === "credit_card" && ![10, 11].includes(phone.length))) throw new Error("Preencha nome, e-mail, CPF/CNPJ e telefone com DDD no perfil")
   if (method === "credit_card" && (!cardToken || !/^card_token\.[A-Za-z0-9_\-\.]+$/.test(cardToken))) throw new Error("Preencha o cartão no formulário seguro da Sync Pay")
   if (method === "credit_card" && (!customerIp || !isIP(customerIp))) throw new Error("Não foi possível identificar a conexão para a análise segura do cartão. Atualize a página e tente novamente.")

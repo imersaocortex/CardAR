@@ -18,6 +18,18 @@ export function syncPayWebhookSecrets(single: string | undefined, list: string |
 export function syncPayIdentity(email: string, document: string) {
   return createHash("sha256").update(`${email.trim().toLowerCase()}|${document.replace(/\D/g, "")}`).digest("hex")
 }
+export function syncPayPhone(value?: string | null) {
+  if (!value?.trim()) return ""
+  let phone = value.replace(/\D/g, "")
+  const invalid = "Informe um telefone brasileiro com DDD e número no perfil."
+  // Strip a country prefix only at international lengths; a national number
+  // whose DDD is 55 must keep those first two digits.
+  if (phone.startsWith("0055") && [14, 15].includes(phone.length)) phone = phone.slice(4)
+  else if (phone.startsWith("55") && [12, 13].includes(phone.length)) phone = phone.slice(2)
+  else if (value.trim().startsWith("+") || phone.startsWith("00")) throw new Error(invalid)
+  if (!/^[1-9]\d{9,10}$/.test(phone)) throw new Error(invalid)
+  return phone
+}
 function cents(value: string | number) {
   const number = Number(value)
   if (!Number.isFinite(number) || number <= 0 || !Number.isSafeInteger(Math.round(number * 100)) || Math.abs(number * 100 - Math.round(number * 100)) > 0.00001) throw new Error("Valor Sync Pay inválido")

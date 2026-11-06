@@ -56,6 +56,7 @@ export const sceneObjectSchema = z.object({
   layer_order: z.number().default(0),
   animation_type: z.string().nullable().optional(),
   action: z.string().nullable().optional(),
+  click_effect: z.enum(["none", "particles"]).optional(),
   asset_url: z.string().nullable().optional(),
   asset_thumbnail: z.string().nullable().optional(),
   show_caption: z.boolean().nullable().optional(),

@@ -8,6 +8,8 @@ import { buildSpatialScene } from "@/lib/ar/spatial-scene"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { ArActions } from "./ar-actions"
 import { SpatialActions } from "./spatial-actions"
+import { attachSceneClicks } from "@/lib/ar/scene-interactions"
+import { createClickParticles } from "@/lib/ar/click-particles"
 
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<string> }
 
@@ -39,6 +41,7 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
     let stream: MediaStream | undefined
     let renderer: THREE.WebGLRenderer | undefined
     let content: Awaited<ReturnType<typeof buildSpatialScene>> | undefined
+    let effects: ReturnType<typeof createClickParticles> | undefined
     const listeners: (() => void)[] = []
     stop.current = () => {
       if (ended) return
@@ -48,6 +51,7 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       if (video.current) video.current.srcObject = null
       if (stereoVideo.current) stereoVideo.current.srcObject = null
       renderer?.setAnimationLoop(null)
+      effects?.dispose()
       content?.dispose()
       renderer?.dispose()
       renderer?.domElement.remove()
@@ -67,8 +71,9 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       stereoVideo.current!.srcObject = stream
       await video.current.play()
       void stereoVideo.current!.play().catch(() => {})
-      content = await buildSpatialScene(experience.scene?.objects ?? [])
-      if (ended || !alive.current) return
+      const loaded = await buildSpatialScene(experience.scene?.objects ?? [], { projectId: experience.id })
+      if (ended || !alive.current) { loaded.dispose(); return }
+      content = loaded
       media.current = content
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -78,6 +83,8 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       camera.position.set(0, 1.5, 0)
       const scene = new THREE.Scene()
       scene.add(content.root, new THREE.HemisphereLight(0xffffff, 0x667788, 3))
+      effects = createClickParticles(scene)
+      listeners.push(attachSceneClicks(renderer.domElement, [content.root], camera, effects, { enabled: () => !cardboard, onInteraction }))
       content.root.visible = false
       const resize = () => { renderer!.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix() }
       resize(); window.addEventListener("resize", resize); listeners.push(() => window.removeEventListener("resize", resize))
@@ -108,7 +115,9 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
       const clock = new THREE.Clock()
       renderer.setAnimationLoop(() => {
         if (ended || !renderer || !content) return
-        content.update(clock.getDelta(), clock.elapsedTime, camera.position)
+        const delta = clock.getDelta()
+        content.update(delta, clock.elapsedTime, camera.position)
+        effects?.update(delta)
         if (cardboard) stereoEffect.render(scene, camera)
         else { renderer.setViewport(0, 0, innerWidth, innerHeight); renderer.render(scene, camera) }
       })

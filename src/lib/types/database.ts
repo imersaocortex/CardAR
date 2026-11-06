@@ -411,6 +411,7 @@ export interface Database {
           layer_order: number
           animation_type: string | null
           action: string | null
+          click_effect: "none" | "particles"
           asset_url: string | null
           asset_thumbnail: string | null
           show_caption: boolean | null
@@ -441,6 +442,7 @@ export interface Database {
           layer_order?: number
           animation_type?: string | null
           action?: string | null
+          click_effect?: "none" | "particles"
           asset_url?: string | null
           asset_thumbnail?: string | null
           show_caption?: boolean | null
@@ -471,6 +473,7 @@ export interface Database {
           layer_order?: number
           animation_type?: string | null
           action?: string | null
+          click_effect?: "none" | "particles"
           asset_url?: string | null
           asset_thumbnail?: string | null
           show_caption?: boolean | null

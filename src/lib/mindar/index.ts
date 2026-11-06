@@ -13,6 +13,7 @@ export interface ArSceneObject {
   visible: boolean
   animationType: string | null
   action: string | null
+  clickEffect?: "none" | "particles"
   assetUrl: string | null
   assetThumbnail: string | null
   showCaption: boolean | null

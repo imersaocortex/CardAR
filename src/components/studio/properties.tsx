@@ -437,6 +437,16 @@ export function StudioProperties() {
             />
           </div>
         )}
+        {(isImage || isVideo || is3D || isButton) && (
+          <div className="space-y-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+            <Label htmlFor="click-effect" className="text-xs font-medium">Efeito ao tocar no objeto</Label>
+            <Select value={selectedElement.clickEffect ?? "none"} onValueChange={(value) => updateElement(selectedElement.id, { clickEffect: value as "none" | "particles" })}>
+              <SelectTrigger id="click-effect" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="none">Sem efeito</SelectItem><SelectItem value="particles">Explosão de partículas</SelectItem></SelectContent>
+            </Select>
+            <p className="text-[11px] leading-snug text-muted-foreground">O toque exibe partículas e também abre a URL, se configurada. O objeto permanece na cena. Respeita a preferência de reduzir animações do visitante.</p>
+          </div>
+        )}
       </div>
     </div>
   )

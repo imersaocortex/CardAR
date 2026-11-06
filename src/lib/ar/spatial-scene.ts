@@ -5,6 +5,7 @@ import { yawTowardViewer } from "@/lib/ar/billboard"
 import { enableSpatialAudio, muteSpatialAudio, playSpatialVideoMuted } from "@/lib/ar/spatial-media"
 import { BUTTON_CAPTION_SIZE, BUTTON_CAPTION_Y, BUTTON_PLANE_SIZE, imagePlaneSize, VIDEO_PLANE_SIZE } from "@/lib/ar/object-geometry"
 import { attachHlsSource } from "@/lib/ar/hls-video"
+import { registerSceneInteraction } from "./scene-interactions"
 
 const buttonStyles: Record<string, { color: string; label: string; icon?: string }> = {
   "botao-whatsapp": { color: "#25D366", label: "WhatsApp", icon: "/whatsapp-icon.svg" },
@@ -71,7 +72,7 @@ export function disposeSpatialGroup(group: THREE.Object3D) {
   textures.forEach((texture) => texture.dispose())
 }
 
-export async function buildSpatialScene(objects: ArSceneObject[], options: { autoplayHls?: boolean } = {}) {
+export async function buildSpatialScene(objects: ArSceneObject[], options: { autoplayHls?: boolean; projectId?: string } = {}) {
   const root = new THREE.Group()
   const media: HTMLMediaElement[] = []
   const streamCleanups: (() => void)[] = []
@@ -90,6 +91,7 @@ export async function buildSpatialScene(objects: ArSceneObject[], options: { aut
     for (const object of objects.filter((item) => item.visible)) {
       const group = new THREE.Group()
       root.add(group)
+      registerSceneInteraction(group, object, options.projectId)
       group.position.fromArray(object.position)
       group.rotation.set(...object.rotation)
       group.scale.fromArray(object.scale)

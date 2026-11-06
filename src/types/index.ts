@@ -39,6 +39,7 @@ export interface StudioElement {
   duration: number
   visible: boolean
   action?: string
+  clickEffect?: "none" | "particles"
   assetUrl?: string
   assetThumbnail?: string
   showCaption?: boolean

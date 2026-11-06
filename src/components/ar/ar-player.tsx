@@ -2,6 +2,8 @@
 
 import { useRef, useEffect, useState, useCallback } from "react"
 import * as THREE from "three"
+import { attachSceneClicks, registerSceneInteraction } from "@/lib/ar/scene-interactions"
+import { createClickParticles } from "@/lib/ar/click-particles"
 import { StereoEffect } from "three/addons/effects/StereoEffect.js"
 import type { ArExperienceData, ArState } from "@/lib/mindar"
 import { getMarkerDimensions } from "@/lib/mindar"
@@ -95,61 +97,6 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
     }
   }, [])
 
-  const handleAction = useCallback((action: string) => {
-    let actionType = ""
-    let actionValue = ""
-
-    if (action.startsWith("http")) {
-      actionType = "url"
-      actionValue = action
-    } else if (action.includes(":")) {
-      const colonIndex = action.indexOf(":")
-      actionType = action.substring(0, colonIndex)
-      actionValue = action.substring(colonIndex + 1)
-    } else if (action.startsWith("tel:")) {
-      actionType = "phone"
-      actionValue = action.replace("tel:", "")
-    } else if (action.startsWith("mailto:")) {
-      actionType = "email"
-      actionValue = action.replace("mailto:", "")
-    } else {
-      actionType = "url"
-      actionValue = action
-    }
-
-    onInteraction?.("button_click", { action_type: actionType, action_value: actionValue })
-
-    const openUrl = (url: string) => {
-      const win = window.open(url, "_blank", "noopener,noreferrer")
-      if (!win) window.location.href = url
-    }
-
-    switch (actionType) {
-      case "url":
-      case "link":
-        openUrl(actionValue)
-        break
-      case "whatsapp": {
-        const phone = actionValue.replace(/\D/g, "")
-        openUrl(`https://wa.me/${phone}`)
-        break
-      }
-      case "instagram": {
-        const insta = actionValue.replace("@", "")
-        openUrl(`https://instagram.com/${insta}`)
-        break
-      }
-      case "phone":
-        window.location.href = `tel:${actionValue}`
-        break
-      case "email":
-        window.location.href = `mailto:${actionValue}`
-        break
-      default:
-        openUrl(actionValue)
-    }
-  }, [onInteraction])
-
   const buildSceneObjects = useCallback(async (anchorGroup: THREE.Group, imageWidth: number, imageHeight: number, project: ArExperienceData) => {
     if (!project.scene?.objects) return
 
@@ -170,6 +117,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       if (!obj.visible) continue
 
       const group = new THREE.Group()
+      registerSceneInteraction(group, obj, project.id)
       group.position.set(
         obj.position[0] * fx + cx,
         obj.position[1] * fy + cy,
@@ -858,50 +806,13 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       resizeObserver.observe(container)
       cleanups.push(() => resizeObserver.disconnect())
 
-      const processHit = (clientX: number, clientY: number) => {
-        const vpW = renderer.domElement.clientWidth
-        const vpH = renderer.domElement.clientHeight
-
-        anchorGroups.filter((group) => group.visible).forEach((group) => group.traverse((child: any) => {
-          if (!child.isMesh || !child.userData.clickable) return
-          child.updateWorldMatrix(true, false)
-          const worldPos = new THREE.Vector3()
-          child.getWorldPosition(worldPos)
-          worldPos.project(cam)
-
-          const sx = (worldPos.x * 0.5 + 0.5) * vpW
-          const sy = (-worldPos.y * 0.5 + 0.5) * vpH
-          const dx = clientX - sx
-          const dy = clientY - sy
-          const dist = Math.sqrt(dx * dx + dy * dy)
-
-          if (dist < 50) {
-            const action = child.userData.action as string
-            if (action) handleAction(action)
-          }
-        }))
-      }
-
-      let lastClickTime = 0
-
-      const handleClickEvent = (event: MouseEvent) => {
-        if (cardboardRef.current) return
-        const now = Date.now()
-        if (now - lastClickTime < 200) return
-        lastClickTime = now
-        try {
-          processHit(event.clientX, event.clientY)
-        } catch (e) {
-          console.error("[AR] click error:", e)
-        }
-      }
-
-      renderer.domElement.addEventListener("click", handleClickEvent)
-      window.addEventListener("click", handleClickEvent)
-      cleanups.push(() => {
-        renderer.domElement.removeEventListener("click", handleClickEvent)
-        window.removeEventListener("click", handleClickEvent)
-      })
+      const effects = createClickParticles(scene)
+      cleanups.push(() => effects.dispose())
+      cleanups.push(attachSceneClicks(renderer.domElement, anchorGroups, cam, effects, {
+        enabled: () => !cardboardRef.current,
+        onInteraction,
+      }))
+      let previousEffectsAt = performance.now()
 
       let previousFrameWasCardboard = cardboardRef.current
       let stereoCanvasHasContent = false
@@ -944,6 +855,9 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
           }))
         }
 
+        const effectsAt = performance.now()
+        effects.update(Math.min((effectsAt - previousEffectsAt) / 1000, 0.1))
+        previousEffectsAt = effectsAt
         if (stereo) {
           stereoEffect.render(scene, cam)
           stereoCanvasHasContent = true
@@ -1015,7 +929,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       }
       updateState("error")
     }
-  }, [experience, experiences, checkWebGL, updateState, handleAction, buildSceneObjects])
+  }, [experience, experiences, checkWebGL, updateState, buildSceneObjects, onInteraction])
 
   useEffect(() => {
     if (!experiences?.length && !experience.marker?.targetUrl) {

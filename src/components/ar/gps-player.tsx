@@ -237,7 +237,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
         }
         if (now - lastHeadingAt > 250) lastHeadingAt = now
         const pendingNearby = inRange.some((nearby, index) => nearby && !contents[index] && !failedByIndex[index])
-        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : visibleIndices.length === 0 ? pendingNearby ? "Carregando as mídias dos pontos próximos…" : inRange.some(Boolean) ? "Mídia do ponto indisponível · veja o radar" : `Aproxime-se até ${nearestRadius} m do ponto` : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Próximo ao ponto" : "Siga a direção do objeto"
+        const message = !compassOk ? "Aguardando bússola · mova o celular" : !positionOk ? "Buscando GPS…" : visibleIndices.length === 0 ? pendingNearby ? "Carregando as mídias dos pontos próximos…" : inRange.some(Boolean) ? "Mídia do ponto indisponível" : `Aproxime-se até ${nearestRadius} m do ponto` : compassAccuracy !== null && compassAccuracy > 50 ? "Bússola imprecisa · afaste-se de metal" : atTarget ? "Próximo ao ponto" : "Siga a direção do objeto"
         if (message !== lastStatus) { lastStatus = message; setStatus(message) }
         if ((visibleIndices.length > 0) !== wasVisible) {
           wasVisible = visibleIndices.length > 0

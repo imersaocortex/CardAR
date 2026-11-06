@@ -61,6 +61,15 @@ test("picking uses the whole transformed image rather than an arbitrary radius a
   assert.equal(pickSceneInteractionAt([image], camera, bounds, 5, 420), null)
 })
 
+test("a visible image without an action blocks links belonging to objects behind it", () => {
+  const camera = new THREE.PerspectiveCamera(60, 0.5, 0.1, 100)
+  const front = target("front", 2), behind = target("behind", 5)
+  delete front.userData.sceneInteraction
+  assert.equal(pickSceneInteractionAt([front, behind], camera, bounds, 210, 420), null)
+  front.visible = false
+  assert.equal(pickSceneInteractionAt([front, behind], camera, bounds, 210, 420).interaction.objectId, "behind")
+})
+
 test("one canvas click fires one action, excludes controls/VR and cleans up listeners", () => {
   const canvas = new EventTarget()
   canvas.getBoundingClientRect = () => bounds

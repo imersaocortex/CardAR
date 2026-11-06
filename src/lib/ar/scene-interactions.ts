@@ -23,7 +23,10 @@ export function pickSceneInteraction(roots: THREE.Object3D[], raycaster: THREE.R
       if (!parent.visible) visible = false
       if (!group && parent.userData.sceneInteraction) group = parent
     }
-    if (visible && group) return { interaction: group.userData.sceneInteraction as SceneInteraction, group, point: hit.point }
+    if (!visible) continue
+    // A visible object without an action still occludes objects behind it.
+    // Never activate another project's URL through the front of that object.
+    return group ? { interaction: group.userData.sceneInteraction as SceneInteraction, group, point: hit.point } : null
   }
   return null
 }

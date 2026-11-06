@@ -7,6 +7,8 @@ import { buildSpatialScene, disposeSpatialGroup } from "@/lib/ar/spatial-scene"
 import { Button } from "@/components/ui/button"
 import { SpatialActions } from "./spatial-actions"
 import { SurfaceFallbackPlayer } from "./surface-fallback-player"
+import { activateSceneInteraction, pickSceneInteraction } from "@/lib/ar/scene-interactions"
+import { createClickParticles } from "@/lib/ar/click-particles"
 
 interface Props {
   experience: ArExperienceData
@@ -54,6 +56,8 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
     let content: Awaited<ReturnType<typeof buildSpatialScene>> | undefined
     let hitSource: XRHitTestSource | undefined
     let worldAnchor: XRAnchor | undefined
+    let effects: ReturnType<typeof createClickParticles> | undefined
+    const listeners: (() => void)[] = []
     const reticle = new THREE.Mesh(new THREE.RingGeometry(0.09, 0.12, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x22d3ee }))
     reticle.matrixAutoUpdate = false
     reticle.visible = false
@@ -64,6 +68,8 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       hitSource?.cancel()
       worldAnchor?.delete()
       renderer?.setAnimationLoop(null)
+      listeners.forEach((remove) => remove())
+      effects?.dispose()
       content?.dispose()
       mediaControl.current = null
       disposeSpatialGroup(reticle)
@@ -93,7 +99,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       if (ended) return
       hitSource = await session.requestHitTestSource!({ space }) ?? undefined
       if (ended) { hitSource?.cancel(); return }
-      const loaded = await buildSpatialScene(experience.scene?.objects ?? [])
+      const loaded = await buildSpatialScene(experience.scene?.objects ?? [], { projectId: experience.id })
       if (ended || !alive.current) { loaded.dispose(); return }
       content = loaded
       mediaControl.current = loaded
@@ -101,12 +107,31 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 3), reticle, content.root)
       content.root.visible = false
       const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100)
+      effects = createClickParticles(scene)
+      const reportInteraction = (event: string, metadata?: Record<string, unknown>) => callbacks.current.onInteraction?.(event, metadata)
       let placed = false
       let placementRequested = false
       place.current = () => {
         if (reticle.visible && !placed) placementRequested = true
       }
-      session.addEventListener("select", () => { if (!placed) place.current?.() })
+      const select = (event: XRInputSourceEvent) => {
+        if (!placed) { place.current?.(); return }
+        const reference = renderer?.xr.getReferenceSpace()
+        const pose = reference && event.frame.getPose(event.inputSource.targetRaySpace, reference)
+        if (!pose || !content || !effects) return
+        const ray = new THREE.Raycaster()
+        const matrix = new THREE.Matrix4().fromArray(pose.transform.matrix)
+        ray.ray.origin.setFromMatrixPosition(matrix)
+        ray.ray.direction.set(0, 0, -1).transformDirection(matrix)
+        const hit = pickSceneInteraction([content.root], ray)
+        if (hit) activateSceneInteraction(hit, effects, reportInteraction)
+      }
+      session.addEventListener("select", select)
+      // A tap on the DOM controls must not also select an XR object behind it.
+      const beforeSelect = (event: Event) => { if ((event.target as Element)?.closest("button,a,input,select")) event.preventDefault() }
+      overlay.current!.addEventListener("beforexrselect", beforeSelect)
+      const currentOverlay = overlay.current!
+      listeners.push(() => { session?.removeEventListener("select", select); currentOverlay.removeEventListener("beforexrselect", beforeSelect) })
       const clock = new THREE.Clock()
       const viewerPosition = new THREE.Vector3()
       let previousReady = false
@@ -148,6 +173,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
           viewerPosition.set(x, y, z)
         }
         content.update(delta, clock.elapsedTime, viewerPose ? viewerPosition : undefined)
+        effects?.update(delta)
         renderer.render(scene, camera)
       })
       const reposition = () => { worldAnchor?.delete(); worldAnchor = undefined; placed = false; placementRequested = false; setPlaced(false); content!.root.visible = false; setMessage("Mova a câmera lentamente até encontrar o chão ou uma mesa.") }

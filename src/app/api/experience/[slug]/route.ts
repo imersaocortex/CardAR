@@ -106,6 +106,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
                 visible: obj.visible,
                 animationType: obj.animation_type || null,
                 action: obj.action || null,
+                clickEffect: obj.click_effect === "particles" ? "particles" : "none",
                 assetUrl: obj.asset_url || null,
                 assetThumbnail: obj.asset_thumbnail || null,
                 showCaption: obj.show_caption || null,

@@ -17,6 +17,7 @@ const { geoOffset, gpsDisplayPosition, bearingDifference, isGpsWithinRadius } = 
 const { yawTowardViewer } = load("src/lib/ar/billboard.ts")
 const { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio } = load("src/lib/ar/spatial-media.ts")
 const { getActionUrl } = load("src/lib/ar/actions.ts")
+const sceneInteractions = load("src/lib/ar/scene-interactions.ts", { "./actions": { getActionUrl } })
 const { selectPrimaryScene } = load("src/lib/scenes.ts")
 const { createProjectSchema } = load("src/lib/schemas/index.ts")
 const objectGeometry = load("src/lib/ar/object-geometry.ts")
@@ -147,6 +148,7 @@ test("GPS and surface render saved object scale with the studio's video and imag
     "@/lib/ar/spatial-media": { playSpatialVideoMuted, enableSpatialAudio, muteSpatialAudio },
     "@/lib/ar/object-geometry": objectGeometry,
     "@/lib/ar/hls-video": { attachHlsSource: async (video, url) => { attachedHlsUrl = url; hlsAutoplay = video.autoplay; return () => {} } },
+    "./scene-interactions": sceneInteractions,
   })
   const originalDocument = globalThis.document
   const originalLoadAsync = THREE.TextureLoader.prototype.loadAsync
@@ -226,7 +228,7 @@ test("AR actions reject executable URLs and preserve supported contact actions",
   assert.equal(getActionUrl("tel:+55 (11) 2222-3333"), "tel:+551122223333")
 })
 
-const element = { id: "2fd30d57-8249-4436-88ae-bba0f3982473", type: "imagem", name: "Teste", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], opacity: 1, visible: true, faceCamera: true, duration: 0, chromaKeyTolerance: 0, chromaKeySmoothness: 0 }
+const element = { id: "2fd30d57-8249-4436-88ae-bba0f3982473", type: "imagem", name: "Teste", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], opacity: 1, visible: true, faceCamera: true, clickEffect: "particles", duration: 0, chromaKeyTolerance: 0, chromaKeySmoothness: 0 }
 function studio(rpc) {
   return load("src/store/index.ts", {
     "@/lib/supabase/client": { createClient: () => ({ rpc }) },
@@ -257,11 +259,13 @@ test("save retains IDs and zero-valued settings", async () => {
   assert.equal(saved.p_objects[0].chroma_key_tolerance, 0)
   assert.equal(saved.p_objects[0].duration, 0)
   assert.equal(saved.p_objects[0].face_camera, true)
+  assert.equal(saved.p_objects[0].click_effect, "particles")
   assert.equal(store.getState().sceneId, "scene")
   assert.equal(store.getState().isSaved, true)
-  store.getState().updateElement(element.id, { faceCamera: false })
+  store.getState().updateElement(element.id, { faceCamera: false, clickEffect: "none" })
   await store.getState().saveScene()
   assert.equal(saved.p_objects[0].face_camera, false)
+  assert.equal(saved.p_objects[0].click_effect, "none")
 })
 test("edits made during an in-flight save remain unsaved", async () => {
   let finish

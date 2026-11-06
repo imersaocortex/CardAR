@@ -6,6 +6,7 @@ type SceneObjectRow = {
   id: string; type: string; name: string; position_x: number; position_y: number; position_z: number
   rotation_x: number; rotation_y: number; rotation_z: number; scale_x: number; scale_y: number; scale_z: number
   opacity: number; visible: boolean; animation_type: string | null; action: string | null
+  click_effect?: "none" | "particles" | null
   asset_url: string | null; asset_thumbnail: string | null; show_caption: boolean | null
   face_camera: boolean | null; chroma_key_color: string | null; chroma_key_tolerance: number | null
   chroma_key_smoothness: number | null; duration: number | null; scene_buttons: SceneButtonRow[]
@@ -46,6 +47,7 @@ export function serializeExperience(project: ExperienceProjectRow): ArExperience
         visible: obj.visible,
         animationType: obj.animation_type || null,
         action: obj.action || null,
+        clickEffect: obj.click_effect === "particles" ? "particles" : "none",
         assetUrl: obj.asset_url || null,
         assetThumbnail: obj.asset_thumbnail || null,
         showCaption: obj.show_caption || null,

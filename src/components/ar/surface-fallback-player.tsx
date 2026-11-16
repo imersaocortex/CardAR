@@ -13,11 +13,12 @@ import { createClickParticles } from "@/lib/ar/click-particles"
 
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: () => Promise<string> }
 
-export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false }: {
+export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false, installControl }: {
   experience: ArExperienceData; siteName: string; hasWatermark: boolean
   onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
   cardboard?: boolean
+  installControl?: React.ReactNode
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -145,16 +146,20 @@ export function SurfaceFallbackPlayer({ experience, siteName, hasWatermark, onSt
     </div>}
     {cardboard && <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex text-center text-[10px] text-white/75 drop-shadow-md" role="status">{[0, 1].map((eye) => <span key={eye} className="w-1/2 px-2">{placed ? "Cena posicionada" : "Posicione a cena antes de colocar o celular nos óculos"}</span>)}</div>}
     {!active && <div className="absolute inset-0 z-10 flex items-center justify-center"><Button onClick={start}>Abrir câmera</Button></div>}
-    {active && (!cardboard || showControls) && <div className="absolute inset-x-4 bottom-24 z-20 flex flex-wrap items-center justify-center gap-2 rounded-xl bg-black/55 p-3 backdrop-blur-sm">
-      <label className="text-xs">Altura <select value={height} onChange={(event) => setHeight(event.target.value as "table" | "floor")} className="ml-1 rounded bg-slate-900 p-2"><option value="table">Mesa</option><option value="floor">Chão</option></select></label>
-      <Button size="sm" onClick={() => place.current(height === "floor" ? 0 : 0.8)}>{placed ? "Reposicionar" : "Posicionar"}</Button>
-      <Button size="sm" variant="outline" onClick={() => stop.current?.()}>Encerrar</Button>
-      {placed && <SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />}
-      {placed && hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}
-      {cardboard && placed && <Button size="sm" variant="outline" onClick={() => setShowControls(false)}>Ocultar controles</Button>}
+    {(!cardboard || showControls) && <div className="pointer-events-none absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex flex-col items-center gap-2">
+      {active && <div className="pointer-events-auto mx-4 flex flex-wrap items-center justify-center gap-2 rounded-xl bg-black/55 p-3 backdrop-blur-sm">
+        <label className="text-xs">Altura <select value={height} onChange={(event) => setHeight(event.target.value as "table" | "floor")} className="ml-1 rounded bg-slate-900 p-2"><option value="table">Mesa</option><option value="floor">Chão</option></select></label>
+        <Button size="sm" onClick={() => place.current(height === "floor" ? 0 : 0.8)}>{placed ? "Reposicionar" : "Posicionar"}</Button>
+        <Button size="sm" variant="outline" onClick={() => stop.current?.()}>Encerrar</Button>
+        {placed && <SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />}
+        {placed && hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}
+        {cardboard && placed && <Button size="sm" variant="outline" onClick={() => setShowControls(false)}>Ocultar controles</Button>}
+      </div>}
+      {!cardboard && hasWatermark && siteName && <span className="text-[10px] text-white/50">{siteName}</span>}
+      {active && <div className="pointer-events-auto"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>}
+      {!cardboard && installControl}
     </div>}
     {cardboard && active && placed && !showControls && <button type="button" onClick={() => setShowControls(true)} className="absolute bottom-5 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1 text-[10px] text-white/75">Mostrar controles</button>}
-    {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex text-[10px] text-white/50 ${cardboard ? "justify-around" : "justify-center"}`}>{(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye}>{siteName}</span>)}</div>}
-    {active && (!cardboard || showControls) && <div className="absolute bottom-5 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr /></div>}
+    {cardboard && hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex text-[10px] text-white/50 justify-around">{[0, 1].map((eye) => <span key={eye}>{siteName}</span>)}</div>}
   </div>
 }

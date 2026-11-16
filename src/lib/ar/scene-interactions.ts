@@ -1,6 +1,8 @@
 import * as THREE from "three"
 import { getActionUrl } from "./actions"
 
+export const PARTICLE_LINK_DELAY_MS = 2500
+
 export type SceneInteraction = { objectId: string; projectId?: string; action: string | null; effect: "none" | "particles" }
 export type SceneHit = { interaction: SceneInteraction; group: THREE.Object3D; point: THREE.Vector3 }
 
@@ -39,33 +41,55 @@ export function pickSceneInteractionAt(roots: THREE.Object3D[], camera: THREE.Ca
   return pickSceneInteraction(roots, ray)
 }
 
-export function activateSceneInteraction(hit: SceneHit, effects: { burst: (hit: SceneHit) => void }, onInteraction?: (event: string, metadata?: Record<string, unknown>) => void) {
-  if (hit.interaction.effect === "particles") effects.burst(hit)
-  // Keep navigation in the original click gesture: no timer or awaited animation
-  // that would cause mobile browsers to block the link as a popup.
-  const url = hit.interaction.action
-  if (url) {
-    if (/^https?:/i.test(url)) {
-      // Open an empty context and detach its opener before navigating. Passing
-      // noopener to window.open returns null even on success, so it cannot be
-      // used to distinguish a blocked popup and would cause double navigation.
-      const popup = window.open("", "_blank")
-      if (popup) { popup.opener = null; popup.location.replace(url) }
-      else window.location.href = url
-    } else window.location.href = url
+export function createSceneInteractionHandler(effects: { burst: (hit: SceneHit) => void }, onInteraction?: (event: string, metadata?: Record<string, unknown>) => void) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return {
+    activate(hit: SceneHit) {
+      if (timer !== undefined) return
+      const { action: url, effect, objectId, projectId } = hit.interaction
+      if (effect === "particles") effects.burst(hit)
+      onInteraction?.("button_click", {
+        object_id: objectId, project_id: projectId, action_value: url, click_effect: effect,
+      })
+      if (!url) return
+
+      if (effect === "particles") {
+        // Stay in the current tab so the effect is visible and the delayed
+        // navigation does not depend on the browser allowing a popup.
+        timer = setTimeout(() => {
+          timer = undefined
+          window.location.href = url
+        }, PARTICLE_LINK_DELAY_MS)
+        return
+      }
+
+      if (/^https?:/i.test(url)) {
+        const popup = window.open("", "_blank")
+        if (popup) {
+          popup.opener = null
+          popup.location.replace(url)
+          return
+        }
+      }
+      window.location.href = url
+    },
+    cancel() {
+      clearTimeout(timer)
+      timer = undefined
+    },
   }
-  onInteraction?.("button_click", {
-    object_id: hit.interaction.objectId, project_id: hit.interaction.projectId,
-    action_value: url, click_effect: hit.interaction.effect,
-  })
 }
 
 export function attachSceneClicks(canvas: HTMLCanvasElement, roots: THREE.Object3D[], camera: THREE.Camera, effects: { burst: (hit: SceneHit) => void }, options: { enabled?: () => boolean; onInteraction?: (event: string, metadata?: Record<string, unknown>) => void } = {}) {
+  const handler = createSceneInteractionHandler(effects, options.onInteraction)
   const click = (event: MouseEvent) => {
     if (options.enabled && !options.enabled()) return
     const hit = pickSceneInteractionAt(roots, camera, canvas.getBoundingClientRect(), event.clientX, event.clientY)
-    if (hit) activateSceneInteraction(hit, effects, options.onInteraction)
+    if (hit) handler.activate(hit)
   }
   canvas.addEventListener("click", click)
-  return () => canvas.removeEventListener("click", click)
+  return () => {
+    handler.cancel()
+    canvas.removeEventListener("click", click)
+  }
 }

@@ -21,13 +21,14 @@ interface ArPlayerProps {
   onInteraction?: (eventType: string, metadata?: Record<string, any>) => void
   cardboard?: boolean
   vrControl?: React.ReactNode
+  installControl?: React.ReactNode
 }
 
 function renderPixelRatio(cardboard: boolean): number {
   return Math.min(window.devicePixelRatio || 1, cardboard ? 1.5 : 2)
 }
 
-export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction, cardboard = false, vrControl }: ArPlayerProps) {
+export function ArPlayer({ experience, experiences, hasWatermark = true, siteName = "", onStateChange, onInteraction, cardboard = false, vrControl, installControl }: ArPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stereoVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -1053,8 +1054,8 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
     <div className="fixed inset-0 overflow-hidden">
       <div ref={containerRef} className="fixed inset-0" />
 
-      {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-30 flex ${cardboard ? "justify-around" : "justify-center"}`}>
-        {(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye} className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] font-medium text-white/50 backdrop-blur-sm">{siteName}</span>)}
+      {cardboard && hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-30 flex justify-around">
+        {[0, 1].map((eye) => <span key={eye} className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] font-medium text-white/50 backdrop-blur-sm">{siteName}</span>)}
       </div>}
 
       {needsVideoInteraction && arState === "detected" && (
@@ -1106,14 +1107,18 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         </>
       )}
 
-      {!cardboard && arState !== "loading" && arState !== "error" && (
-        <div className="absolute bottom-6 left-0 right-0 z-20">
-          <ArActions
-            videoRef={videoRef}
-            containerRef={containerRef}
-            onSwitchCamera={handleSwitchCamera}
-            vrControl={vrControl}
-          />
+      {!cardboard && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex flex-col items-center gap-2">
+          {hasWatermark && siteName && <span className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[10px] font-medium text-white/50 backdrop-blur-sm">{siteName}</span>}
+          {arState !== "loading" && arState !== "error" && <div className="pointer-events-auto">
+            <ArActions
+              videoRef={videoRef}
+              containerRef={containerRef}
+              onSwitchCamera={handleSwitchCamera}
+              vrControl={vrControl}
+            />
+          </div>}
+          {installControl}
         </div>
       )}
 

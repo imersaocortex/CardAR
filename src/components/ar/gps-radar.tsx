@@ -12,7 +12,7 @@ export function GpsRadar({ points, heading, fresh, failedIds = [] }: { points: G
   // filled luminous dots identify those already inside their activation radius.
   const range = Math.max(50, ...points.filter((point) => point.inRange).map((point) => point.radius))
   const valid = fresh && heading !== null
-  return <aside className="absolute bottom-44 right-3 z-20 w-28 text-white sm:w-32" aria-label="Radar dos projetos GPS">
+  return <aside className="pointer-events-auto absolute right-0 top-full z-20 mt-2 w-28 text-white sm:w-32" aria-label="Radar dos projetos GPS">
     <button type="button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded} aria-label={`${expanded ? "Recolher" : "Ver"} pontos do radar: ${nearby} de ${points.length} no raio`} className="w-full rounded-2xl border border-cyan-200/25 bg-slate-950/75 p-2 shadow-xl backdrop-blur-md">
       <span className="flex items-center justify-between text-[9px] font-medium tracking-wide text-cyan-100"><span className="flex items-center gap-1"><Radar className="h-3 w-3" /> RADAR</span><span>{valid ? `${nearby}/${points.length}` : "…"}</span></span>
       <svg viewBox="0 0 100 100" className="mt-1 w-full" role="img" aria-label={valid ? `${nearby} projetos no raio. Frente do celular no topo.` : "Aguardando posição e bússola"}>
@@ -34,7 +34,7 @@ export function GpsRadar({ points, heading, fresh, failedIds = [] }: { points: G
       </svg>
       <span className="block text-[9px] text-cyan-100/75">{valid ? `Frente ↑ · ${range} m` : "Buscando sensores…"}</span>
     </button>
-    {expanded && <div className="absolute bottom-full right-0 mb-2 max-h-52 w-[min(18rem,calc(100vw-2rem))] overflow-auto rounded-xl border border-white/15 bg-slate-950/95 p-3 text-[11px] shadow-xl">
+    {expanded && <div className="absolute right-0 top-full mt-2 max-h-52 w-[min(18rem,calc(100vw-2rem))] overflow-auto rounded-xl border border-white/15 bg-slate-950/95 p-3 text-[11px] shadow-xl">
       <p className="mb-2 font-medium">Projetos próximos</p>
       {!fresh && <p className="mb-2 text-amber-200">Atualizando a localização…</p>}
       <ul className="space-y-2">{sorted.map((point) => <li key={point.id} className="flex justify-between gap-2"><span className="min-w-0 truncate">{point.name}{failedIds.includes(point.id) && <span className="block text-amber-200">Mídia indisponível</span>}</span><span className={point.inRange ? "shrink-0 text-cyan-200" : "shrink-0 text-white/55"}>{Math.round(point.distance)} m</span></li>)}</ul>

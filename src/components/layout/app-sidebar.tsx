@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   FolderKanban,
@@ -16,6 +15,7 @@ import {
   Link2,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth-store"
+import styles from "./app-sidebar.module.css"
 
 interface Branding {
   site_name?: string
@@ -70,38 +70,35 @@ export function AppSidebar() {
       : []),
   ]
 
+  const activeRoute = routes.findIndex(({ href }) => pathname === href || pathname.startsWith(`${href}/`))
+
   return (
-    <aside className="fixed left-0 top-0 z-50 h-screen w-64 border-r border-border/40 bg-background hidden lg:flex flex-col">
-      <div className="flex items-center gap-2 h-16 px-6 border-b border-border/40">
+    <aside className={`${styles.panel} fixed inset-y-3 left-3 z-50 hidden w-[calc(16rem-1.5rem)] flex-col lg:flex`}>
+      <div className={`${styles.brand} flex h-16 shrink-0 items-center gap-3 px-4`}>
         {logoUrl ? (
-          <img src={logoUrl} alt={siteName} className="h-8 w-auto" />
+          <img src={logoUrl} alt={siteName} className="h-9 w-auto max-w-full object-contain" />
         ) : (
           <>
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary">
-              <Zap className="h-4 w-4 text-white" />
+            <div className={`${styles.emblem} grid size-9 shrink-0 place-items-center rounded-xl`}>
+              <Zap className="size-4" aria-hidden="true" />
             </div>
-            <span className="font-bold">{siteName}</span>
+            <span className="truncate text-sm font-semibold tracking-wide">{siteName}</span>
           </>
         )}
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav aria-label="Menu principal" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
         {routes.map((route, i) => {
           const Icon = route.icon
-          const isActive = pathname === route.href
 
           return (
             <Link
               key={`${route.href}-${i}`}
               href={route.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-              )}
+              aria-current={activeRoute === i ? (pathname === route.href ? "page" : "location") : undefined}
+              className={`${styles.link} flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className={`${styles.icon} size-[1.125rem] shrink-0`} aria-hidden="true" />
               {route.label}
             </Link>
           )

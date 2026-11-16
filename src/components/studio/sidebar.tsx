@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import {
-  Box, Video, Camera, Search, Plus, Cuboid, Square, Image, Music, Radio
+  Box, Video, Camera, Search, Plus, Cuboid, Square, Image, Music, Radio, Images
 } from "lucide-react"
 
 function WhatsAppIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
@@ -82,6 +82,7 @@ const elementLibrary: ElementLibraryItem[] = [
   { type: "video-hls", name: "Streaming HLS", icon: Radio, color: "#06b6d4", category: "midia" },
   { type: "video-chromakey", name: "Vídeo Chromakey", icon: Camera, color: "#22c55e", category: "midia" },
   { type: "imagem", name: "Imagem", icon: Image, color: "#f59e0b", category: "midia" },
+  { type: "slider", name: "Slider interativo", icon: Images, color: "#22d3ee", category: "midia" },
   { type: "audio", name: "Áudio", icon: Music, color: "#ec4899", category: "midia" },
   { type: "botao-whatsapp", name: "WhatsApp", icon: WhatsAppIcon, color: "#25D366", category: "botoes" },
   { type: "botao-site", name: "Site", icon: GlobeIcon, color: "#3b82f6", category: "botoes" },
@@ -110,6 +111,7 @@ export function StudioSidebar() {
   const [search, setSearch] = useState("")
   const [assets, setAssets] = useState<AssetItem[]>([])
   const { addElement, elements } = useStudioStore()
+  const slidersEnabled = useStudioStore((state) => state.sliderLibrary?.enabled === true)
 
   useEffect(() => {
     fetch("/api/assets")
@@ -121,7 +123,7 @@ export function StudioSidebar() {
   }, [])
 
   const filtered = elementLibrary.filter((item) =>
-    item.name.toLowerCase().includes(search.toLowerCase())
+    (item.type !== "slider" || slidersEnabled) && item.name.toLowerCase().includes(search.toLowerCase())
   )
 
   const botoes = filtered.filter((i) => i.category === "botoes")
@@ -141,9 +143,10 @@ export function StudioSidebar() {
       duration: 2,
       visible: true,
       assetUrl: isVideo && item.type !== "video-hls" ? defaultUrl : undefined,
-      faceCamera: isVideo || item.type === "imagem" || item.type.startsWith("botao-"),
+      faceCamera: isVideo || item.type === "imagem" || item.type === "slider" || item.type.startsWith("botao-"),
     }
     addElement(newEl)
+    if (item.type === "slider") useStudioStore.getState().selectElement(newEl.id)
     toast({ title: `${item.name} adicionado`, description: "Use o painel de propriedades para ajustar." })
   }
 

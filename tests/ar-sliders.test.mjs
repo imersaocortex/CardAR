@@ -1,0 +1,89 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
+import ts from "typescript"
+
+const require = createRequire(import.meta.url)
+const THREE = require("three")
+function load(path, mocks = {}) {
+  const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } })
+  const loaded = { exports: {} }
+  new Function("require", "module", "exports", outputText)((name) => name in mocks ? mocks[name] : require(name), loaded, loaded.exports)
+  return loaded.exports
+}
+const { parseSliderLink, resolveSliderContent } = load("src/lib/sliders/model.ts")
+const { serializeExperience, experienceSliderIds } = load("src/lib/ar/serialize-experience.ts", {
+  "@/lib/scenes": load("src/lib/scenes.ts"),
+})
+const { attachSceneClicks, registerSceneInteraction } = load("src/lib/ar/scene-interactions.ts", {
+  "./actions": load("src/lib/ar/actions.ts"),
+})
+const assetId = "cfe965f0-3af8-4b56-be17-c526a631c372"
+const content = { name: "Catálogo", width: 1080, height: 1920, fit: "contain", images: [{ id: assetId, url: "https://example.test/image.webp", name: "Produto" }] }
+
+test("slider URLs are local and published content resolves only available images from its asset map", () => {
+  const origin = "https://www.cortexar.space", slug = "z12abc123abc123abc123"
+  assert.equal(parseSliderLink(`${origin}/sliders/${slug}`, origin), slug)
+  assert.equal(parseSliderLink(`https://untrusted.test/sliders/${slug}`, origin), null)
+  assert.equal(parseSliderLink(`/anything/sliders/${slug}`, origin), null)
+  const { images, ...layout } = content
+  const draft = { ...layout, assetIds: [assetId, "e2a4b8bd-0cdc-4bbd-b909-ed0641b7bd01"] }
+  assert.deepEqual(resolveSliderContent(draft, new Map([[assetId, images[0]]])), content)
+  assert.equal(resolveSliderContent(draft, new Map()), null)
+  assert.equal(resolveSliderContent({ ...draft, width: 1e6 }, new Map([[assetId, images[0]]])), null)
+})
+
+test("suspended or unpublished sliders are omitted while existing scene objects still ship", () => {
+  const base = { id: "object", type: "imagem", asset_url: "/legacy.webp", visible: true }
+  const slider = { ...base, id: "widget", type: "slider", slider_id: "slider", asset_url: null }
+  const project = { id: "project", tracking_mode: "gps", scenes: [{ id: "scene", scene_objects: [base, slider] }] }
+  assert.deepEqual(experienceSliderIds([project]), ["slider"])
+  assert.deepEqual(serializeExperience(project).scene.objects.map(({ id }) => id), ["object"])
+  assert.equal(serializeExperience(project, new Map([["slider", null]])).scene.objects.length, 1)
+  const eligible = serializeExperience(project, new Map([["slider", content]]))
+  assert.equal(eligible.scene.objects[0].assetUrl, "/legacy.webp")
+  assert.deepEqual(eligible.scene.objects[1].slider, content)
+  assert.deepEqual(experienceSliderIds([{ ...project, tracking_mode: "surface" }]), [])
+  assert.equal(serializeExperience({ ...project, tracking_mode: "surface" }, new Map([["slider", content]])).scene.objects.length, 1)
+})
+
+test("projected taps and swipes reach only the visible slider touched", () => {
+  const canvas = new EventTarget()
+  canvas.style = { touchAction: "auto" }
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 400 })
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100)
+  const changes = []
+  function group(x, name) {
+    const root = new THREE.Group()
+    root.position.set(x, 0, -5)
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial())
+    plane.userData.sliderControl = (uv, direction) => changes.push([name, direction ?? null, Math.round(uv.y * 100)])
+    root.add(plane)
+    registerSceneInteraction(root, { id: name, type: "slider" }, name)
+    return root
+  }
+  const first = group(-1.2, "A"), second = group(1.2, "B")
+  const detach = attachSceneClicks(canvas, [first, second], camera, { burst: () => assert.fail("Unexpected click effect") }, { sliders: true })
+  const emit = (name, x) => canvas.dispatchEvent(Object.assign(new Event(name), { isPrimary: true, button: 0, pointerId: 1, clientX: x, clientY: 200 }))
+  try {
+    emit("click", 120)
+    emit("pointerdown", 315)
+    emit("pointerup", 260)
+    emit("click", 260)
+    assert.deepEqual(changes, [["A", null, 50], ["B", 1, 50]])
+    emit("pointerdown", 120)
+    emit("pointerup", 280)
+    assert.equal(changes.length, 2)
+    second.visible = false
+    emit("pointerdown", 280)
+    emit("click", 280)
+    assert.equal(changes.length, 2)
+  } finally {
+    detach()
+  }
+  assert.equal(canvas.style.touchAction, "auto")
+  emit("click", 120)
+  assert.equal(changes.length, 2)
+})

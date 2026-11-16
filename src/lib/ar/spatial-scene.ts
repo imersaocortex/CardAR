@@ -96,7 +96,14 @@ export async function buildSpatialScene(objects: ArSceneObject[], options: { aut
       group.rotation.set(...object.rotation)
       group.scale.fromArray(object.scale)
       animated.push({ group, object })
-      if (object.type.startsWith("modelo-3d") && object.assetUrl) {
+      if (object.type === "slider" && object.slider) {
+        const { createSliderMesh } = await import("./slider-mesh")
+        const slider = createSliderMesh(object.slider, object.opacity)
+        if (slider) {
+          group.add(slider.mesh)
+          streamCleanups.push(slider.dispose)
+        }
+      } else if (object.type.startsWith("modelo-3d") && object.assetUrl) {
         const gltf = await loader.loadAsync(object.assetUrl)
         group.add(gltf.scene)
         gltf.scene.traverse((child) => {

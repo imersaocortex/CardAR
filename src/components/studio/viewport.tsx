@@ -9,6 +9,7 @@ import * as THREE from "three"
 import { BUTTON_CAPTION_SIZE, BUTTON_CAPTION_Y, BUTTON_PLANE_SIZE, imagePlaneSize, VIDEO_PLANE_SIZE } from "@/lib/ar/object-geometry"
 import { attachHlsSource } from "@/lib/ar/hls-video"
 import { isPublicHlsUrl } from "@/lib/ar/hls-url"
+import { createSliderMesh } from "@/lib/ar/slider-mesh"
 
 const socialColors: Record<string, string> = {
   "botao-whatsapp": "#25D366",
@@ -437,6 +438,28 @@ function SocialButton({ element }: { element: StudioElement }) {
   )
 }
 
+function SliderPlane({ element }: { element: StudioElement }) {
+  const content = useStudioStore((state) => state.sliderLibrary?.choices.find((choice) => choice.id === element.sliderId)?.content)
+  const host = useRef<THREE.Group>(null)
+
+  useEffect(() => {
+    const group = host.current
+    if (!group || !content) return
+    const slider = createSliderMesh(content, element.opacity)
+    if (!slider) return
+    group.add(slider.mesh)
+    return slider.dispose
+  }, [content, element.opacity])
+
+  return <group ref={host}>
+    {!content && <mesh>
+      <planeGeometry args={[1.5, 0.85]} />
+      <meshBasicMaterial color="#164e63" side={THREE.DoubleSide} />
+      <Text position={[0, 0, 0.02]} fontSize={0.08}>Vincule um slider</Text>
+    </mesh>}
+  </group>
+}
+
 function ElementRenderer({ element }: { element: StudioElement }) {
   switch (element.type) {
     case "modelo-3d":
@@ -450,6 +473,8 @@ function ElementRenderer({ element }: { element: StudioElement }) {
       return <ChromaKeyPlane element={element} />
     case "imagem":
       return <ImagePlane element={element} />
+    case "slider":
+      return <SliderPlane element={element} />
     case "audio":
       return <AudioSpeaker element={element} />
     case "botao-whatsapp":

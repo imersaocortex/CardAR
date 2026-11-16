@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       animation_type: body.animation_type ?? null,
       action: body.action ?? null,
       asset_url: body.asset_url ?? null,
+      ...(body.type === "slider" ? { slider_id: body.slider_id ?? null } : {}),
       asset_thumbnail: body.asset_thumbnail ?? null,
       show_caption: body.show_caption ?? null,
       face_camera: body.face_camera ?? false,

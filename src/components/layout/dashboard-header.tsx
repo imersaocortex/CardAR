@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { LogOut, User, Settings, CreditCard, Link2 } from "lucide-react"
+import { LogOut, User, Settings, CreditCard, Link2, Images } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -60,6 +60,7 @@ export function DashboardHeader() {
                   <CreditCard className="h-4 w-4" />
                   Faturamento
                 </DropdownMenuItem>
+                <DropdownMenuItem className="lg:hidden" asChild><Link href="/sliders"><Images className="h-4 w-4" />Sliders</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push("/affiliates")}><Link2 className="h-4 w-4" />Indicações</DropdownMenuItem>
                 <DropdownMenuItem onClick={logout}>

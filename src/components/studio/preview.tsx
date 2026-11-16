@@ -14,7 +14,7 @@ interface StudioPreviewProps {
 }
 
 export function StudioPreview({ markerImageUrl, markerTargetUrl }: StudioPreviewProps) {
-  const { isPreviewOpen, setPreviewOpen, elements, projectType, projectId, sceneId } = useStudioStore()
+  const { isPreviewOpen, setPreviewOpen, elements, projectType, projectId, sceneId, sliderLibrary } = useStudioStore()
   const [arState, setArState] = useState<ArState>("loading")
 
   const experience = useMemo((): ArExperienceData | null => {
@@ -37,6 +37,7 @@ export function StudioPreview({ markerImageUrl, markerTargetUrl }: StudioPreview
           .map((el) => ({
             id: el.id,
             type: el.type,
+            slider: el.type === "slider" ? sliderLibrary?.choices.find((item) => item.id === el.sliderId)?.content : undefined,
             name: el.name,
             position: el.position,
             rotation: el.rotation,
@@ -56,7 +57,7 @@ export function StudioPreview({ markerImageUrl, markerTargetUrl }: StudioPreview
           })),
       },
     }
-  }, [projectId, sceneId, elements, projectType, markerImageUrl, markerTargetUrl])
+  }, [projectId, sceneId, elements, projectType, markerImageUrl, markerTargetUrl, sliderLibrary])
 
   return (
     <Dialog open={isPreviewOpen} onOpenChange={setPreviewOpen}>

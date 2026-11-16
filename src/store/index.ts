@@ -6,6 +6,7 @@ import { mockElements, mockLayers } from "@/lib/mock-data"
 import { createClient } from "@/lib/supabase/client"
 import { selectPrimaryScene } from "@/lib/scenes"
 import { isPublicHlsUrl } from "@/lib/ar/hls-url"
+import type { SliderChoice } from "@/lib/sliders/model"
 
 export const projectTypeDimensions: Record<ProjectType, { width: number; height: number; label: string }> = {
   cartao: { width: 0.85, height: 0.55, label: "Cartão de Visita (88mm × 48mm)" },
@@ -24,6 +25,7 @@ interface StudioState {
   gizmoMode: "translate" | "rotate" | "scale"
   projectId: string | null
   sceneId: string | null
+  sliderLibrary: { enabled: boolean; choices: SliderChoice[] } | null
   setElements: (elements: StudioElement[]) => void
   setLayers: (layers: Layer[]) => void
   selectElement: (id: string | null) => void
@@ -55,8 +57,9 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   gizmoMode: "translate",
   projectId: null,
   sceneId: null,
+  sliderLibrary: null,
 
-  setProjectId: (id) => set({ projectId: id }),
+  setProjectId: (id) => set({ projectId: id, sliderLibrary: null }),
 
   loadScene: async (projectId: string) => {
     // Limpa o estado anterior para não exibir objetos de outro projeto
@@ -87,6 +90,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
           action: obj.action || undefined,
           clickEffect: obj.click_effect === "particles" ? "particles" : "none",
           assetUrl: obj.asset_url || undefined,
+          sliderId: obj.slider_id || undefined,
           assetThumbnail: obj.asset_thumbnail || undefined,
           showCaption: obj.show_caption ?? undefined,
           faceCamera: obj.face_camera ?? false,
@@ -121,6 +125,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   saveScene: async () => {
     const { projectId, sceneId, elements } = get()
     if (!projectId) throw new Error("Projeto não carregado")
+    const unlinkedSlider = elements.find((el) => el.type === "slider" && !el.sliderId)
+    if (unlinkedSlider) throw new Error("Vincule um slider publicado ou remova o elemento antes de salvar.")
     const invalidStream = elements.find((el) => el.visible && el.type === "video-hls" && !isPublicHlsUrl(el.assetUrl))
     if (invalidStream) throw new Error(`Informe uma URL HTTPS .m3u8 válida para "${invalidStream.name}" antes de salvar.`)
     const supabase = createClient()
@@ -138,6 +144,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         animation_type: el.animationType ?? null, action: el.action ?? null,
         click_effect: el.clickEffect ?? "none",
         asset_url: el.assetUrl ?? null, asset_thumbnail: el.assetThumbnail ?? null,
+        slider_id: el.type === "slider" ? el.sliderId : null,
         show_caption: el.showCaption ?? null,
         face_camera: el.faceCamera ?? false,
         chroma_key_color: el.chromaKeyColor ?? null,
@@ -219,5 +226,6 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       gizmoMode: "translate",
       projectId: null,
       sceneId: null,
+      sliderLibrary: null,
     }),
 }))

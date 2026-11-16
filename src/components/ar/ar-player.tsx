@@ -131,6 +131,15 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
         obj.scale[2] * fz,
       )
 
+      if (obj.type === "slider" && obj.slider) {
+        const { createSliderMesh } = await import("@/lib/ar/slider-mesh")
+        const slider = createSliderMesh(obj.slider, obj.opacity)
+        if (slider) {
+          group.add(slider.mesh)
+          streamCleanupsRef.current.push(slider.dispose)
+        }
+      }
+
       if (isModel) {
         ;(group as any).userData.animationType = obj.animationType
         ;(group as any).userData.assetUrl = obj.assetUrl
@@ -810,6 +819,7 @@ export function ArPlayer({ experience, experiences, hasWatermark = true, siteNam
       const effects = createClickParticles(scene)
       cleanups.push(() => effects.dispose())
       cleanups.push(attachSceneClicks(renderer.domElement, anchorGroups, cam, effects, {
+        sliders: projects.some((project) => project.scene?.objects.some((object) => object.visible && !!object.slider)),
         enabled: () => !cardboardRef.current,
         onInteraction,
       }))

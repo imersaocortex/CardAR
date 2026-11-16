@@ -21,6 +21,7 @@ import { projectTypeDimensions } from "@/store"
 import { createClient } from "@/lib/supabase/client"
 import { mapProjectType } from "@/lib/utils"
 import Link from "next/link"
+import type { SliderLibrary } from "@/lib/sliders/model"
 
 export default function StudioPage() {
   const params = useParams()
@@ -46,6 +47,7 @@ export default function StudioPage() {
   const [renaming, setRenaming] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sceneReady, setSceneReady] = useState(false)
+  const [sliderRefresh, setSliderRefresh] = useState(0)
 
   useEffect(() => {
     const pid = params.id as string
@@ -101,6 +103,29 @@ export default function StudioPage() {
     init()
     return () => { cancelled = true }
   }, [params.id, setProjectType, loadScene, setProjectId])
+
+  useEffect(() => {
+    if (!sceneReady || projectId !== params.id) return
+    let request: AbortController | undefined
+    const loadSliders = () => {
+      request?.abort()
+      const controller = new AbortController()
+      request = controller
+      const query = new URLSearchParams({ picker: "1", project_id: projectId })
+      fetch(`/api/sliders?${query}`, { signal: controller.signal }).then(async (response) => {
+        if (!response.ok) throw new Error("Slider library unavailable")
+        const library: SliderLibrary = await response.json()
+        if (!controller.signal.aborted && useStudioStore.getState().projectId === projectId) {
+          useStudioStore.setState({ sliderLibrary: { enabled: library.enabled && library.canEdit, choices: library.choices } })
+        }
+      }).catch(() => {
+        if (!controller.signal.aborted && useStudioStore.getState().projectId === projectId) useStudioStore.setState({ sliderLibrary: null })
+      })
+    }
+    loadSliders()
+    window.addEventListener("focus", loadSliders)
+    return () => { request?.abort(); window.removeEventListener("focus", loadSliders) }
+  }, [params.id, projectId, sceneReady, sliderRefresh])
 
   const dims = projectTypeDimensions[projectType]
 
@@ -383,7 +408,7 @@ export default function StudioPage() {
 
           <Separator orientation="vertical" className="h-6" />
 
-          <TrackingSettings projectId={params.id as string} disabled={subSuspended || saving || !sceneReady} />
+          <TrackingSettings projectId={params.id as string} disabled={subSuspended || saving || !sceneReady} onSaved={() => setSliderRefresh((value) => value + 1)} />
           <Button variant="outline" size="sm" onClick={handleSave} disabled={subSuspended || saving || !sceneReady}>
             <Save className="h-4 w-4 mr-1" />
             Salvar

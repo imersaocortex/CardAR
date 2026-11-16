@@ -14,6 +14,7 @@ import {
   Link2,
   MessageCircle,
   ArrowUpRight,
+  Images,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth-store"
 import styles from "./app-sidebar.module.css"
@@ -60,6 +61,7 @@ export function AppSidebar() {
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Projetos", href: "/projects", icon: FolderKanban },
     { label: "Assets", href: "/assets", icon: Box },
+    { label: "Sliders", href: "/sliders", icon: Images },
     { label: "Faturamento", href: "/billing", icon: CreditCard },
     { label: "Perfil", href: "/profile", icon: User },
     { label: "Indicações", href: "/affiliates", icon: Link2 },

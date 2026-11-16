@@ -98,7 +98,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       await video.current!.play()
       void stereoVideo.current!.play().catch(() => {})
       if (ended || !alive.current) return
-      if (!projects.some((project) => project.scene?.objects?.some((object) => object.visible && (object.assetUrl || object.type.startsWith("botao-"))))) {
+      if (!projects.some((project) => project.scene?.objects?.some((object) => object.visible && (object.assetUrl || object.slider || object.type.startsWith("botao-"))))) {
         throw new Error("Esta cena ainda não tem um objeto visível. Adicione um modelo, imagem ou vídeo no editor.")
       }
       mediaControl.current = {
@@ -120,6 +120,7 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 3))
       effects = createClickParticles(scene)
       listeners.push(attachSceneClicks(renderer.domElement, anchors, camera, effects, {
+        sliders: projects.some((project) => project.scene?.objects.some((object) => object.visible && !!object.slider)),
         enabled: () => !cardboardRef.current && !ended,
         onInteraction: (event, metadata) => interaction.current?.(event, metadata),
       }))

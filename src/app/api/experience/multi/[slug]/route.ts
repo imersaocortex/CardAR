@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { experienceAccessGranted } from "@/lib/payments/access"
 import { organizationOwnedBySuperAdmin } from "@/lib/payments/platform-admin"
 import { planAllowsTrackingMode } from "@/lib/plans/tracking"
-import { serializeExperience, type ExperienceProjectRow } from "@/lib/ar/serialize-experience"
+import { experienceSliderIds, serializeExperience, type ExperienceProjectRow } from "@/lib/ar/serialize-experience"
+import { getExperienceSliders } from "@/lib/sliders/server"
 import type { ArExperienceData } from "@/lib/mindar"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -13,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     .select("*").eq("slug", slug).maybeSingle()
   if (!collection) return NextResponse.json({ error: "Experiência não encontrada" }, { status: 404 })
   const { data: subscription } = await admin.from("subscriptions")
-    .select("status, trial_ends_at, current_period_end, plans(has_watermark, multi_project_enabled, gps_enabled, surface_enabled)")
+    .select("status, trial_ends_at, current_period_end, plans(has_watermark, multi_project_enabled, gps_enabled, surface_enabled, sliders_enabled)")
     .eq("organization_id", collection.organization_id).maybeSingle()
   const plan = Array.isArray(subscription?.plans) ? subscription.plans[0] : subscription?.plans
   const superAdminOwned = await organizationOwnedBySuperAdmin(admin, collection.organization_id)
@@ -27,11 +28,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   if (error || !projects || projects.length !== collection.project_ids.length)
     return NextResponse.json({ error: "Um dos projetos está indisponível" }, { status: 404 })
   const byId = new Map<string, ExperienceProjectRow>(projects.map((project: ExperienceProjectRow) => [project.id, project]))
+  const sliders = superAdminOwned || plan?.sliders_enabled === true
+    ? await getExperienceSliders(admin, collection.organization_id, experienceSliderIds([...byId.values()]))
+    : undefined
   const experiences: ArExperienceData[] = []
   for (const id of collection.project_ids as string[]) {
     const project = byId.get(id)
     if (!project) return NextResponse.json({ error: "Um dos projetos está indisponível" }, { status: 404 })
-    experiences.push(serializeExperience(project))
+    experiences.push(serializeExperience(project, sliders))
   }
   if (collection.tracking_mode === "marker" && experiences.some((project) => !project.marker?.imageUrl))
     return NextResponse.json({ error: "Um dos marcadores não possui imagem" }, { status: 409 })

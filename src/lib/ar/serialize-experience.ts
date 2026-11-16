@@ -1,5 +1,6 @@
 import { selectPrimaryScene } from "@/lib/scenes"
 import type { ArExperienceData } from "@/lib/mindar"
+import type { SliderContent } from "@/lib/sliders/model"
 
 type SceneButtonRow = { id: string; label: string; icon: string | null; action_type: string; action_value: string }
 type SceneObjectRow = {
@@ -7,6 +8,7 @@ type SceneObjectRow = {
   rotation_x: number; rotation_y: number; rotation_z: number; scale_x: number; scale_y: number; scale_z: number
   opacity: number; visible: boolean; animation_type: string | null; action: string | null
   click_effect?: "none" | "particles" | null
+  slider_id?: string | null
   asset_url: string | null; asset_thumbnail: string | null; show_caption: boolean | null
   face_camera: boolean | null; chroma_key_color: string | null; chroma_key_tolerance: number | null
   chroma_key_smoothness: number | null; duration: number | null; scene_buttons: SceneButtonRow[]
@@ -19,7 +21,7 @@ export type ExperienceProjectRow = {
   project_markers: { image_url: string; target_url: string | null }[] | { image_url: string; target_url: string | null } | null
 }
 
-export function serializeExperience(project: ExperienceProjectRow): ArExperienceData {
+export function serializeExperience(project: ExperienceProjectRow, sliders?: ReadonlyMap<string, SliderContent | null>): ArExperienceData {
   const scene = selectPrimaryScene(Array.isArray(project.scenes) ? project.scenes : [])
   const marker = Array.isArray(project.project_markers) ? project.project_markers[0] : project.project_markers
   return {
@@ -36,7 +38,9 @@ export function serializeExperience(project: ExperienceProjectRow): ArExperience
       id: scene.id,
       name: scene.name,
       backgroundColor: scene.background_color,
-      objects: (scene.scene_objects || []).map((obj) => ({
+      objects: (scene.scene_objects || []).filter((object) =>
+        object.type !== "slider" || (project.tracking_mode !== "surface" && !!object.slider_id && !!sliders?.get(object.slider_id))
+      ).map((obj) => ({
         id: obj.id,
         type: obj.type,
         name: obj.name,
@@ -48,6 +52,7 @@ export function serializeExperience(project: ExperienceProjectRow): ArExperience
         animationType: obj.animation_type || null,
         action: obj.action || null,
         clickEffect: obj.click_effect === "particles" ? "particles" : "none",
+        ...(obj.type === "slider" && obj.slider_id ? { slider: sliders?.get(obj.slider_id) ?? undefined } : {}),
         assetUrl: obj.asset_url || null,
         assetThumbnail: obj.asset_thumbnail || null,
         showCaption: obj.show_caption || null,
@@ -63,4 +68,11 @@ export function serializeExperience(project: ExperienceProjectRow): ArExperience
       })),
     } : null,
   }
+}
+
+export function experienceSliderIds(projects: ExperienceProjectRow[]) {
+  return [...new Set(projects.flatMap((project) => project.tracking_mode === "surface" ? [] :
+    (selectPrimaryScene(project.scenes ?? [])?.scene_objects ?? [])
+      .flatMap((object) => object.type === "slider" && object.visible && object.slider_id ? [object.slider_id] : [])
+  ))]
 }

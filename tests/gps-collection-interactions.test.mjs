@@ -16,7 +16,7 @@ const actions = load("src/lib/ar/actions.ts")
 const interactions = load("src/lib/ar/scene-interactions.ts", { "./actions": actions })
 const { locateGpsProjects, gpsRadarPosition, loadGpsScenes } = load("src/lib/ar/gps-collection.ts", { "./geo": load("src/lib/ar/geo.ts") })
 const { createClickParticles } = load("src/lib/ar/click-particles.ts")
-const { registerSceneInteraction, pickSceneInteractionAt, activateSceneInteraction, attachSceneClicks } = interactions
+const { registerSceneInteraction, pickSceneInteractionAt, createSceneInteractionHandler, attachSceneClicks } = interactions
 const bounds = { left: 10, top: 20, width: 400, height: 800 }
 function target(id, distance = 5, effect = "none") {
   const group = new THREE.Group()
@@ -40,7 +40,7 @@ test("touch raycast opens only the nearest visible project's URL and preserves a
   const popup = { opener: "original", location: { replace: url => opened.push(url) } }
   globalThis.window = { open: () => popup }
   try {
-    activateSceneInteraction(hit, { burst: () => assert.fail("effect is off") }, (event, metadata) => events.push({ event, metadata }))
+    createSceneInteractionHandler({ burst: () => assert.fail("effect is off") }, (event, metadata) => events.push({ event, metadata })).activate(hit)
     assert.deepEqual(opened, ["https://example.com/near"])
     assert.equal(popup.opener, null)
     assert.equal(events[0].metadata.project_id, "project-near")
@@ -91,8 +91,32 @@ test("blocked new tabs fall back to the same page without losing the image actio
   globalThis.window = { open: () => null, location: { href: "" } }
   try {
     const hit = pickSceneInteractionAt([target("coupon")], new THREE.PerspectiveCamera(60, 0.5, 0.1, 100), bounds, 210, 420)
-    activateSceneInteraction(hit, { burst() {} })
+    createSceneInteractionHandler({ burst() {} }).activate(hit)
     assert.equal(globalThis.window.location.href, "https://example.com/coupon")
+  } finally { globalThis.window = original }
+})
+
+test("particle links wait in the current tab and cancel when the scene closes", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] })
+  const original = globalThis.window
+  const location = { href: "" }
+  globalThis.window = { location, open: () => assert.fail("would hide the effect") }
+  try {
+    const hit = pickSceneInteractionAt([target("coupon", 5, "particles")], new THREE.PerspectiveCamera(60, 0.5, 0.1, 100), bounds, 210, 420)
+    let bursts = 0
+    const handler = createSceneInteractionHandler({ burst: () => bursts++ })
+    handler.activate(hit)
+    handler.activate(hit)
+    assert.equal(bursts, 1)
+    t.mock.timers.tick(2499)
+    assert.equal(location.href, "")
+    t.mock.timers.tick(1)
+    assert.equal(location.href, "https://example.com/coupon")
+    location.href = ""
+    handler.activate(hit)
+    handler.cancel()
+    t.mock.timers.tick(2500)
+    assert.equal(location.href, "")
   } finally { globalThis.window = original }
 })
 
@@ -105,7 +129,7 @@ test("particles work without a link, reject executable links and never change th
   assert.equal(hit.interaction.action, null)
   const effects = createClickParticles(scene)
   const transform = image.matrixWorld.clone()
-  activateSceneInteraction(hit, effects)
+  createSceneInteractionHandler(effects).activate(hit)
   assert.equal(scene.children.length, 2)
   effects.update(0.2)
   assert.equal(image.visible, true)
@@ -113,7 +137,9 @@ test("particles work without a link, reject executable links and never change th
   assert.deepEqual(image.scale.toArray(), [1, 1, 1])
   for (let i = 0; i < 8; i++) effects.burst(hit)
   assert.equal(scene.children.length, 4) // at most three bursts
-  effects.update(1)
+  effects.update(2)
+  assert.equal(scene.children.length, 4)
+  effects.update(0.4)
   assert.deepEqual(scene.children, [image])
   effects.dispose()
 })

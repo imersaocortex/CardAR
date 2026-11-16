@@ -18,11 +18,12 @@ import { GpsRadar } from "./gps-radar"
 type CompassEvent = DeviceOrientationEvent & { webkitCompassHeading?: number; webkitCompassAccuracy?: number }
 type OrientationAPI = typeof DeviceOrientationEvent & { requestPermission?: (absolute?: boolean) => Promise<string> }
 
-export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false, vrControl }: {
+export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onStateChange, onInteraction, cardboard = false, vrControl, installControl }: {
   experience: ArExperienceData; experiences?: ArExperienceData[]; siteName: string; hasWatermark: boolean; onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
   cardboard?: boolean
   vrControl?: React.ReactNode
+  installControl?: React.ReactNode
 }) {
   const host = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -283,13 +284,15 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
     <div ref={host} className="absolute inset-0" />
     {!cardboard && <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-4">
       <span className="max-w-[55%] truncate text-[11px] font-medium text-white/70 drop-shadow-md">{experience.name}</span>
-      {active && <button type="button" onClick={() => stop.current?.()} aria-label="Encerrar experiência" className="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/80 backdrop-blur-sm"><X className="h-4 w-4" /></button>}
+      {active && <div className="relative flex flex-col items-end gap-1">
+        <button type="button" onClick={() => stop.current?.()} aria-label="Encerrar experiência" className="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/80 backdrop-blur-sm"><X className="h-4 w-4" /></button>
+        {location && <div className="text-right font-mono text-[10px] leading-relaxed text-white/70 drop-shadow-md">
+          <p>{Math.round(location.distance)} m até o ponto</p>
+          <p>GPS ±{Math.round(location.accuracy)} m · raio {location.radius} m</p>
+        </div>}
+        <GpsRadar points={points} heading={heading} fresh={positionFresh} failedIds={failedIds} />
+      </div>}
     </div>}
-    {!cardboard && active && location && <div className="pointer-events-none absolute right-4 top-14 z-20 text-right font-mono text-[10px] leading-relaxed text-white/70 drop-shadow-md">
-      <p>{Math.round(location.distance)} m até o ponto</p>
-      <p>GPS ±{Math.round(location.accuracy)} m · raio {location.radius} m</p>
-    </div>}
-    {!cardboard && active && projectsForDisplay.length > 1 && <GpsRadar points={points} heading={heading} fresh={positionFresh} failedIds={failedIds} />}
     {!active && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-8 text-center">
       <Button onClick={start}>Iniciar experiência GPS</Button>
       <p className="max-w-xs text-xs text-white/75" role="status">{status}</p>
@@ -298,11 +301,13 @@ export function GpsPlayer({ experience, experiences, siteName, hasWatermark, onS
       {ready && visible && location ? (location.atTarget ? "Próximo ao ponto" : turn !== null && Math.abs(turn) < 15 ? "Objeto à frente" : turn !== null ? <span>Gire {Math.round(Math.abs(turn))}° para {turn > 0 ? "a direita" : "a esquerda"} <span className="inline-block" style={{ transform: `rotate(${turn}deg)` }} aria-hidden="true">↑</span></span> : status) : status}
     </div>}
     {cardboard && active && <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex text-center text-[10px] text-white/70 drop-shadow-md" role="status">{[0, 1].map((eye) => <span key={eye} className="w-1/2 px-2">{location ? `${Math.round(location.distance)} m · ${status}` : status}</span>)}</div>}
-    {hasWatermark && siteName && <div className={`pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex ${cardboard ? "justify-around" : "justify-center"}`}>{(cardboard ? [0, 1] : [0]).map((eye) => <span key={eye} className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span>)}</div>}
-    {ready && <>
-      {!cardboard && visible && <div className="absolute bottom-28 left-0 right-0 z-20 flex flex-wrap justify-center gap-2 px-4">{visibleProjectIndices.map((index) => <SpatialActions key={projectsForDisplay[index].id} projectId={projectsForDisplay[index].id} objects={projectsForDisplay[index].scene?.objects ?? []} onInteraction={onInteraction} />)}{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
-      {!cardboard && failedIds.length > 0 && <p role="status" className="pointer-events-none absolute bottom-40 left-4 z-20 max-w-[55%] text-[10px] text-amber-100">{failedIds.length} projeto(s) com mídia indisponível. Os outros pontos continuam ativos.</p>}
-      {!cardboard && <div className="absolute bottom-6 left-0 right-0 z-20"><ArActions videoRef={video} containerRef={host} reuseCameraForQr vrControl={vrControl} /></div>}
-    </>}
+    {cardboard && hasWatermark && siteName && <div className="pointer-events-none absolute bottom-20 left-0 right-0 z-10 flex justify-around">{[0, 1].map((eye) => <span key={eye} className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span>)}</div>}
+    {!cardboard && <div className="pointer-events-none absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 flex flex-col items-center gap-2">
+      {ready && visible && <div className="pointer-events-auto flex flex-wrap justify-center gap-2 px-4">{visibleProjectIndices.map((index) => <SpatialActions key={projectsForDisplay[index].id} projectId={projectsForDisplay[index].id} objects={projectsForDisplay[index].scene?.objects ?? []} onInteraction={onInteraction} />)}{hasMedia && <Button size="sm" variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-[11px] text-white/80">O som foi bloqueado. Toque em Ativar som novamente.</p>}</div>}
+      {ready && failedIds.length > 0 && <p role="status" className="max-w-[85%] text-center text-[10px] text-amber-100">{failedIds.length} projeto(s) com mídia indisponível. Os outros pontos continuam ativos.</p>}
+      {hasWatermark && siteName && <span className="rounded-full bg-black/30 px-3 py-1 text-[10px] text-white/50">{siteName}</span>}
+      {ready && <div className="pointer-events-auto"><ArActions videoRef={video} containerRef={host} reuseCameraForQr vrControl={vrControl} /></div>}
+      {installControl}
+    </div>}
   </div>
 }

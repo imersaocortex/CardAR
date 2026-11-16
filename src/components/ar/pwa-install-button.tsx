@@ -17,7 +17,7 @@ type InstallWindow = Window & {
   __experienceInstallPrompt?: { event: InstallPromptEvent; path: string }
 }
 
-export function PwaInstallButton({ hidden = false }: { hidden?: boolean }) {
+export function PwaInstallButton() {
   const pendingPrompt = useRef<InstallPromptEvent | null>(null)
   const installedRef = useRef(false)
   const [installed, setInstalled] = useState(false)
@@ -121,9 +121,9 @@ export function PwaInstallButton({ hidden = false }: { hidden?: boolean }) {
     }
   }
 
-  if (installed || hidden || (!mode && !hint)) return null
-  return <div className="pointer-events-auto fixed bottom-24 left-4 z-50 max-w-[min(20rem,calc(100vw-2rem))] text-white">
-    {hint && <div role="status" className="mb-2 rounded-xl border border-white/15 bg-slate-950/90 p-3 text-xs leading-relaxed shadow-xl backdrop-blur">
+  if (installed || (!mode && !hint)) return null
+  return <div className="pointer-events-auto relative flex flex-col items-center text-white">
+    {hint && <div role="status" className="absolute bottom-full left-1/2 z-30 mb-2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-white/15 bg-slate-950/90 p-3 text-xs leading-relaxed shadow-xl backdrop-blur">
       <button type="button" onClick={() => setHint("")} aria-label="Fechar instruções de instalação" className="float-right ml-2 text-white/70"><X className="h-4 w-4" /></button>
       {hint}
     </div>}

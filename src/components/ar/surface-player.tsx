@@ -7,18 +7,19 @@ import { buildSpatialScene, disposeSpatialGroup } from "@/lib/ar/spatial-scene"
 import { Button } from "@/components/ui/button"
 import { SpatialActions } from "./spatial-actions"
 import { SurfaceFallbackPlayer } from "./surface-fallback-player"
-import { activateSceneInteraction, pickSceneInteraction } from "@/lib/ar/scene-interactions"
+import { createSceneInteractionHandler, pickSceneInteraction } from "@/lib/ar/scene-interactions"
 import { createClickParticles } from "@/lib/ar/click-particles"
 
 interface Props {
   experience: ArExperienceData
   siteName: string
   hasWatermark: boolean
+  installControl?: React.ReactNode
   onStateChange?: (state: ArState) => void
   onInteraction?: (event: string, metadata?: Record<string, unknown>) => void
 }
 
-export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction }: Props) {
+export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChange, onInteraction, installControl }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const overlay = useRef<HTMLDivElement>(null)
   const stop = useRef<(() => void) | null>(null)
@@ -109,6 +110,8 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
       const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100)
       effects = createClickParticles(scene)
       const reportInteraction = (event: string, metadata?: Record<string, unknown>) => callbacks.current.onInteraction?.(event, metadata)
+      const interaction = createSceneInteractionHandler(effects, reportInteraction)
+      listeners.push(interaction.cancel)
       let placed = false
       let placementRequested = false
       place.current = () => {
@@ -124,7 +127,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
         ray.ray.origin.setFromMatrixPosition(matrix)
         ray.ray.direction.set(0, 0, -1).transformDirection(matrix)
         const hit = pickSceneInteraction([content.root], ray)
-        if (hit) activateSceneInteraction(hit, effects, reportInteraction)
+        if (hit) interaction.activate(hit)
       }
       session.addEventListener("select", select)
       // A tap on the DOM controls must not also select an XR object behind it.
@@ -176,7 +179,7 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
         effects?.update(delta)
         renderer.render(scene, camera)
       })
-      const reposition = () => { worldAnchor?.delete(); worldAnchor = undefined; placed = false; placementRequested = false; setPlaced(false); content!.root.visible = false; setMessage("Mova a câmera lentamente até encontrar o chão ou uma mesa.") }
+      const reposition = () => { interaction.cancel(); worldAnchor?.delete(); worldAnchor = undefined; placed = false; placementRequested = false; setPlaced(false); content!.root.visible = false; setMessage("Mova a câmera lentamente até encontrar o chão ou uma mesa.") }
       repositionRef.current = reposition
       setActive(true)
       setStarting(false)
@@ -198,16 +201,19 @@ export function SurfacePlayer({ experience, siteName, hasWatermark, onStateChang
   }
   const repositionRef = useRef<(() => void) | null>(null)
   const hasMedia = experience.scene?.objects?.some((object) => object.visible && (object.type === "audio" || object.type.startsWith("video-")))
-  if (manualMode || supported === false) return <SurfaceFallbackPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={onStateChange} onInteraction={onInteraction} />
+  if (manualMode || supported === false) return <SurfaceFallbackPlayer experience={experience} siteName={siteName} hasWatermark={hasWatermark} onStateChange={onStateChange} onInteraction={onInteraction} installControl={installControl} />
   return <div className="fixed inset-0 bg-slate-950 text-white">
     <div ref={host} className="absolute inset-0" />
     <div ref={overlay} className="absolute inset-0 pointer-events-none flex flex-col justify-between p-5">
       <div className="max-w-md rounded-2xl bg-black/65 p-4 backdrop-blur"><h1 className="font-semibold">{experience.name}</h1><p className="text-sm text-white/80" role="status">{message}</p></div>
-      <div className="pointer-events-auto mx-auto flex max-w-md flex-wrap justify-center gap-3 rounded-2xl bg-black/65 p-4">
-        {!active && <Button onClick={start} disabled={!supported || starting}>{starting ? "Carregando…" : "Iniciar AR na superfície"}</Button>}
-        {active && <><Button onClick={() => place.current?.()} disabled={!ready}>Posicionar aqui</Button><Button variant="outline" onClick={() => repositionRef.current?.()}>Reposicionar</Button><Button variant="outline" onClick={() => stop.current?.()}>Encerrar</Button></>}
-        {placed && <><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-xs">O som foi bloqueado. Toque novamente.</p>}</>}
-        {hasWatermark && siteName && <span className="w-full text-center text-xs text-white/60">{siteName}</span>}
+      <div className="flex flex-col items-center gap-2">
+        <div className="pointer-events-auto mx-auto flex max-w-md flex-wrap justify-center gap-3 rounded-2xl bg-black/65 p-4">
+          {!active && <Button onClick={start} disabled={!supported || starting}>{starting ? "Carregando…" : "Iniciar AR na superfície"}</Button>}
+          {active && <><Button onClick={() => place.current?.()} disabled={!ready}>Posicionar aqui</Button><Button variant="outline" onClick={() => repositionRef.current?.()}>Reposicionar</Button><Button variant="outline" onClick={() => stop.current?.()}>Encerrar</Button></>}
+          {placed && <><SpatialActions objects={experience.scene?.objects ?? []} onInteraction={onInteraction} />{hasMedia && <Button variant="outline" onClick={toggleSound}>{soundOn ? "Silenciar" : "Ativar som"}</Button>}{soundError && <p className="w-full text-center text-xs">O som foi bloqueado. Toque novamente.</p>}</>}
+          {hasWatermark && siteName && <span className="w-full text-center text-xs text-white/60">{siteName}</span>}
+        </div>
+        {installControl}
       </div>
     </div>
   </div>

@@ -444,7 +444,7 @@ export function StudioProperties() {
               <SelectTrigger id="click-effect" className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="none">Sem efeito</SelectItem><SelectItem value="particles">Explosão de partículas</SelectItem></SelectContent>
             </Select>
-            <p className="text-[11px] leading-snug text-muted-foreground">O toque exibe partículas e também abre a URL, se configurada. O objeto permanece na cena. Respeita a preferência de reduzir animações do visitante.</p>
+            <p className="text-[11px] leading-snug text-muted-foreground">Ao tocar, as partículas aparecem com um som. Se houver uma URL, ela abre após 2,5 segundos. O efeito respeita a preferência de reduzir movimento.</p>
           </div>
         )}
       </div>

@@ -10,9 +10,10 @@ import {
   CreditCard,
   User,
   Zap,
-  Settings,
   Shield,
   Link2,
+  MessageCircle,
+  ArrowUpRight,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth-store"
 import styles from "./app-sidebar.module.css"
@@ -62,15 +63,8 @@ export function AppSidebar() {
     { label: "Faturamento", href: "/billing", icon: CreditCard },
     { label: "Perfil", href: "/profile", icon: User },
     { label: "Indicações", href: "/affiliates", icon: Link2 },
-    ...(showAdmin
-      ? [
-          { label: "Administrador", href: "/admin", icon: Shield },
-          { label: "Configurações", href: "/admin", icon: Settings },
-        ]
-      : []),
+    ...(showAdmin ? [{ label: "Administrador", href: "/admin", icon: Shield }] : []),
   ]
-
-  const activeRoute = routes.findIndex(({ href }) => pathname === href || pathname.startsWith(`${href}/`))
 
   return (
     <aside className={`${styles.panel} fixed inset-y-3 left-3 z-50 hidden w-[calc(16rem-1.5rem)] flex-col lg:flex`}>
@@ -88,14 +82,15 @@ export function AppSidebar() {
       </div>
 
       <nav aria-label="Menu principal" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
-        {routes.map((route, i) => {
+        {routes.map((route) => {
           const Icon = route.icon
+          const current = pathname === route.href ? "page" : pathname.startsWith(`${route.href}/`) ? "location" : undefined
 
           return (
             <Link
-              key={`${route.href}-${i}`}
+              key={route.href}
               href={route.href}
-              aria-current={activeRoute === i ? (pathname === route.href ? "page" : "location") : undefined}
+              aria-current={current}
               className={`${styles.link} flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium`}
             >
               <Icon className={`${styles.icon} size-[1.125rem] shrink-0`} aria-hidden="true" />
@@ -104,6 +99,28 @@ export function AppSidebar() {
           )
         })}
       </nav>
+      <footer className={`${styles.footer} shrink-0 px-3 py-3`}>
+        <a
+          href="https://wa.me/5581989077025"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${styles.support} flex min-h-12 items-center gap-2.5 rounded-xl px-2.5 text-sm font-semibold`}
+        >
+          <span className={`${styles.supportIcon} grid size-7 shrink-0 place-items-center rounded-lg`}>
+            <MessageCircle className="size-4" aria-hidden="true" />
+          </span>
+          <span className="flex-1">Suporte via WhatsApp</span>
+          <ArrowUpRight className="size-3.5 shrink-0 opacity-80" aria-hidden="true" />
+        </a>
+        <a
+          href="https://imersaocortex.com.br"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${styles.credit} mt-1 flex min-h-8 items-center justify-center rounded-md text-center text-xs`}
+        >
+          Desenvolvimento: Imersão Córtex
+        </a>
+      </footer>
     </aside>
   )
 }

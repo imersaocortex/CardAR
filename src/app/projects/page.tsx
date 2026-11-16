@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, FolderKanban, MoreHorizontal, Copy, Eye, Pause, Play, Trash2, Search, X, FileImage, AlertTriangle } from "lucide-react"
+import { Plus, FolderKanban, MoreHorizontal, Copy, Eye, Pause, Play, Trash2, Search, X, FileImage, AlertTriangle, LayoutGrid, List } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,11 +38,21 @@ interface Project {
   updated_at: string
 }
 
+const projectStatuses = [
+  { value: "published", label: "Publicado" },
+  { value: "draft", label: "Rascunho" },
+  { value: "paused", label: "Pausado" },
+  { value: "suspended", label: "Suspenso" },
+  { value: "archived", label: "Arquivado" },
+] as const
+
 export default function ProjectsPage() {
   const router = useRouter()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>("todos")
+  const [statusFilter, setStatusFilter] = useState("todos")
+  const [view, setView] = useState<"cards" | "list">("cards")
   const [search, setSearch] = useState("")
   const [showNewModal, setShowNewModal] = useState(false)
   const [newProject, setNewProject] = useState({ name: "", type: "business_card", trackingMode: "marker", latitude: "", longitude: "", activationRadius: "100" })
@@ -92,9 +102,11 @@ export default function ProjectsPage() {
     setLoading(false)
   }
 
+  const query = search.trim().toLowerCase()
   const filtered = projects.filter((p) => {
     if (filter !== "todos" && p.type !== filter) return false
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (statusFilter !== "todos" && p.status !== statusFilter) return false
+    if (query && !p.name.toLowerCase().includes(query)) return false
     return true
   })
 
@@ -277,8 +289,12 @@ export default function ProjectsPage() {
 
   const handleStatusChange = async (id: string, status: string) => {
     const supabase = createClient()
-    await supabase.from("projects").update({ status }).eq("id", id)
-    setProjects(projects.map((p) => (p.id === id ? { ...p, status } : p)))
+    const { data, error } = await supabase.from("projects").update({ status }).eq("id", id).select("status").single()
+    if (error || !data) {
+      toast({ title: "Não foi possível atualizar o status", variant: "destructive" })
+      return
+    }
+    setProjects((current) => current.map((p) => (p.id === id ? { ...p, status: data.status } : p)))
   }
 
   const handleDelete = async (id: string) => {
@@ -296,6 +312,7 @@ export default function ProjectsPage() {
     draft: "secondary",
     paused: "warning",
     suspended: "destructive",
+    archived: "secondary",
   }
 
   const typeLabels: Record<string, string> = {
@@ -322,8 +339,8 @@ export default function ProjectsPage() {
   return (
     <AppShell>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div className="mr-auto">
             <h1 className="text-2xl font-bold">Projetos</h1>
             <p className="text-muted-foreground text-sm mt-1">{projects.length} projetos criados</p>
           </div>
@@ -461,37 +478,49 @@ export default function ProjectsPage() {
           </Dialog>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-sm">
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:max-w-xs sm:flex-1 sm:basis-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar projetos..."
-              className="pl-10 bg-muted/50 border-0"
+              aria-label="Buscar projetos"
+              className="border-0 bg-muted/50 pl-10 pr-10"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <button type="button" aria-label="Limpar busca" onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 <X className="h-4 w-4" />
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {(["todos", "business_card", "flyer_a4", "square_1x1"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                  filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground bg-muted/50"
-                )}
-              >
-                {f === "todos" ? "Todos" : typeLabels[f] || f}
-              </button>
-            ))}
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger aria-label="Filtrar por formato"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os formatos</SelectItem>
+              {Object.entries(typeLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger aria-label="Filtrar por status"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os status</SelectItem>
+              {projectStatuses.map(({ value, label }) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <div role="group" aria-label="Visualização dos projetos" className="flex gap-1 rounded-lg border border-border p-1 sm:ml-auto">
+            <Button type="button" size="sm" variant={view === "cards" ? "secondary" : "ghost"} aria-pressed={view === "cards"} onClick={() => setView("cards")}>
+              <LayoutGrid className="h-4 w-4" /> Cartões
+            </Button>
+            <Button type="button" size="sm" variant={view === "list" ? "secondary" : "ghost"} aria-pressed={view === "list"} onClick={() => setView("list")}>
+              <List className="h-4 w-4" /> Lista
+            </Button>
           </div>
         </div>
 
+        {projects.length > 0 && <p role="status" className="mb-3 text-xs text-muted-foreground">
+          {filtered.length} de {projects.length} {projects.length === 1 ? "projeto" : "projetos"}
+        </p>}
         {filtered.length === 0 ? (
           <div className="text-center py-24">
             <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
@@ -499,37 +528,38 @@ export default function ProjectsPage() {
             </div>
             <h3 className="text-lg font-semibold mb-2">Nenhum projeto encontrado</h3>
             <p className="text-sm text-muted-foreground mb-6">
-              {search ? "Tente buscar por outro termo" : "Crie seu primeiro projeto AR"}
+              {projects.length > 0 ? "Ajuste a busca ou limpe os filtros para ver outros projetos." : "Crie seu primeiro projeto AR."}
             </p>
-            {!search && (
-              <Button variant="gradient" onClick={() => setShowNewModal(true)}>
+            {projects.length > 0 ? (
+              <Button variant="outline" onClick={() => { setSearch(""); setFilter("todos"); setStatusFilter("todos") }}>Limpar filtros</Button>
+            ) : (
+              <Button variant="gradient" disabled={subSuspended} onClick={() => setShowNewModal(true)}>
                 <Plus className="h-4 w-4" />
                 Criar Projeto
               </Button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <ul className={cn("grid grid-cols-1", view === "cards" ? "gap-4 md:grid-cols-2 lg:grid-cols-3" : "gap-2")}>
             <AnimatePresence>
               {filtered.map((project) => (
-                <motion.div
+                <motion.li
                   key={project.id}
                   layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                 >
-                  <Card
-                    className="glass border-border/50 hover:border-primary/20 transition-all cursor-pointer group overflow-hidden"
-                  >
-                    <div
-                      className="h-40 bg-gradient-to-br from-primary/10 via-secondary/5 to-primary/5 flex items-center justify-center relative"
-                      onClick={() => router.push(`/projects/${project.id}`)}
+                  <Card className={cn("glass group overflow-hidden border-border/50 transition-colors hover:border-primary/30", view === "list" && "flex items-center px-3 sm:px-4")}>
+                    {view === "cards" ? <Link
+                      href={`/projects/${project.id}`}
+                      aria-label={`Abrir ${project.name}`}
+                      className="relative flex h-40 items-center justify-center bg-gradient-to-br from-primary/10 via-secondary/5 to-primary/5"
                     >
                       <FolderKanban className="h-12 w-12 text-primary/30 group-hover:text-primary/50 transition-colors" />
                       <Badge
                         variant={statusColors[project.status]}
-                        className="absolute top-3 left-3"
+                        className="absolute left-3 top-3 capitalize"
                       >
                         {mapProjectStatus(project.status)}
                       </Badge>
@@ -539,18 +569,22 @@ export default function ProjectsPage() {
                       <span className="absolute bottom-3 left-3 text-xs text-foreground bg-card/80 px-2 py-1 rounded-md">
                         {trackingLabels[project.tracking_mode || "marker"] || "Imagem / marcador"}
                       </span>
-                    </div>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0" onClick={() => router.push(`/projects/${project.id}`)}>
-                          <p className="font-medium text-sm truncate">{project.name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {project.views} visualizações • {new Date(project.updated_at).toLocaleDateString("pt-BR")}
+                    </Link> : <div className="hidden size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary sm:grid">
+                      <FolderKanban className="size-5" aria-hidden="true" />
+                    </div>}
+                    <CardContent className={cn("min-w-0 flex-1 p-4", view === "list" && "px-0 py-3 sm:pl-3")}>
+                      <div className="flex items-center justify-between gap-2">
+                        <Link href={`/projects/${project.id}`} className="min-w-0 flex-1 rounded-sm hover:text-primary">
+                          <p className="truncate text-sm font-medium">{project.name}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {view === "list" && <>{typeLabels[project.type] || project.type} · {trackingLabels[project.tracking_mode] ?? trackingLabels.marker} · </>}
+                            {project.views} visualizações · {new Date(project.updated_at).toLocaleDateString("pt-BR")}
                           </p>
-                        </div>
+                        </Link>
+                        {view === "list" && <Badge variant={statusColors[project.status]} className="shrink-0 capitalize">{mapProjectStatus(project.status)}</Badge>}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="size-9 shrink-0" aria-label={`Ações de ${project.name}`}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -590,10 +624,10 @@ export default function ProjectsPage() {
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
+                </motion.li>
               ))}
             </AnimatePresence>
-          </div>
+          </ul>
         )}
       </motion.div>
     </AppShell>

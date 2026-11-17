@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
 import { sliderDraftSchema, sliderFormats, sliderLink, type SliderDraft, type SliderLibrary, type SliderRow } from "@/lib/sliders/model"
+import { sliderTransitionLabels, sliderTransitions } from "@/lib/sliders/transitions"
 
-const emptyDraft: SliderDraft = { name: "", width: 1080, height: 1080, fit: "contain", assetIds: [] }
+const emptyDraft: SliderDraft = { name: "", width: 1080, height: 1080, fit: "contain", transition: "none", assetIds: [] }
 
 export default function SlidersPage() {
   const [library, setLibrary] = useState<SliderLibrary>()
@@ -37,7 +38,7 @@ export default function SlidersPage() {
 
   function edit(slider?: SliderRow) {
     setActive(slider)
-    setDraft(slider?.draft ?? emptyDraft)
+    setDraft(slider ? { ...slider.draft, transition: slider.draft.transition ?? "none" } : emptyDraft)
     setAssetId("")
     setError("")
     setEditing(true)
@@ -79,7 +80,7 @@ export default function SlidersPage() {
       const saved: SliderRow = result
       setLibrary((current) => current ? { ...current, sliders: [saved, ...current.sliders.filter((slider) => slider.id !== saved.id)] } : current)
       setActive(saved)
-      if (action !== "unpublish") setDraft(saved.draft)
+      if (parsed.success && action !== "unpublish") setDraft(parsed.data)
       toast({ title: action === "publish" ? "Slider publicado" : action === "unpublish" ? "Publicação retirada" : "Rascunho salvo" })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Não foi possível salvar o slider.")
@@ -162,6 +163,15 @@ export default function SlidersPage() {
               </div>
               <div className="space-y-1.5"><Label htmlFor="slider-width">Largura (px)</Label><Input id="slider-width" type="number" min={200} max={2048} value={draft.width || ""} onChange={(event) => setDraft({ ...draft, width: Number(event.target.value) })} /></div>
               <div className="space-y-1.5"><Label htmlFor="slider-height">Altura (px)</Label><Input id="slider-height" type="number" min={200} max={2048} value={draft.height || ""} onChange={(event) => setDraft({ ...draft, height: Number(event.target.value) })} /></div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="slider-transition">Efeito de transição</Label>
+                <select id="slider-transition" className={selectClass} value={draft.transition} onChange={(event) => {
+                  const transition = sliderTransitions.find((effect) => effect === event.target.value)
+                  if (transition) setDraft({ ...draft, transition })
+                }}>
+                  {sliderTransitions.map((effect) => <option key={effect} value={effect}>{sliderTransitionLabels[effect]}</option>)}
+                </select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="slider-assets">Imagens ({draft.assetIds.length}/20)</Label>
@@ -183,7 +193,7 @@ export default function SlidersPage() {
               </ol>
             </div>
           </fieldset>
-          {validPreview && <SliderCarousel key={draft.assetIds.join(",")} content={{ name: draft.name || "Prévia do slider", width: draft.width, height: draft.height, fit: draft.fit, images }} />}
+          {validPreview && <SliderCarousel key={draft.assetIds.join(",")} content={{ name: draft.name || "Prévia do slider", width: draft.width, height: draft.height, fit: draft.fit, transition: draft.transition, images }} />}
           {active?.published && <p className="text-xs text-muted-foreground">Salvar o rascunho mantém a versão pública atual. Use Publicar para atualizar o link e as experiências vinculadas.</p>}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-wrap gap-2">

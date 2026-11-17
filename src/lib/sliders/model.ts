@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { sliderTransitions } from "./transitions"
 
 export const sliderFormats = [
   { id: "square", label: "Quadrado · 1:1", width: 1080, height: 1080 },
@@ -12,18 +13,20 @@ export const sliderDraftSchema = z.object({
   width: z.number().int().min(200).max(2048),
   height: z.number().int().min(200).max(2048),
   fit: z.enum(["contain", "cover"]),
+  transition: z.enum(sliderTransitions).default("none"),
   assetIds: z.array(z.string().uuid()).max(20, "Adicione até 20 imagens"),
 }).refine(({ width, height }) => width / height >= 0.25 && width / height <= 4, {
   message: "Use uma proporção entre 1:4 e 4:1.",
 })
 
 export type SliderDraft = z.infer<typeof sliderDraftSchema>
+type StoredSliderDraft = z.input<typeof sliderDraftSchema>
 export type SliderRow = {
   id: string
   slug: string
   organization_id: string
-  draft: SliderDraft
-  published: SliderDraft | null
+  draft: StoredSliderDraft
+  published: StoredSliderDraft | null
   updated_at: string
 }
 export type SliderAsset = { id: string; name: string; url: string }

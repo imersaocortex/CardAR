@@ -6,14 +6,17 @@ import ts from "typescript"
 
 const require = createRequire(import.meta.url)
 const THREE = require("three")
-function load(path, mocks = {}) {
+function load(path, mocks = {}, globals = {}) {
   const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
   const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } })
   const loaded = { exports: {} }
-  new Function("require", "module", "exports", outputText)((name) => name in mocks ? mocks[name] : require(name), loaded, loaded.exports)
+  new Function("require", "module", "exports", ...Object.keys(globals), outputText)(
+    (name) => name in mocks ? mocks[name] : require(name), loaded, loaded.exports, ...Object.values(globals),
+  )
   return loaded.exports
 }
-const { parseSliderLink, resolveSliderContent } = load("src/lib/sliders/model.ts")
+const transitions = load("src/lib/sliders/transitions.ts")
+const { parseSliderLink, resolveSliderContent } = load("src/lib/sliders/model.ts", { "./transitions": transitions })
 const { serializeExperience, experienceSliderIds } = load("src/lib/ar/serialize-experience.ts", {
   "@/lib/scenes": load("src/lib/scenes.ts"),
 })
@@ -21,18 +24,65 @@ const { attachSceneClicks, registerSceneInteraction } = load("src/lib/ar/scene-i
   "./actions": load("src/lib/ar/actions.ts"),
 })
 const assetId = "cfe965f0-3af8-4b56-be17-c526a631c372"
-const content = { name: "Catálogo", width: 1080, height: 1920, fit: "contain", images: [{ id: assetId, url: "https://example.test/image.webp", name: "Produto" }] }
+const content = { name: "Catálogo", width: 1080, height: 1920, fit: "contain", transition: "none", images: [{ id: assetId, url: "https://example.test/image.webp", name: "Produto" }] }
 
 test("slider URLs are local and published content resolves only available images from its asset map", () => {
   const origin = "https://www.cortexar.space", slug = "z12abc123abc123abc123"
   assert.equal(parseSliderLink(`${origin}/sliders/${slug}`, origin), slug)
   assert.equal(parseSliderLink(`https://untrusted.test/sliders/${slug}`, origin), null)
   assert.equal(parseSliderLink(`/anything/sliders/${slug}`, origin), null)
-  const { images, ...layout } = content
+  const { images, transition, ...layout } = content
   const draft = { ...layout, assetIds: [assetId, "e2a4b8bd-0cdc-4bbd-b909-ed0641b7bd01"] }
-  assert.deepEqual(resolveSliderContent(draft, new Map([[assetId, images[0]]])), content)
+  const assets = new Map([[assetId, images[0]]])
+  assert.deepEqual(resolveSliderContent(draft, assets), { ...content, transition })
+  assert.deepEqual(resolveSliderContent({ ...draft, transition: "zoom" }, assets), { ...content, transition: "zoom" })
+  assert.equal(resolveSliderContent({ ...draft, transition: "unknown" }, assets), null)
   assert.equal(resolveSliderContent(draft, new Map()), null)
   assert.equal(resolveSliderContent({ ...draft, width: 1e6 }, new Map([[assetId, images[0]]])), null)
+})
+
+test("AR slider animates only the image layers, then settles and cancels work on disposal", () => {
+  const transforms = []
+  let callback
+  let reducedMotion = false
+  const motion = load("src/lib/sliders/transitions.ts", {}, {
+    window: { matchMedia: () => ({ matches: reducedMotion }) },
+  })
+  const { createSliderMesh } = load("src/lib/ar/slider-mesh.ts", {
+    "../sliders/transitions": motion,
+    "./object-geometry": { imagePlaneSize: () => [1, 1] },
+  }, {
+    document: { createElement: () => ({
+      getContext: () => new Proxy({
+        translate: (x, y) => transforms.push([x, y]),
+      }, { get: (target, property) => target[property] ?? (() => {}) }),
+    }) },
+    Image: class { complete = true; naturalWidth = 100; naturalHeight = 100; removeAttribute() {} },
+    performance: { now: () => 0 },
+    requestAnimationFrame: (fn) => { callback = fn; return 1 },
+    cancelAnimationFrame: () => { callback = null },
+  })
+  const { mesh, dispose } = createSliderMesh({
+    ...content, width: 800, height: 800, transition: "slide", images: [...content.images, content.images[0]],
+  }, 1)
+  mesh.onBeforeRender()
+  mesh.userData.sliderControl(new THREE.Vector2(0.88, 0.5))
+  assert.deepEqual(transforms.splice(0), [[0, 0], [800, 0]])
+  callback(motion.sliderTransitionDuration / 2)
+  assert.deepEqual(transforms.splice(0), [[-700, 0], [100, 0]])
+  callback(motion.sliderTransitionDuration)
+  assert.deepEqual(transforms, [])
+  reducedMotion = true
+  callback = null
+  mesh.userData.sliderControl(new THREE.Vector2(0.5, 0.5), -1)
+  assert.equal(callback, null)
+  reducedMotion = false
+  mesh.userData.sliderControl(new THREE.Vector2(0.5, 0.5), -1)
+  assert.equal(typeof callback, "function")
+  dispose()
+  assert.equal(callback, null)
+  assert.equal(motion.sliderMotion("fade", 1, 0.5, true).opacity, 0.5)
+  assert.equal(motion.sliderMotion("zoom", 1, 0, true).scale, 0.88)
 })
 
 test("suspended or unpublished sliders are omitted while existing scene objects still ship", () => {

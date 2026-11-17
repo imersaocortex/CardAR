@@ -1,18 +1,49 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import type { SliderContent } from "@/lib/sliders/model"
+import { activeSliderTransition, sliderMotion, sliderTransitionDuration, sliderTransitionEasing, type AnimatedSliderTransition } from "@/lib/sliders/transitions"
+
+type SlidePosition = {
+  index: number
+  transition?: { from: number; direction: number; effect: AnimatedSliderTransition }
+}
 
 export function SliderCarousel({ content }: { content: SliderContent }) {
-  const [position, setPosition] = useState(0)
+  const [position, setPosition] = useState<SlidePosition>({ index: 0 })
   const start = useRef<{ id: number; x: number; y: number } | null>(null)
+  const incoming = useRef<HTMLDivElement>(null)
+  const outgoing = useRef<HTMLDivElement>(null)
   const count = content.images.length
-  const index = count ? position % count : 0
+  const index = count ? position.index % count : 0
   const move = (direction: number) => {
-    if (count > 1) setPosition((current) => (current + direction + count) % count)
+    if (count < 2) return
+    const effect = incoming.current?.animate ? activeSliderTransition(content.transition) : null
+    setPosition((current) => current.transition ? current : {
+      index: (current.index + direction + count) % count,
+      transition: effect ? { from: current.index % count, direction, effect } : undefined,
+    })
   }
-  const image = content.images[index]
+  useLayoutEffect(() => {
+    const transition = position.transition
+    if (!transition || !incoming.current || !outgoing.current) return
+    const { effect, direction } = transition
+    const animate = (node: HTMLDivElement, enter: boolean) => node.animate([0, 1].map((progress) => {
+      const { offset, scale, opacity } = sliderMotion(effect, direction, progress, enter)
+      return { transform: `translateX(${offset * 100}%) scale(${scale})`, opacity }
+    }), { duration: sliderTransitionDuration, easing: sliderTransitionEasing, fill: "both" })
+    const exit = animate(outgoing.current, false)
+    const enter = animate(incoming.current, true)
+    enter.onfinish = () => setPosition({ index: position.index })
+    return () => {
+      enter.onfinish = null
+      enter.cancel()
+      exit.cancel()
+    }
+  }, [position])
+
+  const layers = position.transition ? [position.transition.from, index] : [index]
   return (
     <section
       aria-label={content.name}
@@ -43,7 +74,16 @@ export function SliderCarousel({ content }: { content: SliderContent }) {
           if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) move(dx < 0 ? 1 : -1)
         }}
       >
-        {image ? <SlideImage key={image.id} image={image} fit={content.fit} /> : "Adicione imagens para ver a prévia"}
+        {count ? layers.map((layer) => (
+          <div
+            key={layer}
+            ref={layer === index ? incoming : outgoing}
+            aria-hidden={layer !== index || undefined}
+            className="absolute inset-0 grid place-items-center bg-slate-950"
+          >
+            <SlideImage image={content.images[layer]} fit={content.fit} />
+          </div>
+        )) : "Adicione imagens para ver a prévia"}
       </div>
       {count > 1 && <>
         <button type="button" aria-label="Imagem anterior" onClick={() => move(-1)} className="absolute left-2 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-slate-950/80 text-white hover:bg-slate-800"><ChevronLeft aria-hidden="true" /></button>

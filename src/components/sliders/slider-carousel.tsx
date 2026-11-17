@@ -1,7 +1,7 @@
 "use client"
 
 import { useLayoutEffect, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react"
 import type { SliderContent } from "@/lib/sliders/model"
 import { activeSliderTransition, sliderMotion, sliderTransitionDuration, sliderTransitionEasing, type AnimatedSliderTransition } from "@/lib/sliders/transitions"
 
@@ -13,6 +13,7 @@ type SlidePosition = {
 export function SliderCarousel({ content }: { content: SliderContent }) {
   const [position, setPosition] = useState<SlidePosition>({ index: 0 })
   const start = useRef<{ id: number; x: number; y: number } | null>(null)
+  const dragged = useRef(false)
   const incoming = useRef<HTMLDivElement>(null)
   const outgoing = useRef<HTMLDivElement>(null)
   const count = content.images.length
@@ -61,29 +62,47 @@ export function SliderCarousel({ content }: { content: SliderContent }) {
         className="absolute inset-0 grid touch-pan-y select-none place-items-center text-sm text-white/65"
         onPointerDown={(event) => {
           if (!event.isPrimary || event.button !== 0) return
+          dragged.current = false
           start.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
-          event.currentTarget.setPointerCapture(event.pointerId)
+          // Touch pointers already have implicit capture on the original target.
+          if (event.pointerType === "mouse" && event.target instanceof Element) event.target.setPointerCapture(event.pointerId)
         }}
-        onPointerCancel={() => { start.current = null }}
+        onPointerCancel={() => { start.current = null; dragged.current = true }}
         onPointerUp={(event) => {
           const from = start.current
           start.current = null
           if (!from || from.id !== event.pointerId) return
           const dx = event.clientX - from.x
           const dy = event.clientY - from.y
+          dragged.current = Math.max(Math.abs(dx), Math.abs(dy)) > 30
           if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) move(dx < 0 ? 1 : -1)
         }}
+        onClickCapture={(event) => {
+          if (event.detail !== 0 && dragged.current) event.preventDefault()
+        }}
+        onDragStart={(event) => event.preventDefault()}
       >
-        {count ? layers.map((layer) => (
-          <div
-            key={layer}
-            ref={layer === index ? incoming : outgoing}
-            aria-hidden={layer !== index || undefined}
-            className="absolute inset-0 grid place-items-center bg-slate-950"
-          >
-            <SlideImage image={content.images[layer]} fit={content.fit} />
-          </div>
-        )) : "Adicione imagens para ver a prévia"}
+        {count ? layers.map((layer) => {
+          const image = content.images[layer]
+          const slide = <SlideImage image={image} fit={content.fit} />
+          return (
+            <div
+              key={layer}
+              ref={layer === index ? incoming : outgoing}
+              aria-hidden={layer !== index || undefined}
+              className="absolute inset-0 grid place-items-center bg-slate-950"
+            >
+              {image.link ? (
+                <a href={position.transition ? undefined : image.link} target="_blank" rel="noopener noreferrer" aria-label={`Abrir link de ${image.name} em nova aba`} className="absolute inset-0 grid place-items-center focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-cyan-300">
+                  {slide}
+                  <span aria-hidden="true" className="pointer-events-none absolute right-2 top-2 grid size-9 place-items-center rounded-full bg-slate-950/85 text-white">
+                    <ExternalLink className="size-4" />
+                  </span>
+                </a>
+              ) : slide}
+            </div>
+          )
+        }) : "Adicione imagens para ver a prévia"}
       </div>
       {count > 1 && <>
         <button type="button" aria-label="Imagem anterior" onClick={() => move(-1)} className="absolute left-2 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-slate-950/80 text-white hover:bg-slate-800"><ChevronLeft aria-hidden="true" /></button>

@@ -6,7 +6,7 @@ export const PARTICLE_LINK_DELAY_MS = 2500
 export type SceneInteraction = { objectId: string; projectId?: string; action: string | null; effect: "none" | "particles" }
 export type SceneHit = {
   interaction: SceneInteraction; group: THREE.Object3D; point: THREE.Vector3
-  slider?: { uv: THREE.Vector2; handle: (uv: THREE.Vector2, direction?: number) => void }
+  slider?: { uv: THREE.Vector2; handle: (uv: THREE.Vector2, direction?: number) => string | undefined }
 }
 
 export function registerSceneInteraction(group: THREE.Object3D, object: { id: string; action?: string | null; clickEffect?: string | null; type?: string }, projectId?: string) {
@@ -110,8 +110,8 @@ export function attachSceneClicks(canvas: HTMLCanvasElement, roots: THREE.Object
     if (options.enabled && !options.enabled()) return
     const dx = event.clientX - x
     const dy = event.clientY - y
+    ignoreClick = Math.max(Math.abs(dx), Math.abs(dy)) >= 30
     if (Math.abs(dx) < 30 || Math.abs(dx) <= Math.abs(dy)) return
-    ignoreClick = true
     const hit = pick(event)
     if (hit?.slider && hit.group === group) hit.slider.handle(hit.slider.uv, dx < 0 ? 1 : -1)
   }
@@ -120,8 +120,11 @@ export function attachSceneClicks(canvas: HTMLCanvasElement, roots: THREE.Object
     if (options.enabled && !options.enabled()) return
     if (ignoreClick) { ignoreClick = false; return }
     const hit = pick(event)
-    if (hit?.slider) hit.slider.handle(hit.slider.uv)
-    else if (hit) handler.activate(hit)
+    if (!hit) return
+    if (hit.slider) {
+      const link = hit.slider.handle(hit.slider.uv)
+      if (link) handler.activate({ ...hit, interaction: { ...hit.interaction, action: link, effect: "none" } })
+    } else handler.activate(hit)
   }
   if (options.sliders) {
     canvas.style.touchAction = "pan-y"

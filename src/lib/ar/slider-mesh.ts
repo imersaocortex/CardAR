@@ -85,6 +85,27 @@ export function createSliderMesh(slider: SliderContent, opacity: number) {
     } else {
       drawSlide(context, index)
     }
+    if (!transition && slider.images[index].link) {
+      const size = Math.min(width, height) * 0.055
+      const x = width - size * 1.5
+      const y = size * 1.5
+      context.beginPath()
+      context.arc(x, y, size, 0, Math.PI * 2)
+      context.fillStyle = "rgba(3, 9, 23, 0.86)"
+      context.fill()
+      const tip = size * 0.36
+      context.beginPath()
+      context.moveTo(x - tip, y + tip)
+      context.lineTo(x + tip, y - tip)
+      context.moveTo(x - tip, y - tip)
+      context.lineTo(x + tip, y - tip)
+      context.lineTo(x + tip, y + tip)
+      context.lineWidth = Math.max(1.5, size * 0.12)
+      context.lineCap = "round"
+      context.lineJoin = "round"
+      context.strokeStyle = "#ffffff"
+      context.stroke()
+    }
     if (count > 1) {
       const size = Math.min(width, height) * 0.078
       for (const direction of [-1, 1]) {
@@ -155,10 +176,11 @@ export function createSliderMesh(slider: SliderContent, opacity: number) {
     refresh()
   }
   mesh.userData.sliderControl = (uv: THREE.Vector2, direction?: number) => {
-    if (disposed || transition || count < 2) return
-    const arrow = uv.y > 0.38 && uv.y < 0.62 ? (uv.x <= 0.24 ? -1 : uv.x >= 0.76 ? 1 : 0) : 0
+    if (disposed || transition) return
+    const arrow = count > 1 && uv.y > 0.38 && uv.y < 0.62 ? (uv.x <= 0.24 ? -1 : uv.x >= 0.76 ? 1 : 0) : 0
     const step = direction ?? arrow
-    if (!step) return
+    if (!step) return slider.images[index].link
+    if (count < 2) return
     const effect = activeSliderTransition(slider.transition)
     if (effect) transition = { from: index, direction: step, effect, startedAt: performance.now() }
     index = wrap(index + step)

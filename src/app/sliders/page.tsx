@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/hooks/use-toast"
-import { sliderDraftSchema, sliderFormats, sliderLink, type SliderDraft, type SliderLibrary, type SliderRow } from "@/lib/sliders/model"
+import { resolveSliderImages, sliderDraftSchema, sliderFormats, sliderImageLinkMaxLength, sliderLink, type SliderDraft, type SliderLibrary, type SliderRow } from "@/lib/sliders/model"
 import { sliderTransitionLabels, sliderTransitions } from "@/lib/sliders/transitions"
 
-const emptyDraft: SliderDraft = { name: "", width: 1080, height: 1080, fit: "contain", transition: "none", assetIds: [] }
+const emptyDraft: SliderDraft = { name: "", width: 1080, height: 1080, fit: "contain", transition: "none", assetIds: [], imageLinks: [] }
 
 export default function SlidersPage() {
   const [library, setLibrary] = useState<SliderLibrary>()
@@ -38,7 +38,11 @@ export default function SlidersPage() {
 
   function edit(slider?: SliderRow) {
     setActive(slider)
-    setDraft(slider ? { ...slider.draft, transition: slider.draft.transition ?? "none" } : emptyDraft)
+    setDraft(slider ? {
+      ...slider.draft,
+      transition: slider.draft.transition ?? "none",
+      imageLinks: slider.draft.assetIds.map((_, index) => slider.draft.imageLinks?.[index] ?? ""),
+    } : emptyDraft)
     setAssetId("")
     setError("")
     setEditing(true)
@@ -47,10 +51,12 @@ export default function SlidersPage() {
   function move(index: number, offset: number) {
     setDraft((current) => {
       const assetIds = [...current.assetIds]
+      const imageLinks = [...current.imageLinks]
       const target = index + offset
       if (target < 0 || target >= assetIds.length) return current
       ;[assetIds[index], assetIds[target]] = [assetIds[target], assetIds[index]]
-      return { ...current, assetIds }
+      ;[imageLinks[index], imageLinks[target]] = [imageLinks[target], imageLinks[index]]
+      return { ...current, assetIds, imageLinks }
     })
   }
 
@@ -58,7 +64,9 @@ export default function SlidersPage() {
     if (busy) return
     const parsed = sliderDraftSchema.safeParse(draft)
     if (action !== "unpublish" && !parsed.success) {
-      setError("Informe um nome e dimensões entre 200 e 2048 px, com proporção entre 1:4 e 4:1.")
+      const issue = parsed.error.issues[0]
+      const index = issue.path[0] === "imageLinks" ? issue.path[1] : undefined
+      setError(typeof index === "number" ? `Imagem ${index + 1}. ${issue.message}` : "Informe um nome e dimensões entre 200 e 2048 px, com proporção entre 1:4 e 4:1.")
       return
     }
     setBusy(true)
@@ -90,10 +98,7 @@ export default function SlidersPage() {
   }
 
   const assets = new Map(library?.assets.map((asset) => [asset.id, asset]))
-  const images = draft.assetIds.flatMap((id) => {
-    const asset = assets.get(id)
-    return asset ? [asset] : []
-  })
+  const images = resolveSliderImages(draft, assets)
   const dimensions = sliderFormats.find(({ width, height }) => width === draft.width && height === draft.height)?.id ?? "custom"
   const validPreview = draft.width > 0 && draft.height > 0 && draft.width / draft.height >= 0.25 && draft.width / draft.height <= 4
   const selectClass = "block h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
@@ -180,15 +185,29 @@ export default function SlidersPage() {
                   <option value="">Selecione um asset</option>
                   {library.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
                 </select>
-                <Button type="button" variant="outline" disabled={!assetId || draft.assetIds.length >= 20} onClick={() => { setDraft({ ...draft, assetIds: [...draft.assetIds, assetId] }); setAssetId("") }}>Adicionar</Button>
+                <Button type="button" variant="outline" disabled={!assetId || draft.assetIds.length >= 20} onClick={() => {
+                  setDraft({ ...draft, assetIds: [...draft.assetIds, assetId], imageLinks: [...draft.imageLinks, ""] })
+                  setAssetId("")
+                }}>Adicionar</Button>
               </div>
               <Link href="/assets" target="_blank" className="inline-flex items-center gap-1 text-xs text-cyan-300 underline"><Images className="size-3" /> Abrir biblioteca de imagens</Link>
               <ol className="space-y-1">
-                {draft.assetIds.map((id, index) => <li key={`${id}-${index}`} className="flex items-center gap-1 rounded-lg border px-2 py-1">
-                  <span className="min-w-0 flex-1 truncate text-sm">{index + 1}. {assets.get(id)?.name ?? "Imagem indisponível"}</span>
-                  <Button size="icon" variant="ghost" aria-label={`Subir imagem ${index + 1}`} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp className="size-4" /></Button>
-                  <Button size="icon" variant="ghost" aria-label={`Descer imagem ${index + 1}`} disabled={index === draft.assetIds.length - 1} onClick={() => move(index, 1)}><ArrowDown className="size-4" /></Button>
-                  <Button size="icon" variant="ghost" aria-label={`Remover imagem ${index + 1}`} onClick={() => setDraft({ ...draft, assetIds: draft.assetIds.filter((_, position) => position !== index) })}><X className="size-4" /></Button>
+                {draft.assetIds.map((id, index) => <li key={`${id}-${index}`} className="space-y-1.5 rounded-lg border px-2 pb-2 pt-1">
+                  <div className="flex items-center gap-1">
+                    <span className="min-w-0 flex-1 truncate text-sm">{index + 1}. {assets.get(id)?.name ?? "Imagem indisponível"}</span>
+                    <Button size="icon" variant="ghost" aria-label={`Subir imagem ${index + 1}`} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`Descer imagem ${index + 1}`} disabled={index === draft.assetIds.length - 1} onClick={() => move(index, 1)}><ArrowDown className="size-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`Remover imagem ${index + 1}`} onClick={() => setDraft({
+                      ...draft,
+                      assetIds: draft.assetIds.filter((_, position) => position !== index),
+                      imageLinks: draft.imageLinks.filter((_, position) => position !== index),
+                    })}><X className="size-4" /></Button>
+                  </div>
+                  <Label htmlFor={`slider-image-link-${index}`} className="text-xs">Link externo da imagem {index + 1} (opcional)</Label>
+                  <Input id={`slider-image-link-${index}`} type="url" maxLength={sliderImageLinkMaxLength} placeholder="https://exemplo.com" value={draft.imageLinks[index] ?? ""} onChange={(event) => {
+                    const link = event.target.value
+                    setDraft((current) => ({ ...current, imageLinks: current.imageLinks.map((value, position) => position === index ? link : value) }))
+                  }} />
                 </li>)}
               </ol>
             </div>

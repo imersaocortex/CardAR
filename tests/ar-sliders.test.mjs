@@ -20,8 +20,11 @@ const { parseSliderLink, resolveSliderContent } = load("src/lib/sliders/model.ts
 const { serializeExperience, experienceSliderIds } = load("src/lib/ar/serialize-experience.ts", {
   "@/lib/scenes": load("src/lib/scenes.ts"),
 })
+const opened = []
 const { attachSceneClicks, registerSceneInteraction } = load("src/lib/ar/scene-interactions.ts", {
   "./actions": load("src/lib/ar/actions.ts"),
+}, {
+  window: { open: () => ({ location: { replace: (url) => opened.push(url) } }) },
 })
 const assetId = "cfe965f0-3af8-4b56-be17-c526a631c372"
 const content = { name: "Catálogo", width: 1080, height: 1920, fit: "contain", transition: "none", images: [{ id: assetId, url: "https://example.test/image.webp", name: "Produto" }] }
@@ -39,6 +42,18 @@ test("slider URLs are local and published content resolves only available images
   assert.equal(resolveSliderContent({ ...draft, transition: "unknown" }, assets), null)
   assert.equal(resolveSliderContent(draft, new Map()), null)
   assert.equal(resolveSliderContent({ ...draft, width: 1e6 }, new Map([[assetId, images[0]]])), null)
+})
+
+test("image links belong to individual positions, including repeated and missing assets", () => {
+  const missingId = "e2a4b8bd-0cdc-4bbd-b909-ed0641b7bd01"
+  const { images, ...layout } = content
+  const assets = new Map([[assetId, images[0]]])
+  const draft = { ...layout, assetIds: [assetId, missingId, assetId], imageLinks: [" https://example.test/a ", "", "https://example.test/b"] }
+  assert.deepEqual(resolveSliderContent(draft, assets).images.map(({ link }) => link), ["https://example.test/a", "https://example.test/b"])
+  for (const link of ["javascript:alert(1)", "data:text/html,test", "//example.test", "https://name:password@example.test/"]) {
+    assert.equal(resolveSliderContent({ ...draft, imageLinks: [link] }, assets), null, link)
+  }
+  assert.equal(resolveSliderContent({ ...draft, imageLinks: ["", "", "", ""] }, assets), null)
 })
 
 test("AR slider animates only the image layers, then settles and cancels work on disposal", () => {
@@ -63,15 +78,22 @@ test("AR slider animates only the image layers, then settles and cancels work on
     cancelAnimationFrame: () => { callback = null },
   })
   const { mesh, dispose } = createSliderMesh({
-    ...content, width: 800, height: 800, transition: "slide", images: [...content.images, content.images[0]],
+    ...content, width: 800, height: 800, transition: "slide", images: [
+      { ...content.images[0], link: "https://example.test/first" },
+      { ...content.images[0], link: "https://example.test/second" },
+    ],
   }, 1)
   mesh.onBeforeRender()
-  mesh.userData.sliderControl(new THREE.Vector2(0.88, 0.5))
+  const center = new THREE.Vector2(0.5, 0.5)
+  assert.equal(mesh.userData.sliderControl(center), "https://example.test/first")
+  assert.equal(mesh.userData.sliderControl(new THREE.Vector2(0.88, 0.5)), undefined)
+  assert.equal(mesh.userData.sliderControl(center), undefined)
   assert.deepEqual(transforms.splice(0), [[0, 0], [800, 0]])
   callback(motion.sliderTransitionDuration / 2)
   assert.deepEqual(transforms.splice(0), [[-700, 0], [100, 0]])
   callback(motion.sliderTransitionDuration)
   assert.deepEqual(transforms, [])
+  assert.equal(mesh.userData.sliderControl(center), "https://example.test/second")
   reducedMotion = true
   callback = null
   mesh.userData.sliderControl(new THREE.Vector2(0.5, 0.5), -1)
@@ -109,7 +131,10 @@ test("projected taps and swipes reach only the visible slider touched", () => {
     const root = new THREE.Group()
     root.position.set(x, 0, -5)
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial())
-    plane.userData.sliderControl = (uv, direction) => changes.push([name, direction ?? null, Math.round(uv.y * 100)])
+    plane.userData.sliderControl = (uv, direction) => {
+      changes.push([name, direction ?? null, Math.round(uv.y * 100)])
+      return direction ? undefined : `https://example.test/${name}`
+    }
     root.add(plane)
     registerSceneInteraction(root, { id: name, type: "slider" }, name)
     return root
@@ -123,6 +148,7 @@ test("projected taps and swipes reach only the visible slider touched", () => {
     emit("pointerup", 260)
     emit("click", 260)
     assert.deepEqual(changes, [["A", null, 50], ["B", 1, 50]])
+    assert.deepEqual(opened, ["https://example.test/A"])
     emit("pointerdown", 120)
     emit("pointerup", 280)
     assert.equal(changes.length, 2)

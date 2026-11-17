@@ -4,10 +4,13 @@ import { getActionUrl } from "./actions"
 export const PARTICLE_LINK_DELAY_MS = 2500
 
 export type SceneInteraction = { objectId: string; projectId?: string; action: string | null; effect: "none" | "particles" }
-export type SceneHit = { interaction: SceneInteraction; group: THREE.Object3D; point: THREE.Vector3 }
+export type SceneHit = {
+  interaction: SceneInteraction; group: THREE.Object3D; point: THREE.Vector3
+  slider?: { uv: THREE.Vector2; handle: (uv: THREE.Vector2, direction?: number) => void }
+}
 
-export function registerSceneInteraction(group: THREE.Object3D, object: { id: string; action?: string | null; clickEffect?: string | null }, projectId?: string) {
-  if (!getActionUrl(object.action ?? "") && object.clickEffect !== "particles") return
+export function registerSceneInteraction(group: THREE.Object3D, object: { id: string; action?: string | null; clickEffect?: string | null; type?: string }, projectId?: string) {
+  if (object.type !== "slider" && !getActionUrl(object.action ?? "") && object.clickEffect !== "particles") return
   group.userData.sceneInteraction = {
     objectId: object.id, projectId, action: getActionUrl(object.action ?? ""), effect: object.clickEffect === "particles" ? "particles" : "none",
   } satisfies SceneInteraction
@@ -28,7 +31,14 @@ export function pickSceneInteraction(roots: THREE.Object3D[], raycaster: THREE.R
     if (!visible) continue
     // A visible object without an action still occludes objects behind it.
     // Never activate another project's URL through the front of that object.
-    return group ? { interaction: group.userData.sceneInteraction as SceneInteraction, group, point: hit.point } : null
+    if (!group) return null
+    const sliderControl = hit.object.userData.sliderControl
+    return {
+      interaction: group.userData.sceneInteraction as SceneInteraction,
+      group,
+      point: hit.point,
+      ...(typeof sliderControl === "function" && hit.uv ? { slider: { uv: hit.uv, handle: sliderControl } } : {}),
+    }
   }
   return null
 }
@@ -80,16 +90,56 @@ export function createSceneInteractionHandler(effects: { burst: (hit: SceneHit) 
   }
 }
 
-export function attachSceneClicks(canvas: HTMLCanvasElement, roots: THREE.Object3D[], camera: THREE.Camera, effects: { burst: (hit: SceneHit) => void }, options: { enabled?: () => boolean; onInteraction?: (event: string, metadata?: Record<string, unknown>) => void } = {}) {
+export function attachSceneClicks(canvas: HTMLCanvasElement, roots: THREE.Object3D[], camera: THREE.Camera, effects: { burst: (hit: SceneHit) => void }, options: { enabled?: () => boolean; onInteraction?: (event: string, metadata?: Record<string, unknown>) => void; sliders?: boolean } = {}) {
   const handler = createSceneInteractionHandler(effects, options.onInteraction)
+  const pick = (event: MouseEvent) => pickSceneInteractionAt(roots, camera, canvas.getBoundingClientRect(), event.clientX, event.clientY)
+  let gesture: { id: number; x: number; y: number; group: THREE.Object3D } | undefined
+  let ignoreClick = false
+  const previousTouchAction = canvas.style?.touchAction
+  const pointerDown = (event: PointerEvent) => {
+    if (!event.isPrimary || event.button !== 0) return
+    ignoreClick = false
+    if (options.enabled && !options.enabled()) return
+    const hit = pick(event)
+    if (hit?.slider) gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, group: hit.group }
+  }
+  const pointerUp = (event: PointerEvent) => {
+    if (!gesture || gesture.id !== event.pointerId) return
+    const { x, y, group } = gesture
+    gesture = undefined
+    if (options.enabled && !options.enabled()) return
+    const dx = event.clientX - x
+    const dy = event.clientY - y
+    if (Math.abs(dx) < 30 || Math.abs(dx) <= Math.abs(dy)) return
+    ignoreClick = true
+    const hit = pick(event)
+    if (hit?.slider && hit.group === group) hit.slider.handle(hit.slider.uv, dx < 0 ? 1 : -1)
+  }
+  const pointerCancel = () => { gesture = undefined }
   const click = (event: MouseEvent) => {
     if (options.enabled && !options.enabled()) return
-    const hit = pickSceneInteractionAt(roots, camera, canvas.getBoundingClientRect(), event.clientX, event.clientY)
-    if (hit) handler.activate(hit)
+    if (ignoreClick) { ignoreClick = false; return }
+    const hit = pick(event)
+    if (hit?.slider) hit.slider.handle(hit.slider.uv)
+    else if (hit) handler.activate(hit)
+  }
+  if (options.sliders) {
+    canvas.style.touchAction = "pan-y"
+    canvas.addEventListener("pointerdown", pointerDown)
+    canvas.addEventListener("pointerup", pointerUp)
+    canvas.addEventListener("pointercancel", pointerCancel)
+    canvas.addEventListener("pointerleave", pointerCancel)
   }
   canvas.addEventListener("click", click)
   return () => {
     handler.cancel()
     canvas.removeEventListener("click", click)
+    if (options.sliders) {
+      canvas.style.touchAction = previousTouchAction ?? ""
+      canvas.removeEventListener("pointerdown", pointerDown)
+      canvas.removeEventListener("pointerup", pointerUp)
+      canvas.removeEventListener("pointercancel", pointerCancel)
+      canvas.removeEventListener("pointerleave", pointerCancel)
+    }
   }
 }

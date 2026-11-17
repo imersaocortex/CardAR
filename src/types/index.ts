@@ -19,6 +19,7 @@ export type ElementType =
   | "video-hls"
   | "video-chromakey"
   | "imagem"
+  | "slider"
   | "audio"
   | "botao-whatsapp"
   | "botao-site"
@@ -44,6 +45,7 @@ export interface StudioElement {
   assetThumbnail?: string
   showCaption?: boolean
   faceCamera?: boolean
+  sliderId?: string
   animationType?: AnimationType
   hasEmbeddedAnimations?: boolean
   chromaKeyColor?: string

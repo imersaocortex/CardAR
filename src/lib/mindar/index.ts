@@ -1,5 +1,7 @@
 "use client"
 
+import type { SliderContent } from "@/lib/sliders/model"
+
 export type ArState = "loading" | "scanning" | "detected" | "lost" | "error"
 
 export interface ArSceneObject {
@@ -14,6 +16,7 @@ export interface ArSceneObject {
   animationType: string | null
   action: string | null
   clickEffect?: "none" | "particles"
+  slider?: SliderContent
   assetUrl: string | null
   assetThumbnail: string | null
   showCaption: boolean | null

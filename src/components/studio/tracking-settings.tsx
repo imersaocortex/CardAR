@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { toast } from "@/hooks/use-toast"
 
-export function TrackingSettings({ projectId, disabled }: { projectId: string; disabled: boolean }) {
+export function TrackingSettings({ projectId, disabled, onSaved }: { projectId: string; disabled: boolean; onSaved?: () => void }) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState("marker")
   const [latitude, setLatitude] = useState("")
@@ -32,6 +32,7 @@ export function TrackingSettings({ projectId, disabled }: { projectId: string; d
       const res = await fetch(`/api/projects/${projectId}/tracking`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tracking_mode: mode, latitude: latitude.trim() ? Number(latitude) : null, longitude: longitude.trim() ? Number(longitude) : null, activation_radius: Number(radius) }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      onSaved?.()
       toast({ title: "Modo de experiência salvo", variant: "success" }); setOpen(false)
     } catch (error) { toast({ title: error instanceof Error ? error.message : "Falha ao salvar", variant: "destructive" }) }
     finally { setBusy(false) }

@@ -32,6 +32,7 @@ interface Plan {
   multi_project_enabled?: boolean
   gps_enabled?: boolean
   surface_enabled?: boolean
+  sliders_enabled?: boolean
   active: boolean
   created_at: string
   subscriptions?: { count: number }[]
@@ -68,6 +69,7 @@ export function PlansTab() {
     multi_project_enabled: false,
     gps_enabled: false,
     surface_enabled: false,
+    sliders_enabled: false,
     allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
     highlight: false,
   })
@@ -105,6 +107,7 @@ export function PlansTab() {
       multi_project_enabled: false,
       gps_enabled: false,
       surface_enabled: false,
+      sliders_enabled: false,
       allowed_media_types: "image/png,image/jpeg,model/gltf-binary",
       highlight: false,
     })
@@ -128,6 +131,7 @@ export function PlansTab() {
       multi_project_enabled: plan.multi_project_enabled === true,
       gps_enabled: plan.gps_enabled === true,
       surface_enabled: plan.surface_enabled === true,
+      sliders_enabled: plan.sliders_enabled === true,
       allowed_media_types: Array.isArray((plan as any).allowed_media_types)
         ? (plan as any).allowed_media_types.join(", ")
         : "image/png,image/jpeg,model/gltf-binary",
@@ -181,6 +185,7 @@ export function PlansTab() {
         multi_project_enabled: form.multi_project_enabled,
         gps_enabled: form.gps_enabled,
         surface_enabled: form.surface_enabled,
+        sliders_enabled: form.sliders_enabled,
         allowed_media_types: form.allowed_media_types.split(",").map((t) => t.trim()).filter(Boolean),
         highlight: form.highlight,
       }
@@ -483,6 +488,11 @@ export function PlansTab() {
             <div className="flex items-center gap-3">
               <Switch id="plan-surface" checked={form.surface_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, surface_enabled: value }))} />
               <Label htmlFor="plan-surface">Permitir AR sem marcador (superfície)</Label>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Switch id="plan-sliders" checked={form.sliders_enabled} onCheckedChange={(value) => setForm((current) => ({ ...current, sliders_enabled: value }))} />
+              <Label htmlFor="plan-sliders">Permitir sliders interativos</Label>
             </div>
 
             <div className="space-y-2">

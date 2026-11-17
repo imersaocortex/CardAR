@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { selectPrimaryScene } from "@/lib/scenes"
+import { experienceSliderIds, serializeExperience, type ExperienceProjectRow } from "@/lib/ar/serialize-experience"
+import { getExperienceSliders } from "@/lib/sliders/server"
 import { experienceAccessGranted } from "@/lib/payments/access"
 import { organizationOwnedBySuperAdmin } from "@/lib/payments/platform-admin"
 import { planAllowsTrackingMode } from "@/lib/plans/tracking"
@@ -38,11 +39,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     // Check plan for watermark feature
     let hasWatermark = true
-    let trackingPlan: { gps_enabled: boolean; surface_enabled: boolean } | null = null
+    let trackingPlan: { gps_enabled: boolean; surface_enabled: boolean; sliders_enabled: boolean } | null = null
     if (subscription?.plan_id) {
       const { data: plan } = await admin
         .from("plans")
-        .select("has_watermark, gps_enabled, surface_enabled")
+        .select("has_watermark, gps_enabled, surface_enabled, sliders_enabled")
         .eq("id", subscription.plan_id)
         .single()
       if (plan) {
@@ -64,69 +65,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
 
     await admin.rpc("increment_project_views", { p_project_id: project.id })
 
-    // Prefere a cena com elementos (objects) e, em empate, a mais antiga (created_at)
-    const scenes = Array.isArray(project.scenes) ? project.scenes : []
-    const scene = selectPrimaryScene<any>(scenes)
-    const objects = scene?.scene_objects || []
-    const marker = project.project_markers
-      ? (Array.isArray(project.project_markers) ? project.project_markers[0] : project.project_markers)
-      : null
-
+    const row: ExperienceProjectRow = project
+    const sliders = superAdminOwned || trackingPlan?.sliders_enabled === true
+      ? await getExperienceSliders(admin, project.organization_id, experienceSliderIds([row]))
+      : undefined
     return NextResponse.json({
       hasWatermark,
       siteName,
-      project: {
-        trackingMode: project.tracking_mode || "marker",
-        latitude: project.latitude,
-        longitude: project.longitude,
-        activationRadius: project.activation_radius ?? 100,
-        id: project.id,
-        name: project.name,
-        type: project.type,
-        thumbnailUrl: project.thumbnail_url,
-        marker: marker
-          ? {
-              imageUrl: marker.image_url,
-              targetUrl: marker.target_url || null,
-            }
-          : null,
-        scene: scene
-          ? {
-              id: scene.id,
-              name: scene.name,
-              backgroundColor: scene.background_color,
-              objects: objects.map((obj: any) => ({
-                id: obj.id,
-                type: obj.type,
-                name: obj.name,
-                position: [obj.position_x, obj.position_y, obj.position_z] as [number, number, number],
-                rotation: [obj.rotation_x, obj.rotation_y, obj.rotation_z] as [number, number, number],
-                scale: [obj.scale_x, obj.scale_y, obj.scale_z] as [number, number, number],
-                opacity: obj.opacity,
-                visible: obj.visible,
-                animationType: obj.animation_type || null,
-                action: obj.action || null,
-                clickEffect: obj.click_effect === "particles" ? "particles" : "none",
-                assetUrl: obj.asset_url || null,
-                assetThumbnail: obj.asset_thumbnail || null,
-                showCaption: obj.show_caption || null,
-                faceCamera: obj.face_camera ?? false,
-                chromaKeyColor: obj.chroma_key_color || null,
-                chromaKeyTolerance: obj.chroma_key_tolerance || null,
-                chromaKeySmoothness: obj.chroma_key_smoothness || null,
-                duration: obj.duration || null,
-                buttons: (obj.scene_buttons || []).map((btn: any) => ({
-                  id: btn.id,
-                  label: btn.label,
-                  icon: btn.icon,
-                  actionType: btn.action_type,
-                  actionValue: btn.action_value,
-                })),
-              })),
-            }
-          : null,
-      },
-    })
+      project: serializeExperience(row, sliders),
+    }, { headers: { "Cache-Control": "no-store" } })
   } catch (err: any) {
     console.error("[experience API] Unhandled error:", err?.message || err)
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })

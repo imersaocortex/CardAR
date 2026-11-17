@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { AnimationType, StudioElement } from "@/types"
 import { toast } from "@/hooks/use-toast"
 import { isPublicHlsUrl } from "@/lib/ar/hls-url"
+import { SliderPicker } from "./slider-picker"
 
 interface AssetItem {
   id: string
@@ -181,6 +182,8 @@ export function StudioProperties() {
 
         <Separator />
 
+        {selectedElement.type === "slider" && <SliderPicker key={selectedElement.id} element={selectedElement} />}
+
         {selectedElement.type === "video-hls" && (
           <HlsUrlField key={selectedElement.id} element={selectedElement} />
         )}
@@ -285,7 +288,7 @@ export function StudioProperties() {
           </div>
         </div>
 
-        {(is3D || isImage || isVideo || isButton) && (
+        {(is3D || isImage || isVideo || isButton || selectedElement.type === "slider") && (
           <div className="flex items-start justify-between gap-3 rounded-lg border border-border/60 p-3">
             <div>
               <Label htmlFor="face-camera" className="text-xs font-medium cursor-pointer">Sempre voltado para a câmera</Label>

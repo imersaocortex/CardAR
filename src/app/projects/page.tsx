@@ -189,6 +189,7 @@ export default function ProjectsPage() {
     }
 
     const newProject = result.data
+    let skippedSlider = false
     if (newProject?.id && project.id !== newProject.id) {
       try {
         // Copy scene + objects + buttons
@@ -215,7 +216,7 @@ export default function ProjectsPage() {
 
           if (newScene && srcScene.scene_objects?.length) {
             for (const obj of srcScene.scene_objects) {
-              const { data: newObj } = await supabase
+              const { data: newObj, error: copyError } = await supabase
                 .from("scene_objects")
                 .insert({
                   scene_id: newScene.id,
@@ -239,6 +240,7 @@ export default function ProjectsPage() {
                   asset_thumbnail: obj.asset_thumbnail,
                   show_caption: obj.show_caption,
                   face_camera: obj.face_camera ?? false,
+                  ...(obj.type === "slider" ? { slider_id: obj.slider_id } : {}),
                   chroma_key_color: obj.chroma_key_color,
                   chroma_key_tolerance: obj.chroma_key_tolerance,
                   chroma_key_smoothness: obj.chroma_key_smoothness,
@@ -247,6 +249,7 @@ export default function ProjectsPage() {
                 .select()
                 .single()
 
+              if (copyError && obj.type === "slider") skippedSlider = true
               if (newObj && obj.scene_buttons?.length) {
                 for (const btn of obj.scene_buttons) {
                   await supabase.from("scene_buttons").insert({
@@ -283,7 +286,7 @@ export default function ProjectsPage() {
       }
     }
 
-    toast({ title: "Projeto duplicado" })
+    toast({ title: "Projeto duplicado", description: skippedSlider ? "Sliders indisponíveis ou fora do plano não foram copiados." : undefined })
     loadProjects()
   }
 

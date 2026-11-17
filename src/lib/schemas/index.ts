@@ -117,11 +117,12 @@ export const createPlanSchema = z.object({
   multi_project_enabled: z.boolean().default(false),
   gps_enabled: z.boolean().default(false),
   surface_enabled: z.boolean().default(false),
+  sliders_enabled: z.boolean().default(false),
   allowed_media_types: z.array(z.string()).default(["image/png", "image/jpeg", "model/gltf-binary"]),
   highlight: z.boolean().default(false),
 })
 
-export const updatePlanSchema = createPlanSchema.partial()
+export const updatePlanSchema = createPlanSchema.partial().extend({ sliders_enabled: z.boolean().optional() })
 
 export const updateProfileSchema = z.object({
   name: z.string().min(2, "Mínimo 2 caracteres").max(100).optional(),
